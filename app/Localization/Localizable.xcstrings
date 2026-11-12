@@ -325,18 +325,18 @@
         }
       }
     },
-    "Add a 3DS…": {
+    "Add a Device…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add a 3DS…"
+            "value": "Add a Device…"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "添加 3DS…"
+            "value": "添加设备…"
           }
         }
       }
@@ -357,18 +357,18 @@
         }
       }
     },
-    "Add your Nintendo 3DS to install applets, take screenshots and more. It takes a couple of minutes.": {
+    "Add a device to install applets on it, take screenshots and more.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add your Nintendo 3DS to install applets, take screenshots and more. It takes a couple of minutes."
+            "value": "Add a device to install applets on it, take screenshots and more."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "添加你的 Nintendo 3DS，即可安装小程序、截图等。只需几分钟。"
+            "value": "添加一台设备，即可在上面安装小程序、截图等。"
           }
         }
       }
@@ -401,6 +401,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "高级"
+          }
+        }
+      }
+    },
+    "All Installed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All Installed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已全部安装"
           }
         }
       }
@@ -517,22 +533,6 @@
         }
       }
     },
-    "Applet Store": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Applet Store"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "小程序商店"
-          }
-        }
-      }
-    },
     "Applets": {
       "localizations": {
         "en": {
@@ -565,18 +565,18 @@
         }
       }
     },
-    "Applets for %@": {
+    "Available in the Store": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Applets for %@"
+            "value": "Available in the Store"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "适用于 %@ 的小程序"
+            "value": "商店中可安装"
           }
         }
       }
@@ -1301,18 +1301,18 @@
         }
       }
     },
-    "Everything the store offers. Add a 3DS to install applets on it.": {
+    "Everything the store offers for this device is on it.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Everything the store offers. Add a 3DS to install applets on it."
+            "value": "Everything the store offers for this device is on it."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "商店提供的全部小程序。添加一台 3DS 即可在上面安装。"
+            "value": "商店为这台设备提供的小程序都已安装。"
           }
         }
       }
@@ -2561,6 +2561,22 @@
         }
       }
     },
+    "Once it connects, the store shows the applets it can run.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Once it connects, the store shows the applets it can run."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接后，商店会显示它能运行的小程序。"
+          }
+        }
+      }
+    },
     "Open": {
       "localizations": {
         "en": {
@@ -2589,22 +2605,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "打开 %@"
-          }
-        }
-      }
-    },
-    "Open %@ on the console": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open %@ on the console"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在主机上打开 %@"
           }
         }
       }
@@ -3569,18 +3569,18 @@
         }
       }
     },
-    "Set it up again with Add a 3DS… to bring its software up to date.": {
+    "Set it up again with Add a Device… to bring its software up to date.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Set it up again with Add a 3DS… to bring its software up to date."
+            "value": "Set it up again with Add a Device… to bring its software up to date."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请用“添加 3DS…”重新设置它，以将软件更新到最新。"
+            "value": "请用“添加设备…”重新设置它，以更新它的软件。"
           }
         }
       }
@@ -4321,22 +4321,6 @@
         }
       }
     },
-    "The device the store shows applets for": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The device the store shows applets for"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "商店为其显示小程序的设备"
-          }
-        }
-      }
-    },
     "The download didn't finish.": {
       "localizations": {
         "en": {
@@ -4461,22 +4445,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "商店暂时没有适用于这台设备的小程序。"
-          }
-        }
-      }
-    },
-    "The store shows the applets a console can run once it has connected. Open Pocket Shell on the 3DS, then come back here.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The store shows the applets a console can run once it has connected. Open Pocket Shell on the 3DS, then come back here."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主机连接过一次后，商店才会显示它能运行的小程序。请在 3DS 上打开 Pocket Shell，然后回到这里。"
           }
         }
       }

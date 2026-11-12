@@ -59,7 +59,7 @@ struct MenuBarContent: View {
                     DeviceMenuLabel(device: device)
                 }
             }
-            Button("Add a 3DS…") { state.startSetup() }
+            Button("Add a Device…") { state.startSetup() }
             Divider()
         }
         Button("Open Pocket Hub") { state.showWindow() }

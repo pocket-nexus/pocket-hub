@@ -78,7 +78,7 @@ struct Sidebar: View {
                     Button {
                         state.showingSetup = true
                     } label: {
-                        Label("Add a 3DS…", systemImage: "plus.circle")
+                        Label("Add a Device…", systemImage: "plus.circle")
                     }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
@@ -88,11 +88,10 @@ struct Sidebar: View {
                         .selectionDisabled()
                 }
             }
-            Section("Pocket Hub") {
-                Label("Applet Store", systemImage: "bag")
-                    .tag(SidebarItem.store)
-            }
-            // Developer surfaces, kept out of the owner's way but fully working.
+            // The store is not a place beside the devices: what it offers
+            // depends on the device and goes onto it, so it is part of each
+            // device's Applets page. Below the devices is only what runs on
+            // this Mac, a developer surface kept out of the owner's way.
             Section("Advanced") {
                 Label("Daemons", systemImage: "gearshape.2")
                     .tag(SidebarItem.daemons)
@@ -160,16 +159,14 @@ struct Detail: View {
                 }
             case .daemons:
                 DaemonsView()
-            case .store:
-                StoreView()
             case nil:
                 if model.devices.isEmpty {
                     ContentUnavailableView {
                         Label("No Devices Yet", systemImage: "gamecontroller")
                     } description: {
-                        Text("Add your Nintendo 3DS to install applets, take screenshots and more. It takes a couple of minutes.")
+                        Text("Add a device to install applets on it, take screenshots and more.")
                     } actions: {
-                        Button("Add a 3DS…") { state.showingSetup = true }
+                        Button("Add a Device…") { state.showingSetup = true }
                             .controlSize(.large)
                             .buttonStyle(.borderedProminent)
                     }

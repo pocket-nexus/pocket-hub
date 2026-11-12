@@ -11,8 +11,9 @@ import SwiftUI
 /// Space, another app in front). Each command calls the same model method as
 /// the button it stands for; results show in the window and in the snapshots.
 ///
-///   select store | daemons | device <id>     tab applets | screenshot | log | details
-///   store choose <device> | refresh | install <app> | cancel <app> | details <app> | close-details
+///   select daemons | device <id>             tab applets | screenshot | log | details
+///   store refresh | install <app> | cancel <app> | details <app> | close-details
+///                                            (the store of the selected device's Applets page)
 ///   screenshot | logs on | logs off | open <app id> | home | update | update-dismiss
 ///                                            (on the selected device)
 ///   menu-preview | menu-preview-close        (the menu bar menu's views in a window)
@@ -62,7 +63,6 @@ enum DebugCommands {
             {
                 window.setContentSize(NSSize(width: width, height: height))
             }
-        case ["select", "store"]: state.selection = .store
         case ["select", "daemons"]: state.selection = .daemons
         case let w where w.count == 3 && w[0] == "select" && w[1] == "device": state.selection = .device(w[2])
         case ["tab", "applets"]: state.deviceTab = .applets
@@ -96,7 +96,6 @@ enum DebugCommands {
         case ["store", "close-details"]: state.storeDetails = nil
         case let w where w.count == 3 && w[0] == "store":
             switch w[1] {
-            case "choose": store.choose(device: w[2])
             case "install": if let app = storeApp(w[2]), let device = store.deviceId { store.install(app, on: device) }
             case "cancel": if let app = storeApp(w[2]), let device = store.deviceId { store.cancelInstall(of: app, on: device) }
             case "details": state.storeDetails = storeApp(w[2])
