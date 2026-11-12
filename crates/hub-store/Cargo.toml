@@ -1,0 +1,12 @@
+[package]
+name = "pocket-hub-store"
+description = "Pocket Hub's files: its identity, one record per paired device, the channel generation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pocket-link.workspace = true
+serde.workspace = true
+serde_json.workspace = true
