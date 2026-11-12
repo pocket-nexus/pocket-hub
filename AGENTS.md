@@ -46,8 +46,12 @@ touch its folders on a machine (`~/Library/Application Support/Pocket Hub`,
 ```sh
 cargo test --workspace && cargo clippy --workspace --all-targets
 (cd sdk/daemon && bun test)
-(cd app && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test)
+(cd app && export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer && swift test &&
+  xcodebuild -quiet -scheme PocketHub -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath build build)
 ```
+
+`swift test` covers the app's libraries; the SwiftUI app is the Xcode
+project's target and only `xcodebuild` (or Xcode) compiles it.
 
 Tests use temp homes and ephemeral ports (`--link-port 0`), never TCP 8628 or
 the default home: a core for a real device may be running there. Stop only

@@ -3,17 +3,17 @@ import HubAppModel
 import HubClient
 import SwiftUI
 
-/// The device's software update on its page: offered when Hub knows a newer
-/// release (`program.update`), then its progress, the restart as an expected
-/// step, and how it ended. Nothing shows when there is no update.
-struct SoftwareUpdateBanner: View {
+/// The device's software update, a card of its page: offered when Hub knows a
+/// newer release (`program.update`), then its progress, the restart as an
+/// expected step, and how it ended. No card when there is no update.
+struct SoftwareUpdateSection: View {
     let device: Device
     @Environment(AppState.self) private var state
 
     var body: some View {
         let model = state.model
-        Group {
-            if let update = model.programUpdates[device.id] {
+        if let update = model.programUpdates[device.id] {
+            Section {
                 switch update.stage {
                 case .finished(let version):
                     finished(version: version)
@@ -22,19 +22,19 @@ struct SoftwareUpdateBanner: View {
                 default:
                     progress(update)
                 }
-            } else if device.offersSoftwareUpdate, let latest = device.program.latest {
+            }
+        } else if device.offersSoftwareUpdate, let latest = device.program.latest {
+            Section {
                 available(latest: latest)
             }
         }
-        .padding(.horizontal)
-        .padding(.bottom, 12)
     }
 
     // MARK: - Offered
 
     private func available(latest: String) -> some View {
         let unavailable = unavailableReason
-        return BannerBox(tint: .accentColor) {
+        return BannerBox {
             Image(systemName: "arrow.down.circle.fill")
                 .font(.title)
                 .foregroundStyle(Color.accentColor)
@@ -67,7 +67,7 @@ struct SoftwareUpdateBanner: View {
     // MARK: - Running
 
     private func progress(_ update: ProgramUpdate) -> some View {
-        BannerBox(tint: .accentColor) {
+        BannerBox {
             Image(systemName: update.stage == .restarting || update.stage == .reconnected
                   ? "arrow.triangle.2.circlepath" : "arrow.down.circle")
                 .font(.title)
@@ -106,7 +106,7 @@ struct SoftwareUpdateBanner: View {
     // MARK: - Ended
 
     private func finished(version: String?) -> some View {
-        BannerBox(tint: .green) {
+        BannerBox {
             Image(systemName: "checkmark.circle.fill")
                 .font(.title)
                 .foregroundStyle(.green)
@@ -125,7 +125,7 @@ struct SoftwareUpdateBanner: View {
     }
 
     private func failed(_ failure: UserFacingError) -> some View {
-        BannerBox(tint: .orange) {
+        BannerBox {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.title)
                 .foregroundStyle(.orange)
@@ -150,19 +150,18 @@ struct SoftwareUpdateBanner: View {
     }
 }
 
-/// The rounded, tinted box the banner's states share.
+/// The row the update's states share: a symbol in the state's colour, the
+/// words, the action. The card around it is the grouped form's own, as the
+/// cards of the page's other sections are; the states differ by the symbol.
 private struct BannerBox<Content: View>: View {
-    let tint: Color
     @ViewBuilder let content: Content
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             content
         }
-        .padding(12)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.25)))
     }
 }
 

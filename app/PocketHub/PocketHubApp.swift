@@ -12,7 +12,7 @@ struct PocketHubApp: App {
         Window("Pocket Hub", id: "main") {
             ContentView()
                 .environment(state)
-                .frame(minWidth: 720, minHeight: 480)
+                .frame(minWidth: 800, minHeight: 480)
         }
         // The window is opened by the menu bar label at launch, so a launch at
         // login can start in the menu bar only.
@@ -60,8 +60,14 @@ struct HubCommands: Commands {
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .disabled(!selectedDeviceIsLinked)
+            Button("Install Applet…") { state.importingApplet = true }
+            .keyboardShortcut("i", modifiers: [.command, .shift])
+            .disabled(!selectedDeviceIsLinked || state.selectedDeviceID.flatMap { state.model.pushes[$0] } != nil)
             Button("Show Log") { state.deviceTab = .log }
             .keyboardShortcut("l")
+            .disabled(state.selectedDeviceID == nil)
+            Divider()
+            Button("Remove from Pocket Hub…") { state.confirmingRemoveDevice = true }
             .disabled(state.selectedDeviceID == nil)
         }
         CommandGroup(replacing: .appTermination) {

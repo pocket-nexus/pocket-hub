@@ -58,67 +58,42 @@ public struct CoreLauncher: Sendable {
         case failed(String)
     }
 
-    /// Candidate executables in order of preference; the first that exists is used.
-    public var candidates: @Sendable () -> [URL]
+    /// The core's executable; nil when this process has none to start.
+    public var executable: @Sendable () -> URL?
     public var arguments: [String]
     public var environment: [String: String]
 
-    public init(candidates: @escaping @Sendable () -> [URL], arguments: [String] = [],
+    public init(executable: @escaping @Sendable () -> URL?, arguments: [String] = [],
                 environment: [String: String] = ProcessInfo.processInfo.environment)
     {
-        self.candidates = candidates
+        self.executable = executable
         self.arguments = arguments
         self.environment = environment
     }
 
-    /// The standard search: `$POCKET_HUBD`; the app bundle's
-    /// `Contents/Helpers/pocket-hubd`; in a development run, `target/release`
-    /// or `target/debug` of the repository the running executable sits in
-    /// (the newer of the two). The core reads its own settings from the
-    /// environment (`POCKET_HUB_HOME`, `POCKET_HUB_LINK_PORT`, …), passed on as is.
+    /// The app's core: `$POCKET_HUBD` when it is set, else the app bundle's
+    /// `Contents/Helpers/pocket-hubd`, as the command line takes `$POCKET_HUBD`
+    /// or the `pocket-hubd` beside it. One place each, nothing searched: a
+    /// `$POCKET_HUBD` that names no program, or a bundle without its helper,
+    /// is reported as a missing core rather than replaced by another one.
+    /// The core reads its own settings from the environment
+    /// (`POCKET_HUB_HOME`, `POCKET_HUB_LINK_PORT`, …), passed on as is.
     public static func standard(bundle: Bundle = .main,
                                 environment: [String: String] = ProcessInfo.processInfo.environment) -> CoreLauncher
     {
         let bundleURL = bundle.bundleURL
-        let executableURL = bundle.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
-        return CoreLauncher(candidates: {
-            var urls: [URL] = []
+        return CoreLauncher(executable: {
             if let explicit = environment["POCKET_HUBD"], !explicit.isEmpty {
-                urls.append(URL(fileURLWithPath: explicit))
+                return URL(fileURLWithPath: explicit)
             }
-            if bundleURL.pathExtension == "app" {
-                urls.append(bundleURL.appending(path: "Contents/Helpers/pocket-hubd"))
-            }
-            urls.append(contentsOf: developmentBuilds(above: executableURL.resolvingSymlinksInPath()))
-            return urls
+            guard bundleURL.pathExtension == "app" else { return nil }
+            return bundleURL.appending(path: "Contents/Helpers/pocket-hubd")
         }, environment: environment)
     }
 
-    /// `target/{release,debug}/pocket-hubd` of the nearest ancestor that holds a
-    /// `Cargo.toml` and a `target` folder, newest first.
-    static func developmentBuilds(above start: URL) -> [URL] {
-        let fm = FileManager.default
-        var directory = start.deletingLastPathComponent()
-        while directory.path != "/" {
-            let target = directory.appending(path: "target")
-            if fm.fileExists(atPath: directory.appending(path: "Cargo.toml").path),
-               fm.fileExists(atPath: target.path)
-            {
-                let builds = ["release", "debug"]
-                    .map { target.appending(path: "\($0)/pocket-hubd") }
-                    .filter { fm.isExecutableFile(atPath: $0.path) }
-                func modified(_ url: URL) -> Date {
-                    (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                }
-                return builds.sorted { modified($0) > modified($1) }
-            }
-            directory = directory.deletingLastPathComponent()
-        }
-        return []
-    }
-
+    /// The core's executable when it is there and can be run.
     public func locate() -> URL? {
-        candidates().first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        executable().flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil }
     }
 
     /// Starts the core. Does not wait for it to listen; the caller retries the

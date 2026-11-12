@@ -16,50 +16,54 @@ struct DaemonsView: View {
     private var model: HubModel { state.model }
 
     var body: some View {
-        VStack(spacing: 0) {
-            BunRuntimeBar()
-                .padding()
-            Divider()
-            if let daemons = model.daemons {
-                if daemons.isEmpty {
-                    ContentUnavailableView {
-                        Label("No Daemons", systemImage: "gearshape.2")
-                    } description: {
-                        Text("Some applets come with a part that runs on this Mac. Install one from a folder or a .tar.gz file.")
-                    } actions: {
-                        Button("Install Daemon…") { importing = true }
-                    }
-                } else {
-                    List(daemons, selection: $selection) { daemon in
-                        DaemonRow(daemon: daemon, perform: perform)
-                            .tag(daemon.id)
-                            .contextMenu {
-                                Button("Start") { perform(.start, daemon.id) }.disabled(daemon.state == .running)
-                                Button("Stop") { perform(.stop, daemon.id) }.disabled(daemon.state == .stopped)
-                                Button("Restart") { perform(.restart, daemon.id) }
-                                Divider()
-                                Button("Show Output") { selection = daemon.id; showingLog = true }
-                                Divider()
-                                Button("Remove…", role: .destructive) { confirmingRemove = daemon }
-                            }
-                    }
-                    .listStyle(.inset(alternatesRowBackgrounds: true))
-                }
-            } else {
-                ContentUnavailableView("Daemons Unavailable", systemImage: "exclamationmark.triangle",
-                                       description: Text("Pocket Hub couldn't list its daemons."))
+        // The runtime, the install under way and the daemons are cards of one
+        // grouped page. A row's output opens in the inspector, from the row's
+        // own button or its context menu.
+        Form {
+            Section {
+                BunRuntimeBar()
             }
             if let install = model.daemonInstall {
-                Divider()
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text("Installing \(install.source)…")
-                    Text(verbatim: daemonInstallStageText(install.stage)).foregroundStyle(.secondary)
-                    Spacer()
+                Section {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("Installing \(install.source)…")
+                        Text(verbatim: daemonInstallStageText(install.stage)).foregroundStyle(.secondary)
+                        Spacer()
+                    }
                 }
-                .padding(10)
+            }
+            Section("Daemons") {
+                if let daemons = model.daemons {
+                    if daemons.isEmpty {
+                        VStack(spacing: 8) {
+                            EmptySectionNote(
+                                title: Text("No Daemons"),
+                                detail: Text("Some applets come with a part that runs on this Mac. Install one from a folder or a .tar.gz file."))
+                            Button("Install Daemon…") { importing = true }
+                        }
+                        .padding(.bottom, 8)
+                    } else {
+                        ForEach(daemons) { daemon in
+                            DaemonRow(daemon: daemon, perform: perform) { showOutput(of: daemon.id) }
+                                .contextMenu {
+                                    Button("Start") { perform(.start, daemon.id) }.disabled(daemon.state == .running)
+                                    Button("Stop") { perform(.stop, daemon.id) }.disabled(daemon.state == .stopped)
+                                    Button("Restart") { perform(.restart, daemon.id) }
+                                    Divider()
+                                    Button("Show Output") { showOutput(of: daemon.id) }
+                                    Divider()
+                                    Button("Remove…", role: .destructive) { confirmingRemove = daemon }
+                                }
+                        }
+                    }
+                } else {
+                    EmptySectionNote(title: Text("Daemons Unavailable"),
+                                     detail: Text("Pocket Hub couldn't list its daemons."))
+                }
             }
         }
+        .formStyle(.grouped)
         .navigationTitle("Daemons")
         .toolbar {
             ToolbarItemGroup {
@@ -96,6 +100,11 @@ struct DaemonsView: View {
         }
     }
 
+    private func showOutput(of id: String) {
+        selection = id
+        showingLog = true
+    }
+
     private func perform(_ action: DaemonAction, _ id: String) {
         Task {
             do { try await model.perform(action, daemon: id) } catch { state.presentedError = UserFacingError(error) }
@@ -120,6 +129,7 @@ struct DaemonsView: View {
 struct DaemonRow: View {
     let daemon: Daemon
     let perform: (DaemonAction, String) -> Void
+    let showOutput: () -> Void
 
     var body: some View {
         HStack {
@@ -155,6 +165,8 @@ struct DaemonRow: View {
                 Button("Start", systemImage: "play.fill") { perform(.start, daemon.id) }
                     .labelStyle(.iconOnly).help("Start")
             }
+            Button("Show Output", systemImage: "text.alignleft", action: showOutput)
+                .labelStyle(.iconOnly).help("Show Output")
         }
         .buttonStyle(.borderless)
         .padding(.vertical, 2)

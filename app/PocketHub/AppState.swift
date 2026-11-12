@@ -24,11 +24,18 @@ final class AppState {
 
     let model: HubModel
     let launchAtLogin = LaunchAtLogin()
+    let language = AppLanguage()
     var selection: SidebarItem?
     /// The section shown on a device's page; kept here so the menu bar and the
     /// keyboard commands can choose it, whichever page is open.
     var deviceTab: DeviceTab = .applets
     var showingSetup = false
+    /// The device page's file picker for a .pocket applet, and its question
+    /// before removing the device: here so the Device menu can open them as
+    /// the toolbar does (HIG, Toolbars › macOS: every toolbar item is also a
+    /// menu command).
+    var importingApplet = false
+    var confirmingRemoveDevice = false
     /// The store applet whose details sheet is open.
     var storeDetails: StoreApp?
     /// An error to show in the window, from an action started anywhere.
@@ -99,9 +106,10 @@ final class AppState {
     }
 
     /// Starts updating a device's software from anywhere (the menu bar) and
-    /// shows its page, where the progress and the outcome are.
+    /// shows its Applets page, where the progress and the outcome are.
     func updateSoftware(of deviceId: String) {
         model.updateProgram(on: deviceId)
+        deviceTab = .applets
         show(device: deviceId)
     }
 
@@ -109,6 +117,34 @@ final class AppState {
     func quit(stoppingHub: Bool) {
         stopHubOnQuit = stoppingHub
         NSApp.terminate(nil)
+    }
+
+    /// Opens a new instance of the app and quits this one, the core left
+    /// running: how a language choice takes effect (AppLanguage). The new
+    /// instance is started by Launch Services, so it shares no descriptor with
+    /// this process; if it cannot be opened, this one stays and says why. It
+    /// gets this one's environment (`POCKET_HUB_HOME` and the like) but not its
+    /// arguments: an `-AppleLanguages` there would override the choice.
+    func relaunch() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        configuration.environment = ProcessInfo.processInfo.environment
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+            Task { @MainActor in
+                if let error {
+                    self.presentedError = UserFacingError(error)
+                    self.showWindow()
+                    return
+                }
+                // terminate(_:) waits in a nested event loop for the
+                // delegate's reply, which a main-actor task sends
+                // (AppDelegate.applicationShouldTerminate). Called from this
+                // task, it would hold the main queue that reply needs and
+                // never return, so it runs on the next turn of the run loop.
+                self.stopHubOnQuit = false
+                NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)
+            }
+        }
     }
 }
 
