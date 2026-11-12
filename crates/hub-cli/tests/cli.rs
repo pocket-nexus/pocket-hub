@@ -1,0 +1,491 @@
+//! `pocket-hub` against a real core: the main commands in both output modes,
+//! the exit statuses, starting the core when none answers, `--no-start`, and
+//! a core that cannot start.
+//!
+//! The core is the `pocket-hubd` next to `pocket-hub` in the target folder
+//! (built here when it is missing). Every test uses its own home, an
+//! ephemeral link port and no beacons, so nothing here touches another Hub.
+
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Output, Stdio};
+use std::time::{Duration, Instant};
+
+use serde_json::Value;
+
+const CLI: &str = env!("CARGO_BIN_EXE_pocket-hub");
+
+fn hubd() -> PathBuf {
+    let path = Path::new(CLI).with_file_name("pocket-hubd");
+    if !path.is_file() {
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let status = Command::new(cargo).args(["build", "-p", "pocket-hubd", "--bin", "pocket-hubd"]).status().expect("cargo builds pocket-hubd");
+        assert!(status.success());
+    }
+    path
+}
+
+fn bun() -> String {
+    let output = Command::new("which").arg("bun").output().unwrap();
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
+}
+
+fn home() -> tempfile::TempDir {
+    tempfile::Builder::new().prefix("phc").tempdir_in("/tmp").unwrap()
+}
+
+struct Run {
+    status: i32,
+    stdout: String,
+    stderr: String,
+}
+
+impl Run {
+    fn json(&self) -> Value {
+        serde_json::from_str(self.stdout.trim()).unwrap_or_else(|_| panic!("not JSON: {}", self.stdout))
+    }
+}
+
+fn command(home: &Path, args: &[&str]) -> Command {
+    hubd();
+    let mut command = Command::new(CLI);
+    command
+        .args(args)
+        .env("POCKET_HUB_HOME", home)
+        .env("POCKET_HUB_LINK_PORT", "0")
+        // A fixed name on the fresh home, never this computer's.
+        .env("POCKET_HUB_NAME", "Studio Mac")
+        .env("POCKET_HUB_NO_BEACONS", "1")
+        .env("POCKET_HUB_BUN", bun())
+        // No applet store and no release source unless a test sets up its
+        // fake one: a core looks Pocket Shell's release up when a device links.
+        .env("POCKET_HUB_STORE_URL", "http://127.0.0.1:9")
+        .env("POCKET_HUB_SHELL_API", "http://127.0.0.1:9")
+        .env_remove("POCKET_HUB_SHELL_FILE")
+        .env_remove("POCKET_HUB_SHELL_REPO")
+        .env_remove("POCKET_HUBD")
+        .current_dir(home);
+    command
+}
+
+fn run(home: &Path, args: &[&str]) -> Run {
+    let Output { status, stdout, stderr } = command(home, args).output().expect("pocket-hub runs");
+    Run { status: status.code().unwrap_or(-1), stdout: String::from_utf8_lossy(&stdout).into_owned(), stderr: String::from_utf8_lossy(&stderr).into_owned() }
+}
+
+/// The reference device (hub-core's harness) on a card's pairing; returns
+/// once it has linked.
+fn device(card: &Path, hub: &str, port: u64) -> Child {
+    let config = serde_json::json!({"dir": card.join("pocketjs/link"), "hub": hub, "address": "127.0.0.1", "port": port});
+    let harness = concat!(env!("CARGO_MANIFEST_DIR"), "/../hub-core/tests/harness/device.ts");
+    let mut child = Command::new(bun()).arg(harness).arg(config.to_string()).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).spawn().unwrap();
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    for line in lines.by_ref() {
+        if line.unwrap().contains("\"ev\":\"linked\"") {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the device did not link");
+    }
+    // The device's later lines are not read; it writes few.
+    std::thread::spawn(move || for _ in lines {});
+    child
+}
+
+/// Stops a core a test started even when the test fails: a started core is
+/// detached and would outlive the test.
+struct Stop<'a>(&'a Path);
+
+impl Drop for Stop<'_> {
+    fn drop(&mut self) {
+        let _ = command(self.0, &["--no-start", "shutdown"]).output();
+    }
+}
+
+fn shutdown(home: &Path) {
+    let done = run(home, &["shutdown"]);
+    assert_eq!(done.status, 0, "{}", done.stderr);
+}
+
+#[test]
+fn starting_the_core_and_reaching_none() {
+    let home = home();
+    let _stop = Stop(home.path());
+    let unreachable = run(home.path(), &["--no-start", "status"]);
+    assert_eq!(unreachable.status, 3);
+    assert!(unreachable.stderr.contains("No Pocket Hub core answers"), "{}", unreachable.stderr);
+    let unreachable = run(home.path(), &["--no-start", "--json", "devices"]);
+    assert_eq!(unreachable.status, 3);
+    assert!(unreachable.json()["error"]["message"].as_str().unwrap().contains("No Pocket Hub core"));
+
+    // `status` starts the core next to the command and waits for it.
+    let status = run(home.path(), &["status"]);
+    assert_eq!(status.status, 0, "{}", status.stderr);
+    assert!(status.stdout.starts_with("Pocket Hub \"") && status.stdout.contains("Link:     tcp port"), "{}", status.stdout);
+    let json = run(home.path(), &["--json", "status"]).json();
+    assert_eq!(json["home"], home.path().display().to_string());
+    let port = json["carriers"][0]["port"].as_u64().unwrap();
+    assert!(port > 0 && port != 8628);
+    // A second core for the same home exits at once with 0.
+    let second = Command::new(hubd()).arg("--home").arg(home.path()).args(["--link-port", "0", "--no-beacons"]).output().unwrap();
+    assert_eq!(second.status.code(), Some(0));
+    assert!(run(home.path(), &["--no-start", "status"]).status == 0);
+
+    shutdown(home.path());
+    assert!(!home.path().join("hubd.sock").exists());
+    assert_eq!(run(home.path(), &["shutdown"]).status, 3, "shutdown starts no core");
+    assert_eq!(run(home.path(), &["--no-start", "status"]).status, 3);
+}
+
+#[test]
+fn a_core_that_cannot_start_is_reported() {
+    // A link port another program holds: the core says so in one line and
+    // the command exits with "core unreachable".
+    let taken = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+    let port = taken.local_addr().unwrap().port().to_string();
+    let home = home();
+    let run_taken = {
+        let output = command(home.path(), &["status"]).env("POCKET_HUB_LINK_PORT", &port).output().unwrap();
+        Run { status: output.status.code().unwrap(), stdout: String::from_utf8_lossy(&output.stdout).into(), stderr: String::from_utf8_lossy(&output.stderr).into() }
+    };
+    assert_eq!(run_taken.status, 3);
+    assert!(run_taken.stderr.contains(&format!("The link port {port} is in use")), "{}", run_taken.stderr);
+    let log = std::fs::read_to_string(home.path().join("logs/hubd.log")).unwrap();
+    assert!(log.contains(&format!("The link port {port} is in use")), "the line is in hubd.log too");
+
+    // The binary alone: a non-zero status and the same line on standard error.
+    let direct = Command::new(hubd()).arg("--home").arg(home.path()).args(["--link-port", &port, "--no-beacons"]).output().unwrap();
+    assert_eq!(direct.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&direct.stderr);
+    assert!(stderr.lines().any(|l| l.starts_with("pocket-hubd: The link port") && l.contains(&port)), "{stderr}");
+
+    // A home too long for its socket.
+    let long = home.path().join("y".repeat(100));
+    let refused = Command::new(hubd()).arg("--home").arg(&long).args(["--link-port", "0"]).output().unwrap();
+    assert_eq!(refused.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("too long"));
+
+    // An explicit core program that does not exist.
+    let missing = command(home.path(), &["status"]).env("POCKET_HUBD", home.path().join("nowhere")).output().unwrap();
+    assert_eq!(missing.status.code(), Some(3));
+    drop(taken);
+}
+
+#[test]
+fn devices_setup_and_daemons_in_both_modes() {
+    let home = home();
+    let _stop = Stop(home.path());
+    let work = home.path().join("work");
+    std::fs::create_dir_all(work.join("sd/3ds")).unwrap();
+    let card = work.join("sd");
+    let shell = work.join("shell.3dsx");
+    let mut program = b"3DSX".to_vec();
+    program.extend((0..4096u32).map(|i| (i * 31) as u8));
+    std::fs::write(&shell, &program).unwrap();
+
+    let none = run(home.path(), &["devices"]);
+    assert_eq!((none.status, none.stdout.trim()), (0, "No device is paired. Set one up with: pocket-hub setup 3ds"));
+    assert_eq!(run(home.path(), &["--json", "devices"]).json(), serde_json::json!({"devices": []}));
+    let no_device = run(home.path(), &["device", "status"]);
+    assert_eq!(no_device.status, 1);
+    assert!(no_device.stderr.contains("No device is paired") && no_device.stderr.contains("[not_found]"), "{}", no_device.stderr);
+
+    // Setup onto the card, with a relative path for the program.
+    let setup = run(home.path(), &["setup", "3ds", "--card", card.to_str().unwrap(), "--program", "work/shell.3dsx"]);
+    assert_eq!(setup.status, 0, "{}", setup.stderr);
+    assert!(setup.stdout.contains("a new pairing was written; the 3DS's software was installed.") && setup.stdout.contains("Next: Done."), "{}", setup.stdout);
+    let again = run(home.path(), &["--json", "setup", "3ds", "--card", card.to_str().unwrap(), "--program", shell.to_str().unwrap()]).json();
+    assert_eq!((again["pairing"].as_str(), again["program"]["action"].as_str(), again["confirmed"].as_bool()), (Some("kept"), Some("kept"), Some(true)));
+    let id = again["device"].as_str().unwrap().to_owned();
+    let devices = run(home.path(), &["devices"]);
+    assert!(devices.stdout.contains(&id) && devices.stdout.contains("not linked"), "{}", devices.stdout);
+    let not_linked = run(home.path(), &["--json", "device", "status"]);
+    assert_eq!(not_linked.status, 1);
+    assert_eq!(not_linked.json()["error"]["data"]["kind"], "not_linked");
+
+    // The reference device links with that pairing.
+    let status = run(home.path(), &["--json", "status"]).json();
+    let mut device = device(&card, status["id"].as_str().unwrap(), status["carriers"][0]["port"].as_u64().unwrap());
+    let fields = run(home.path(), &["device", &id, "status"]);
+    assert_eq!(fields.status, 0, "{}", fields.stderr);
+    assert!(fields.stdout.lines().any(|line| line == "phase: booted"), "{}", fields.stdout);
+    assert_eq!(run(home.path(), &["--json", "device", "status"]).json()["phase"], "booted");
+
+    // `device logs` follows the device's lines until it is stopped.
+    let mut logs = command(home.path(), &["device", "logs"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut note = String::new();
+    BufReader::new(logs.stderr.take().unwrap()).read_line(&mut note).unwrap();
+    assert!(note.starts_with("Logs of Test 3DS"), "{note}");
+    use std::io::Write;
+    writeln!(device.stdin.as_mut().unwrap(), r#"{{"cmd":"log","text":"from the cli test","level":"info","source":"host","frame":7}}"#).unwrap();
+    let mut line = String::new();
+    BufReader::new(logs.stdout.take().unwrap()).read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "[7] info host: from the cli test");
+    let _ = logs.kill();
+    let _ = logs.wait();
+
+    let mut package = (0..4088u32).map(|i| (i * 7 + 13) as u8).collect::<Vec<u8>>();
+    package[0] = 1;
+    let hash = package.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3));
+    package.extend_from_slice(&hash.to_le_bytes());
+    std::fs::write(work.join("demo.pocket"), &package).unwrap();
+    let pushed = run(home.path(), &["device", "push", "work/demo.pocket"]);
+    assert_eq!(pushed.status, 0, "{}", pushed.stderr);
+    assert!(pushed.stdout.starts_with("Pushed Demo (dev.demo): generation"), "{}", pushed.stdout);
+    let pushed = run(home.path(), &["--json", "device", &id, "push", "work/demo.pocket"]).json();
+    assert_eq!(pushed["hash"], format!("{hash:016x}"));
+    let launched = run(home.path(), &["device", "launch", "demo"]);
+    assert_eq!(launched.stdout.trim(), "Launched demo.");
+    let shot = run(home.path(), &["device", "shot", "screen.png"]);
+    assert_eq!(shot.status, 0, "{}", shot.stderr);
+    assert!(std::fs::read(home.path().join("screen.png")).unwrap().starts_with(b"\x89PNG"));
+    let into_cache = run(home.path(), &["--json", "device", "shot"]).json();
+    assert!(Path::new(into_cache["path"].as_str().unwrap()).starts_with(home.path().join("cache/screenshots")));
+    // A local build replaces the device's program whatever its name.
+    std::fs::write(work.join("pocket-cli.3dsx"), &program).unwrap();
+    let installed = run(home.path(), &["device", "update", "--program", "work/pocket-cli.3dsx", "--no-launch"]);
+    assert_eq!(installed.stdout.trim(), "The 3DS's software was installed. It runs at the device's next start.", "{}", installed.stderr);
+    let installed = run(home.path(), &["--json", "device", &id, "update", "--program", "work/pocket-cli.3dsx", "--no-launch"]).json();
+    assert_eq!(installed, serde_json::json!({"phase": "installed", "name": "pocket-shell.3dsx", "version": null}));
+    // No release source answers: the update fails and sends nothing.
+    let unreachable = run(home.path(), &["device", "update"]);
+    assert_eq!(unreachable.status, 1);
+    assert!(unreachable.stderr.contains("Hub could not get the 3DS's software, so nothing was sent to the device") && unreachable.stderr.contains("[release, reason unreachable]"), "{}", unreachable.stderr);
+    let unreachable = run(home.path(), &["--json", "device", "update"]).json();
+    assert_eq!((unreachable["error"]["data"]["kind"].as_str(), unreachable["error"]["data"]["reason"].as_str()), (Some("release"), Some("unreachable")));
+    assert_eq!(run(home.path(), &["--json", "devices"]).json()["devices"][0]["program"], serde_json::json!({"version": null, "latest": null, "update": false}), "the look failed: nothing is known");
+    let apps = run(home.path(), &["device", "apps"]);
+    assert_eq!(apps.status, 0);
+    assert_eq!(run(home.path(), &["--json", "device", "apps"]).json(), Value::Null, "no applet report yet");
+    let bad = run(home.path(), &["device", "push", "work/shell.3dsx"]);
+    assert_eq!(bad.status, 1);
+    assert!(bad.stderr.contains("[invalid]"), "{}", bad.stderr);
+
+    // Daemons, while `watch` prints the events.
+    // `watch` says on standard error once it is subscribed; the install comes after that.
+    let mut watch = command(home.path(), &["watch", "--topic", "daemon.changed"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut note = String::new();
+    BufReader::new(watch.stderr.take().unwrap()).read_line(&mut note).unwrap();
+    assert!(note.starts_with("Watching the core's events"), "{note}");
+    assert_eq!(run(home.path(), &["daemons"]).stdout.trim(), "No daemon is installed.");
+    let package = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sdk/daemon/examples/link-channel");
+    let installed = run(home.path(), &["daemon", "install", package.to_str().unwrap()]);
+    assert_eq!(installed.stdout.trim(), "Installed dev.pocket-nexus.link-channel 0.1.0.", "{}", installed.stderr);
+    let mut first = String::new();
+    BufReader::new(watch.stdout.take().unwrap()).read_line(&mut first).unwrap();
+    assert!(first.starts_with("daemon dev.pocket-nexus.link-channel 0.1.0: stopped"), "{first}");
+    let _ = watch.kill();
+    let _ = watch.wait();
+    let daemons = run(home.path(), &["--json", "daemons"]).json();
+    assert_eq!(daemons["daemons"][0]["state"], "stopped");
+    let started = run(home.path(), &["daemon", "start", "dev.pocket-nexus.link-channel"]);
+    assert!(started.stdout.contains("running"), "{}", started.stdout);
+    let logs = run(home.path(), &["--json", "daemon", "logs", "dev.pocket-nexus.link-channel"]).json();
+    assert!(logs["lines"].as_array().unwrap().iter().any(|line| line["text"].as_str().unwrap().contains("installed 0.1.0")));
+    assert!(run(home.path(), &["daemon", "stop", "dev.pocket-nexus.link-channel"]).stdout.contains("stopped"));
+    assert_eq!(run(home.path(), &["daemon", "remove", "dev.pocket-nexus.link-channel"]).stdout.trim(), "Removed dev.pocket-nexus.link-channel; its data folder is kept.");
+    assert_eq!(run(home.path(), &["daemon", "start", "dev.pocket-nexus.link-channel"]).status, 1);
+    assert!(run(home.path(), &["runtime"]).stdout.contains("is installed at"));
+
+    let forgotten = run(home.path(), &["device", "forget"]);
+    assert_eq!(forgotten.status, 0, "{}", forgotten.stderr);
+    assert_eq!(run(home.path(), &["--json", "devices"]).json()["devices"], serde_json::json!([]));
+    let _ = device.kill();
+    let _ = device.wait();
+    shutdown(home.path());
+}
+
+/// `store` and `store install` against the fake applet store, in both
+/// output modes. The first command starts the core with the store's URL and
+/// key; the later ones reach that core.
+#[test]
+fn the_store_in_both_modes() {
+    use pocket_hub_applet_store::test_support::{FakeStore, build_package, icon, public, test_key};
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let store = runtime.block_on(FakeStore::start());
+    let notes = store.publish(&test_key(1), build_package("dev.pocket-nexus.notes", "1.0.0", "Notes", &[("3ds-dev", "notes")], 30_000), icon(1), "pocket-nexus", "Notes.");
+    store.publish(&test_key(2), build_package("io.example.rg", "2.0.0", "RG", &[("rg-ds-plus", "rg")], 100), icon(2), "someone", "Elsewhere.");
+    let home = home();
+    let _stop = Stop(home.path());
+    let key = public(&test_key(1));
+    let with_store = |args: &[&str]| {
+        let Output { status, stdout, stderr } = command(home.path(), args).env("POCKET_HUB_STORE_URL", &store.url).env("POCKET_HUB_STORE_KEY", &key).output().unwrap();
+        Run { status: status.code().unwrap_or(-1), stdout: String::from_utf8_lossy(&stdout).into_owned(), stderr: String::from_utf8_lossy(&stderr).into_owned() }
+    };
+
+    let table = with_store(&["store"]);
+    assert_eq!(table.status, 0, "{}", table.stderr);
+    let lines: Vec<&str> = table.stdout.lines().collect();
+    assert!(lines[0].starts_with("TITLE") && lines[0].contains("SIZE") && !lines[0].contains("ON DEVICE"), "{}", table.stdout);
+    assert!(table.stdout.contains("Notes") && table.stdout.contains("RG (by someone)") && table.stdout.contains("Catalog of "), "{}", table.stdout);
+    let json = with_store(&["--json", "store"]).json();
+    assert_eq!(json["apps"].as_array().unwrap().len(), 2);
+    assert!(json["apps"][0].get("installed").is_none() && json["fetchedAt"].is_i64(), "{json}");
+
+    // A device, paired on a card and linked.
+    let work = home.path().join("work");
+    std::fs::create_dir_all(work.join("sd/3ds")).unwrap();
+    let card = work.join("sd");
+    let shell = work.join("shell.3dsx");
+    let mut program = b"3DSX".to_vec();
+    program.extend((0..4096u32).map(|i| (i * 31) as u8));
+    std::fs::write(&shell, &program).unwrap();
+    let setup = with_store(&["--json", "setup", "3ds", "--card", card.to_str().unwrap(), "--program", shell.to_str().unwrap()]).json();
+    let id = setup["device"].as_str().unwrap().to_owned();
+    let status = with_store(&["--json", "status"]).json();
+    let mut linked = device(&card, status["id"].as_str().unwrap(), status["carriers"][0]["port"].as_u64().unwrap());
+
+    let for_device = with_store(&["store", "--device", &id]);
+    assert_eq!(for_device.status, 0, "{}", for_device.stderr);
+    assert!(for_device.stdout.lines().next().unwrap().contains("ON DEVICE"), "{}", for_device.stdout);
+    assert!(!for_device.stdout.contains("RG"), "the RG-only app is not the 3DS's: {}", for_device.stdout);
+    assert!(for_device.stdout.lines().any(|line| line.contains("Notes") && line.contains(" * ") && line.trim_end().ends_with('-')), "not downloaded yet: {}", for_device.stdout);
+    assert!(for_device.stdout.contains("* not downloaded by Hub yet"), "{}", for_device.stdout);
+
+    // Install it: the one paired device, without --device.
+    let installed = with_store(&["store", "install", &notes.id]);
+    assert_eq!(installed.status, 0, "{}", installed.stderr);
+    assert!(installed.stdout.starts_with("Installed Notes (dev.pocket-nexus.notes): generation "), "{}", installed.stdout);
+    let again = with_store(&["--json", "store", "install", &notes.id, "--device", &id]).json();
+    assert_eq!(again["app"]["output"], "notes");
+    // The device's report names it.
+    let mut held = serde_json::Value::Null;
+    for _ in 0..100 {
+        let json = with_store(&["--json", "store", "--device", &id]).json();
+        held = json["apps"].as_array().unwrap().iter().find(|app| app["id"] == notes.id.as_str()).cloned().unwrap();
+        if !held["installed"].is_null() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert_eq!((held["installed"]["version"].as_str(), held["update"].as_bool()), (Some("1.0.0"), Some(false)), "{held}");
+    let shown = with_store(&["store", "--device", &id]);
+    assert!(shown.stdout.lines().any(|line| line.contains("Notes") && line.contains("1.0.0 installed") && !line.contains(" * ")), "{}", shown.stdout);
+    assert_eq!(held["cached"], true);
+
+    // Errors in both modes.
+    let none = with_store(&["--json", "store", "install", "io.example.none"]);
+    assert_eq!((none.status, none.json()["error"]["data"]["kind"].as_str()), (1, Some("not_found")));
+    store.catalog_status(Some(500));
+    let down = with_store(&["store", "--refresh"]);
+    assert_eq!(down.status, 1);
+    assert!(down.stderr.contains("[store, reason unreachable]"), "{}", down.stderr);
+    let down = with_store(&["--json", "store", "--refresh"]).json();
+    assert_eq!(down["error"]["data"]["reason"], "unreachable");
+    let _ = linked.kill();
+    let _ = linked.wait();
+    drop(runtime);
+}
+
+#[test]
+fn usage_errors_and_help() {
+    let home = home();
+    let help = run(home.path(), &["--help"]);
+    assert_eq!(help.status, 0);
+    assert!(help.stdout.contains("Exit status: 0 success, 1 the operation failed, 2 a usage error, 3 no Pocket Hub core could be reached."));
+    let device_help = run(home.path(), &["device", "--help"]);
+    assert!(device_help.stdout.contains("update [--program <file.3dsx> | --release <tag>] [--no-launch]"), "{}", device_help.stdout);
+    assert_eq!(run(home.path(), &["device", "update", "--program", "a.3dsx", "--release", "v1"]).status, 2);
+    assert_eq!(run(home.path(), &["device", "install-program", "a.3dsx"]).status, 2, "replaced by update");
+    assert_eq!(run(home.path(), &["frobnicate"]).status, 2);
+    assert_eq!(run(home.path(), &["device", "0123456789abcdef", "explode"]).status, 2);
+    // Usage errors need no core: none was started.
+    assert!(!home.path().join("hubd.sock").exists());
+}
+
+/// `device update` from a release on a GitHub-shaped server on loopback, and
+/// the program's version and update in `devices` and `device status`, in
+/// both output modes.
+#[test]
+fn device_update_in_both_modes() {
+    use pocket_hub_setup::test_support::{FakeHttp, fake_3dsx, github_release};
+    use std::io::Write;
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let release = fake_3dsx(40_000, 9);
+    let releases = runtime.block_on(FakeHttp::start(github_release("test/shell", "v2026.11.11", "2026.11.11", &release, true)));
+    let home = home();
+    let _stop = Stop(home.path());
+    let hub = |args: &[&str]| {
+        let Output { status, stdout, stderr } = command(home.path(), args).env("POCKET_HUB_SHELL_API", &releases.base).env("POCKET_HUB_SHELL_REPO", "test/shell").output().unwrap();
+        Run { status: status.code().unwrap_or(-1), stdout: String::from_utf8_lossy(&stdout).into_owned(), stderr: String::from_utf8_lossy(&stderr).into_owned() }
+    };
+
+    let work = home.path().join("work");
+    std::fs::create_dir_all(work.join("sd/3ds")).unwrap();
+    let card = work.join("sd");
+    std::fs::write(work.join("shell.3dsx"), fake_3dsx(4096, 1)).unwrap();
+    let setup = hub(&["--json", "setup", "3ds", "--card", card.to_str().unwrap(), "--program", "work/shell.3dsx"]).json();
+    let id = setup["device"].as_str().unwrap().to_owned();
+    let unknown = hub(&["devices"]);
+    assert!(unknown.stdout.lines().next().unwrap().contains("PROGRAM"), "{}", unknown.stdout);
+    assert!(unknown.stdout.lines().nth(1).unwrap().contains(" -  "), "no version before a report: {}", unknown.stdout);
+
+    // The device links (Hub looks the release up) and reports its program.
+    let status = hub(&["--json", "status"]).json();
+    let mut linked = device(&card, status["id"].as_str().unwrap(), status["carriers"][0]["port"].as_u64().unwrap());
+    writeln!(linked.stdin.as_mut().unwrap(), r#"{{"cmd":"apps","count":0,"home":"2026.11.2"}}"#).unwrap();
+    let mut program = Value::Null;
+    for _ in 0..200 {
+        program = hub(&["--json", "devices"]).json()["devices"][0]["program"].clone();
+        if !program["version"].is_null() && !program["latest"].is_null() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert_eq!(program, serde_json::json!({"version": "2026.11.2", "latest": "2026.11.11", "update": true}));
+    let listed = hub(&["devices"]);
+    assert!(listed.stdout.contains("2026.11.2 (update available: 2026.11.11)"), "{}", listed.stdout);
+    let status = hub(&["device", "status"]);
+    assert!(status.stdout.lines().any(|line| line == "program: 2026.11.2 (update available: 2026.11.11)"), "{}", status.stdout);
+    assert_eq!(hub(&["--json", "device", "status"]).json()["phase"], "booted", "--json prints the runtime status as it came");
+
+    // The latest release, then a tag, not launched; then launched.
+    let updated = hub(&["device", "update", "--no-launch"]);
+    assert_eq!(updated.status, 0, "{}", updated.stderr);
+    assert_eq!(updated.stdout.trim(), "Version 2026.11.11 of the 3DS's software was installed. It runs at the device's next start.");
+    let tagged = hub(&["--json", "device", &id, "update", "--release", "v2026.11.11", "--no-launch"]).json();
+    assert_eq!(tagged, serde_json::json!({"phase": "installed", "name": "pocket-shell.3dsx", "version": "2026.11.11"}));
+    let missing = hub(&["device", "update", "--release", "v1999.01.01"]);
+    assert_eq!(missing.status, 1);
+    assert!(missing.stderr.contains("There is no release v1999.01.01 of the 3DS's software. [release, reason not_found]"), "{}", missing.stderr);
+    let missing = hub(&["--json", "device", "update", "--release", "v1999.01.01"]).json();
+    assert_eq!(missing["error"]["data"], serde_json::json!({"kind": "release", "reason": "not_found"}));
+    let launched = hub(&["device", "update"]);
+    assert_eq!(launched.status, 0, "{}", launched.stderr);
+    assert_eq!(launched.stdout.trim(), "Version 2026.11.11 of the 3DS's software was installed. The device restarts and connects again by itself.");
+    assert_eq!(releases.hits("/dl/v2026.11.11/pocket-shell-v2026.11.11.3dsx"), 1, "downloaded once, then from the cache");
+    let restarting = hub(&["devices"]);
+    assert!(restarting.stdout.contains("restarting into a program"), "{}", restarting.stdout);
+
+    let _ = linked.kill();
+    let _ = linked.wait();
+    drop(runtime);
+}
+
+/// A core started by the command line holds none of the descriptors the
+/// command line had: this test gives `pocket-hub` a file at descriptor 150
+/// without close-on-exec, and the core it starts must not hold that file.
+#[test]
+fn a_started_core_holds_no_descriptor_of_its_client() {
+    use std::os::fd::AsRawFd;
+    let home = home();
+    let _stop = Stop(home.path());
+    let marker = home.path().join(format!("leak-marker-{}.txt", std::process::id()));
+    let file = std::fs::File::create(&marker).unwrap();
+    // SAFETY: dup2 onto a number this test owns; the copy has no close-on-exec,
+    // so `pocket-hub` inherits it, and so would the core it starts.
+    assert_eq!(unsafe { libc::dup2(file.as_raw_fd(), 150) }, 150);
+    let status = run(home.path(), &["status"]);
+    // SAFETY: this test's own copy.
+    unsafe { libc::close(150) };
+    assert_eq!(status.status, 0, "{}", status.stderr);
+    // The core holds its home's lock file: that names its pid.
+    let pid = Command::new("lsof").arg("-t").arg(home.path().join("hubd.lock")).output().unwrap();
+    let pid = String::from_utf8_lossy(&pid.stdout).lines().next().expect("the core holds its lock").trim().to_owned();
+    let open = Command::new("lsof").args(["-n", "-P", "-Fn", "-p", &pid]).output().unwrap();
+    let open = String::from_utf8_lossy(&open.stdout);
+    assert!(open.contains("hubd.lock"), "lsof lists the core's files: {open}");
+    assert!(!open.contains("leak-marker"), "the core holds its client's descriptor: {open}");
+    drop(file);
+    shutdown(home.path());
+}

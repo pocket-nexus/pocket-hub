@@ -1,0 +1,1510 @@
+{
+  "about": "Lines pocket-hubd wrote and read in crates/hubd/tests/e2e.rs (POCKET_HUB_UPDATE_EXAMPLES=1 cargo test -p pocket-hubd --test e2e writes this file again). One example per method (request, answer, and the last progress notification of each phase), notification a client sends, event topic and error kind or code. What belongs to the computer and the run that made it is replaced: paths (the repository is /path/to/pocket-hub, Hub's home /tmp/hub-home, the test's files /tmp/work), ids made in the run, times (2026-01-01), pids, loopback ports and byte counts between 0 and the total.",
+  "methods": {
+    "daemons.install": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 35,
+        "method": "daemons.install",
+        "params": {
+          "path": "/path/to/pocket-hub/sdk/daemon/examples/link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 35,
+        "result": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "stopped",
+          "pid": null,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": null,
+          "error": null
+        }
+      },
+      "progress": [
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "installing",
+            "message": "Installing the daemon package /path/to/pocket-hub/sdk/daemon/examples/link-channel.",
+            "id": 35
+          }
+        }
+      ]
+    },
+    "daemons.list": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 37,
+        "method": "daemons.list",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 37,
+        "result": {
+          "daemons": [
+            {
+              "id": "dev.pocket-nexus.link-channel",
+              "version": "0.1.0",
+              "state": "running",
+              "pid": 4242,
+              "since": 1767225600000,
+              "channels": 1,
+              "lastExit": null,
+              "error": null
+            }
+          ]
+        }
+      }
+    },
+    "daemons.logs": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 36,
+        "method": "daemons.logs",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel",
+          "tail": 1
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 36,
+        "result": {
+          "lines": [
+            {
+              "at": 1767225600000,
+              "stream": "hub",
+              "text": "installed 0.1.0"
+            }
+          ]
+        }
+      }
+    },
+    "daemons.remove": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 43,
+        "method": "daemons.remove",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 43,
+        "result": {}
+      }
+    },
+    "daemons.restart": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 40,
+        "method": "daemons.restart",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 40,
+        "result": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "running",
+          "pid": 4242,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": {
+            "code": 0,
+            "signal": null,
+            "at": 1767225600000
+          },
+          "error": null
+        }
+      }
+    },
+    "daemons.runtime": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 34,
+        "method": "daemons.runtime",
+        "params": {
+          "install": null
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 34,
+        "result": {
+          "version": "1.4.4",
+          "installed": true,
+          "path": "/usr/local/bin/bun"
+        }
+      }
+    },
+    "daemons.start": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 39,
+        "method": "daemons.start",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 39,
+        "result": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "running",
+          "pid": 4242,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": {
+            "code": 0,
+            "signal": null,
+            "at": 1767225600000
+          },
+          "error": null
+        }
+      }
+    },
+    "daemons.stop": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "method": "daemons.stop",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "result": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "stopped",
+          "pid": null,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": {
+            "code": 0,
+            "signal": null,
+            "at": 1767225600000
+          },
+          "error": null
+        }
+      }
+    },
+    "devices.forget": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 12,
+        "method": "devices.forget",
+        "params": {
+          "device": "00000000000000f1"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 12,
+        "result": {}
+      }
+    },
+    "devices.get": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 17,
+        "method": "devices.get",
+        "params": {
+          "device": "*"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 17,
+        "result": {
+          "id": "0123456789abcdef",
+          "kind": "3ds",
+          "name": "Test 3DS",
+          "model": "New Nintendo 3DS XL",
+          "target": "3ds-dev",
+          "hostAbi": 7,
+          "lastAddress": "127.0.0.1",
+          "lastSeen": 1767225600000,
+          "setupUnconfirmed": false,
+          "duplicateId": false,
+          "link": {
+            "carrier": "tcp",
+            "peer": "127.0.0.1:50000",
+            "since": 1767225600000,
+            "payloadLimit": 16384,
+            "features": [
+              "runtime",
+              "runtime.native",
+              "apps",
+              "channel",
+              "net.http",
+              "catalog",
+              "install"
+            ]
+          },
+          "status": {
+            "phase": "booted",
+            "target": "3ds-dev",
+            "hostAbi": 7,
+            "slot": "0000000000000001",
+            "address": "127.0.0.1",
+            "generation": 1,
+            "active": "00000000000000aa",
+            "lastGood": "00000000000000aa",
+            "running": "00000000000000aa",
+            "frame": 1234,
+            "app": {
+              "id": "dev.demo",
+              "output": "demo",
+              "title": "Demo"
+            }
+          },
+          "apps": [
+            {
+              "id": "dev.pocket-nexus.shell",
+              "output": "home",
+              "version": "2026.11.2",
+              "hash": "00000000000000aa",
+              "home": true
+            },
+            {
+              "id": "dev.app.0",
+              "output": "app0",
+              "version": "1.0.0",
+              "hash": "0000000000000000"
+            },
+            {
+              "id": "dev.app.1",
+              "output": "app1",
+              "version": "1.0.0",
+              "hash": "0000000000000001"
+            }
+          ],
+          "busy": null,
+          "program": {
+            "version": "2026.11.2",
+            "latest": "2026.11.11",
+            "update": true
+          },
+          "channels": []
+        }
+      }
+    },
+    "devices.installProgram": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 21,
+        "method": "devices.installProgram",
+        "params": {
+          "device": "0123456789abcdef",
+          "launch": false
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 21,
+        "result": {
+          "phase": "installed",
+          "name": "pocket-shell.3dsx",
+          "version": "2026.11.11"
+        }
+      },
+      "progress": [
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "downloading",
+            "done": 65536,
+            "total": 65536,
+            "id": 21
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "sending",
+            "done": 0,
+            "total": 65536,
+            "id": 21
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "receiving",
+            "done": 65536,
+            "total": 65536,
+            "id": 21
+          }
+        }
+      ]
+    },
+    "devices.launch": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 20,
+        "method": "devices.launch",
+        "params": {
+          "device": "0123456789abcdef",
+          "app": "dev.app.1"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 20,
+        "result": {
+          "output": "app1"
+        }
+      }
+    },
+    "devices.list": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 16,
+        "method": "devices.list",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 16,
+        "result": {
+          "devices": [
+            {
+              "id": "0123456789abcdef",
+              "kind": "3ds",
+              "name": "Test 3DS",
+              "model": "New Nintendo 3DS XL",
+              "target": "3ds-dev",
+              "hostAbi": 7,
+              "lastAddress": "127.0.0.1",
+              "lastSeen": 1767225600000,
+              "setupUnconfirmed": false,
+              "duplicateId": false,
+              "link": {
+                "carrier": "tcp",
+                "peer": "127.0.0.1:50000",
+                "since": 1767225600000,
+                "payloadLimit": 16384,
+                "features": [
+                  "runtime",
+                  "runtime.native",
+                  "apps",
+                  "channel",
+                  "net.http",
+                  "catalog",
+                  "install"
+                ]
+              },
+              "status": {
+                "phase": "booted",
+                "target": "3ds-dev",
+                "hostAbi": 7,
+                "slot": "0000000000000001",
+                "address": "127.0.0.1",
+                "generation": 1,
+                "active": "00000000000000aa",
+                "lastGood": "00000000000000aa",
+                "running": "00000000000000aa",
+                "frame": 1234,
+                "app": {
+                  "id": "dev.demo",
+                  "output": "demo",
+                  "title": "Demo"
+                }
+              },
+              "apps": [
+                {
+                  "id": "dev.pocket-nexus.shell",
+                  "output": "home",
+                  "version": "2026.11.2",
+                  "hash": "00000000000000aa",
+                  "home": true
+                },
+                {
+                  "id": "dev.app.0",
+                  "output": "app0",
+                  "version": "1.0.0",
+                  "hash": "0000000000000000"
+                },
+                {
+                  "id": "dev.app.1",
+                  "output": "app1",
+                  "version": "1.0.0",
+                  "hash": "0000000000000001"
+                }
+              ],
+              "busy": null,
+              "program": {
+                "version": "2026.11.2",
+                "latest": "2026.11.11",
+                "update": true
+              },
+              "channels": []
+            }
+          ]
+        }
+      }
+    },
+    "devices.logs": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 27,
+        "method": "devices.logs",
+        "params": {
+          "device": "0123456789abcdef",
+          "on": true
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 27,
+        "result": {}
+      }
+    },
+    "devices.push": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 18,
+        "method": "devices.push",
+        "params": {
+          "device": "*",
+          "path": "/tmp/work/demo.pocket"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 18,
+        "result": {
+          "app": {
+            "id": "dev.demo",
+            "output": "demo",
+            "title": "Demo"
+          },
+          "hash": "889c42cfc9505649",
+          "generation": 2
+        }
+      },
+      "progress": [
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "sending",
+            "done": 0,
+            "total": 307200,
+            "id": 18
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "receiving",
+            "done": 307200,
+            "total": 307200,
+            "id": 18
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "received",
+            "done": 307200,
+            "total": 307200,
+            "id": 18
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "staged",
+            "done": 307200,
+            "total": 307200,
+            "id": 18
+          }
+        }
+      ]
+    },
+    "devices.screenshot": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 25,
+        "method": "devices.screenshot",
+        "params": {
+          "device": "0123456789abcdef",
+          "path": null
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 25,
+        "result": {
+          "path": "/tmp/hub-home/cache/screenshots/1767225600000-0123456789abcdef-99.png",
+          "width": 400,
+          "height": 480,
+          "frame": 99
+        }
+      }
+    },
+    "devices.status": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 15,
+        "method": "devices.status",
+        "params": {
+          "device": "0123456789abcdef"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 15,
+        "result": {
+          "phase": "booted",
+          "target": "3ds-dev",
+          "hostAbi": 7,
+          "slot": "0000000000000001",
+          "address": "127.0.0.1",
+          "generation": 1,
+          "active": "00000000000000aa",
+          "lastGood": "00000000000000aa",
+          "running": "00000000000000aa",
+          "frame": 1234,
+          "app": {
+            "id": "dev.demo",
+            "output": "demo",
+            "title": "Demo"
+          }
+        }
+      }
+    },
+    "hub.hello": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "hub.hello",
+        "params": {
+          "protocol": 1,
+          "client": {
+            "kind": "gui",
+            "name": "Pocket Hub",
+            "version": "0.0.0-test"
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "protocol": 1,
+          "hub": {
+            "id": "fedcba9876543210",
+            "name": "Studio Mac",
+            "version": "0.1.0"
+          }
+        }
+      }
+    },
+    "hub.setName": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "hub.setName",
+        "params": {
+          "name": "Studio Test"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "result": {
+          "name": "Studio Test"
+        }
+      }
+    },
+    "hub.shutdown": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 48,
+        "method": "hub.shutdown",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 48,
+        "result": {}
+      }
+    },
+    "hub.status": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "hub.status",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": {
+          "id": "fedcba9876543210",
+          "name": "Studio Mac",
+          "version": "0.1.0",
+          "home": "/tmp/hub-home",
+          "startedAt": 1767225600000,
+          "carriers": [
+            {
+              "kind": "tcp",
+              "port": 8628
+            }
+          ],
+          "bun": {
+            "version": "1.4.4",
+            "installed": true
+          }
+        }
+      }
+    },
+    "hub.subscribe": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "hub.subscribe",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {}
+      }
+    },
+    "setup.card": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 13,
+        "method": "setup.card",
+        "params": {
+          "kind": "3ds",
+          "path": "/tmp/work/sd",
+          "program": {
+            "path": "/tmp/work/pocket-shell.3dsx"
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 13,
+        "result": {
+          "device": "0123456789abcdef",
+          "pairing": "key",
+          "program": {
+            "action": "installed",
+            "version": null,
+            "runtime": null
+          },
+          "confirmed": true,
+          "next": "Done. Eject the SD card, put it back in the console, then open Pocket Shell from the Homebrew Launcher. It connects to \"Studio Test\" by itself."
+        }
+      },
+      "progress": [
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "connecting",
+            "message": "Connecting to the device's storage.",
+            "id": 13
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "reading",
+            "message": "Reading what the device holds.",
+            "id": 13
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "downloading",
+            "done": 32768,
+            "total": 32768,
+            "message": "Downloading the 3DS's software.",
+            "id": 13
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "uploading",
+            "done": 32768,
+            "total": 32768,
+            "message": "Copying the 3DS's software to the device.",
+            "id": 13
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "pairing",
+            "done": 8,
+            "total": 8,
+            "message": "Writing this computer's pairing.",
+            "id": 13
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "done",
+            "done": 1,
+            "total": 1,
+            "message": "Done.",
+            "id": 13
+          }
+        }
+      ]
+    },
+    "setup.discover": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "setup.discover",
+        "params": {
+          "kind": "3ds"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "result": {
+          "candidates": [
+            {
+              "address": "127.0.0.1",
+              "port": 5000,
+              "banner": "Hello!",
+              "ftpd": true
+            }
+          ]
+        }
+      }
+    },
+    "setup.install": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "setup.install",
+        "params": {
+          "kind": "3ds",
+          "host": "127.0.0.1",
+          "port": 5000,
+          "program": {
+            "path": "/tmp/work/pocket-shell.3dsx"
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "result": {
+          "device": "00000000000000f1",
+          "pairing": "key",
+          "program": {
+            "action": "installed",
+            "version": null,
+            "runtime": null
+          },
+          "confirmed": true,
+          "next": "Done. On the console, press START to exit ftpd, then open Pocket Shell from the Homebrew Launcher. It connects to \"Studio Test\" by itself."
+        }
+      },
+      "progress": [
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "connecting",
+            "message": "Connecting to the device's storage.",
+            "id": 10
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "reading",
+            "message": "Reading what the device holds.",
+            "id": 10
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "downloading",
+            "done": 32768,
+            "total": 32768,
+            "message": "Downloading the 3DS's software.",
+            "id": 10
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "uploading",
+            "done": 32768,
+            "total": 32768,
+            "message": "Copying the 3DS's software to the device.",
+            "id": 10
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "pairing",
+            "done": 8,
+            "total": 8,
+            "message": "Writing this computer's pairing.",
+            "id": 10
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "done",
+            "done": 1,
+            "total": 1,
+            "message": "Done.",
+            "id": 10
+          }
+        }
+      ]
+    },
+    "store.apps": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 30,
+        "method": "store.apps",
+        "params": {
+          "device": "0123456789abcdef"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 30,
+        "result": {
+          "apps": [
+            {
+              "id": "dev.pocket-nexus.notes",
+              "title": "Notes",
+              "summary": "Notes on the device.",
+              "author": "pocket-nexus",
+              "version": "1.0.0",
+              "official": true,
+              "targets": [
+                "3ds-dev",
+                "tab5-home"
+              ],
+              "bytes": 131576,
+              "icon": "/tmp/hub-home/cache/store/icons/b7f6f602630cda7c93b6187a77cdfd5736c2061801cacc6153272716c61ba879.png",
+              "cached": true,
+              "services": [
+                "store"
+              ],
+              "hosts": [
+                "example.com"
+              ],
+              "installed": {
+                "version": "1.0.0",
+                "hash": "c637d406902fb8d9"
+              },
+              "update": false
+            },
+            {
+              "id": "io.example.forged",
+              "title": "Forged",
+              "summary": "Signed by another key.",
+              "author": "someone",
+              "version": "1.0.0",
+              "official": false,
+              "targets": [
+                "3ds-dev"
+              ],
+              "bytes": 440,
+              "icon": null,
+              "cached": false,
+              "services": [
+                "store"
+              ],
+              "hosts": [
+                "example.com"
+              ],
+              "installed": null,
+              "update": false
+            }
+          ],
+          "fetchedAt": 1767225600000
+        }
+      }
+    },
+    "store.install": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 29,
+        "method": "store.install",
+        "params": {
+          "device": "0123456789abcdef",
+          "app": "dev.pocket-nexus.notes"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 29,
+        "result": {
+          "app": {
+            "id": "dev.pocket-nexus.notes",
+            "output": "notes",
+            "title": "Notes"
+          },
+          "hash": "c637d406902fb8d9",
+          "generation": 2
+        }
+      },
+      "progress": [
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "downloading",
+            "done": 131576,
+            "total": 131576,
+            "id": 29
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "sending",
+            "done": 0,
+            "total": 131576,
+            "id": 29
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "receiving",
+            "done": 131576,
+            "total": 131576,
+            "id": 29
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "received",
+            "done": 131576,
+            "total": 131576,
+            "id": 29
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "staged",
+            "done": 131576,
+            "total": 131576,
+            "id": 29
+          }
+        }
+      ]
+    }
+  },
+  "notifications": {
+    "cancel": {
+      "jsonrpc": "2.0",
+      "method": "cancel",
+      "params": {
+        "id": 33
+      }
+    }
+  },
+  "events": {
+    "daemon.changed": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "daemon.changed",
+        "daemon": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "stopped",
+          "pid": null,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": null,
+          "error": null
+        }
+      }
+    },
+    "daemon.log": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "daemon.log",
+        "id": "dev.pocket-nexus.link-channel",
+        "at": 1767225600000,
+        "stream": "hub",
+        "text": "installed 0.1.0"
+      }
+    },
+    "daemon.removed": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "daemon.removed",
+        "id": "dev.pocket-nexus.link-channel"
+      }
+    },
+    "device.changed": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "device.changed",
+        "device": {
+          "id": "0123456789abcdef",
+          "kind": "3ds",
+          "name": "Test 3DS",
+          "model": "New Nintendo 3DS XL",
+          "target": "3ds-dev",
+          "hostAbi": 7,
+          "lastAddress": "127.0.0.1",
+          "lastSeen": 1767225600000,
+          "setupUnconfirmed": false,
+          "duplicateId": false,
+          "link": {
+            "carrier": "tcp",
+            "peer": "127.0.0.1:50000",
+            "since": 1767225600000,
+            "payloadLimit": 16384,
+            "features": [
+              "runtime",
+              "runtime.native",
+              "apps",
+              "channel",
+              "net.http",
+              "catalog",
+              "install"
+            ]
+          },
+          "status": {
+            "phase": "booted",
+            "target": "3ds-dev",
+            "hostAbi": 7,
+            "slot": "0000000000000001",
+            "address": "127.0.0.1",
+            "generation": 1,
+            "active": "00000000000000aa",
+            "lastGood": "00000000000000aa",
+            "running": "00000000000000aa",
+            "frame": 1234,
+            "app": {
+              "id": "dev.demo",
+              "output": "demo",
+              "title": "Demo"
+            }
+          },
+          "apps": [
+            {
+              "id": "dev.pocket-nexus.shell",
+              "output": "home",
+              "version": "2026.11.2",
+              "hash": "00000000000000aa",
+              "home": true
+            },
+            {
+              "id": "dev.app.0",
+              "output": "app0",
+              "version": "1.0.0",
+              "hash": "0000000000000000"
+            },
+            {
+              "id": "dev.app.1",
+              "output": "app1",
+              "version": "1.0.0",
+              "hash": "0000000000000001"
+            }
+          ],
+          "busy": {
+            "holder": {
+              "kind": "gui",
+              "name": "Pocket Hub",
+              "method": "devices.push"
+            },
+            "since": 1767225600000,
+            "launching": false
+          },
+          "program": {
+            "version": "2026.11.2",
+            "latest": "2026.11.11",
+            "update": true
+          },
+          "channels": []
+        }
+      }
+    },
+    "device.log": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "device.log",
+        "id": "0123456789abcdef",
+        "level": "warn",
+        "source": "guest",
+        "text": "hello from the device",
+        "frame": 42
+      }
+    },
+    "device.removed": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "device.removed",
+        "id": "00000000000000f1"
+      }
+    },
+    "device.screenshot": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "device.screenshot",
+        "id": "0123456789abcdef",
+        "path": "/tmp/hub-home/cache/screenshots/1767225600000-0123456789abcdef-99.png",
+        "width": 400,
+        "height": 480,
+        "frame": 99
+      }
+    },
+    "device.unlinked": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "device.unlinked",
+        "id": "0123456789abcdef",
+        "code": "restart",
+        "reason": "starting a .3dsx"
+      }
+    },
+    "hub.changed": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "hub.changed",
+        "hub": {
+          "id": "fedcba9876543210",
+          "name": "Studio Test",
+          "version": "0.1.0"
+        }
+      }
+    },
+    "store.changed": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "store.changed",
+        "fetchedAt": 1767225600000
+      }
+    }
+  },
+  "errors": {
+    "-32600": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "hub.status",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": {
+          "code": -32600,
+          "message": "The first request must be hub.hello."
+        }
+      }
+    },
+    "-32601": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "hub.nothing",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "error": {
+          "code": -32601,
+          "message": "There is no method hub.nothing."
+        }
+      }
+    },
+    "-32602": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "devices.get",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "error": {
+          "code": -32602,
+          "message": "The parameters of devices.get are not usable: missing field `device`."
+        }
+      }
+    },
+    "busy": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 24,
+        "method": "devices.launch",
+        "params": {
+          "device": "0123456789abcdef",
+          "app": "app0"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 24,
+        "error": {
+          "code": 1,
+          "message": "The device is busy: Pocket Hub (gui) is running devices.installProgram.",
+          "data": {
+            "kind": "busy",
+            "holder": {
+              "kind": "gui",
+              "name": "Pocket Hub",
+              "method": "devices.installProgram"
+            }
+          }
+        }
+      }
+    },
+    "cancelled": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 33,
+        "method": "devices.push",
+        "params": {
+          "device": "0123456789abcdef",
+          "path": "/tmp/work/big.pocket"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 33,
+        "error": {
+          "code": 1,
+          "message": "The call was cancelled.",
+          "data": {
+            "kind": "cancelled"
+          }
+        }
+      }
+    },
+    "daemon": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 46,
+        "method": "daemons.start",
+        "params": {
+          "id": "dev.test.broken"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 46,
+        "error": {
+          "code": 1,
+          "message": "The daemon did not start: the process exited before its daemon.hello (exited with code 3).",
+          "data": {
+            "kind": "daemon",
+            "id": "dev.test.broken"
+          }
+        }
+      }
+    },
+    "invalid": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 19,
+        "method": "devices.push",
+        "params": {
+          "device": "*",
+          "path": "/tmp/work/notes.txt"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 19,
+        "error": {
+          "code": 1,
+          "message": "/tmp/work/notes.txt is not a Pocket package: the package is truncated.",
+          "data": {
+            "kind": "invalid"
+          }
+        }
+      }
+    },
+    "not_found": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "devices.get",
+        "params": {
+          "device": "0123456789abcdef"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "error": {
+          "code": 1,
+          "message": "No device 0123456789abcdef is paired with this Hub.",
+          "data": {
+            "kind": "not_found"
+          }
+        }
+      }
+    },
+    "not_linked": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 14,
+        "method": "devices.status",
+        "params": {
+          "device": "0123456789abcdef"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 14,
+        "error": {
+          "code": 1,
+          "message": "The device is not connected to this Hub now.",
+          "data": {
+            "kind": "not_linked"
+          }
+        }
+      }
+    },
+    "release": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 22,
+        "method": "devices.installProgram",
+        "params": {
+          "device": "0123456789abcdef",
+          "program": {
+            "release": "v1999.01.01"
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 22,
+        "error": {
+          "code": 1,
+          "message": "There is no release v1999.01.01 of the 3DS's software.",
+          "data": {
+            "kind": "release",
+            "reason": "not_found"
+          }
+        }
+      }
+    },
+    "setup": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "setup.install",
+        "params": {
+          "kind": "3ds",
+          "host": "127.0.0.1",
+          "port": 5000,
+          "program": null
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "error": {
+          "code": 1,
+          "message": "Hub could not reach the console at 127.0.0.1:50000. On the console, open ftpd from the Homebrew Launcher and keep it open, check that the console and this computer are on the same Wi-Fi network, then try again.",
+          "data": {
+            "kind": "setup",
+            "step": "connecting",
+            "reason": "unreachable",
+            "detail": "the connection to the console was lost: Connection refused (os error 61)"
+          }
+        }
+      }
+    },
+    "store": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 32,
+        "method": "store.install",
+        "params": {
+          "device": "0123456789abcdef",
+          "app": "io.example.forged"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 32,
+        "error": {
+          "code": 1,
+          "message": "The package of io.example.forged 1.0.0 is rejected: the publisher's signature of io.example.forged 1.0.0 does not verify.",
+          "data": {
+            "kind": "store",
+            "reason": "rejected"
+          }
+        }
+      }
+    }
+  }
+}

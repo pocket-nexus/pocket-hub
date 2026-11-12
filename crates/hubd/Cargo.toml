@@ -1,0 +1,41 @@
+[package]
+name = "pocket-hubd"
+description = "Pocket Hub's resident core: the link endpoint, the daemons, the store and the control API on a Unix socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "pocket_hubd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pocket-hubd"
+path = "src/main.rs"
+
+[dependencies]
+pocket-link.workspace = true
+pocket-hub-api.workspace = true
+pocket-hub-applet-store.workspace = true
+pocket-hub-core.workspace = true
+pocket-hub-daemons.workspace = true
+pocket-hub-net.workspace = true
+pocket-hub-setup.workspace = true
+pocket-hub-store.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+clap.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+pocket-hub-applet-store = { workspace = true, features = ["test-support"] }
+pocket-hub-setup = { workspace = true, features = ["test-support"] }
+png.workspace = true
+tempfile.workspace = true

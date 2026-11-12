@@ -1,0 +1,25 @@
+[package]
+name = "pocket-hub-cli"
+description = "pocket-hub: the command line of Pocket Hub, a client of pocket-hubd's control socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "pocket-hub"
+path = "src/main.rs"
+
+[dependencies]
+pocket-hub-api.workspace = true
+clap.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+pocket-hub-applet-store = { workspace = true, features = ["test-support"] }
+pocket-hub-setup = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+tokio.workspace = true
