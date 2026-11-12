@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import HubClient
@@ -56,5 +57,32 @@ struct CoreLauncherTests {
         #expect(CoreLauncher.standard(bundle: plain, environment: [:]).locate() == nil)
         let empty = try appBundle(in: folder, withHelper: false)
         #expect(CoreLauncher.standard(bundle: empty, environment: [:]).locate() == nil)
+    }
+
+    /// The client starts the core from an actor, on one of the threads Swift's
+    /// concurrency runs on, which block SIGTERM. What it starts must not
+    /// inherit that: the core ends at SIGTERM (CONTROL-API.md §1).
+    @Test func whatItStartsEndsAtSIGTERM() async throws {
+        let folder = try temporaryHome()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // Stands for the core: a process that does nothing about signals.
+        let script = folder.appending(path: "pocket-hubd")
+        try "#!/bin/sh\nexec /bin/sleep 30\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        actor Starter {
+            func start(_ launcher: CoreLauncher) -> CoreLauncher.Outcome { launcher.launch() }
+        }
+        guard case .started(let core) = await Starter().start(CoreLauncher(executable: { script }, environment: [:])) else {
+            Issue.record("expected the stand-in to start")
+            return
+        }
+        defer { kill(core.pid, SIGKILL) }
+        core.discardOutput()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(core.exitStatus == nil, "it runs until it is told to end")
+        kill(core.pid, SIGTERM)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while core.exitStatus == nil, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(core.exitStatus == 128 + SIGTERM, "ended by the signal, not still running with it blocked")
     }
 }

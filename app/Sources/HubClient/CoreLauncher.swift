@@ -51,6 +51,14 @@ public final class LaunchedCore: @unchecked Sendable {
 /// started it, so it is started detached: its own session, no terminal, not
 /// killed by a signal sent to the app's process group. It keeps running when
 /// the app quits. It writes its own log to `<home>/logs/hubd.log`.
+///
+/// It is also started with no signal blocked. A spawned process inherits the
+/// signal mask of the thread that spawns it, and the threads Swift's
+/// concurrency runs on block SIGTERM, SIGINT and SIGHUP among others
+/// (measured: a child started from an actor found them blocked, one started
+/// from the main thread did not). A core started that way never saw the
+/// SIGTERM it ends at (CONTROL-API.md §1): it outlived a `kill`, and a logout
+/// could only kill it outright.
 public struct CoreLauncher: Sendable {
     public enum Outcome: Sendable {
         case started(LaunchedCore)
@@ -107,7 +115,11 @@ public struct CoreLauncher: Sendable {
         var attributes = posix_spawnattr_t(nil as OpaquePointer?)
         posix_spawnattr_init(&attributes)
         defer { posix_spawnattr_destroy(&attributes) }
-        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID))
+        // An empty mask for the core, whatever this thread's is (above).
+        var unblocked = sigset_t()
+        sigemptyset(&unblocked)
+        posix_spawnattr_setsigmask(&attributes, &unblocked)
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID | POSIX_SPAWN_SETSIGMASK))
 
         var actions = posix_spawn_file_actions_t(nil as OpaquePointer?)
         posix_spawn_file_actions_init(&actions)
