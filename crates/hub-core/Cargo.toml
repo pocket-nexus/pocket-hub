@@ -1,0 +1,22 @@
+[package]
+name = "pocket-hub-core"
+description = "Pocket Hub's Pocket Link endpoint: carriers, beacons, the handshake, requests, streams and applet channels"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pocket-link.workspace = true
+pocket-hub-store.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+crc32fast.workspace = true
+hex.workspace = true
+if-addrs.workspace = true
+png.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
