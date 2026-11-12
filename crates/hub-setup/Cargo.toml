@@ -1,0 +1,30 @@
+[package]
+name = "pocket-hub-setup"
+description = "Pocket Hub's first install: the program and the pairing written onto a device's storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pocket-link.workspace = true
+pocket-hub-store.workspace = true
+hex.workspace = true
+if-addrs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+# The program's release download.
+reqwest.workspace = true
+
+[features]
+# The fake ftpd and the HTTP server of this crate's tests, for other crates'
+# end-to-end tests (`pocket_hub_setup::test_support`).
+test-support = []
+
+[dev-dependencies]
+tokio.workspace = true
+pocket-hub-setup = { path = ".", features = ["test-support"] }
