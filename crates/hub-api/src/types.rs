@@ -232,6 +232,13 @@ pub struct LaunchResult {
     pub output: String,
 }
 
+/// `devices.remove`: `app` is an installed applet's id or output name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoveParams {
+    pub device: String,
+    pub app: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScreenshotParams {
     pub device: String,

@@ -4,7 +4,7 @@
     "daemons.install": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 35,
+        "id": 37,
         "method": "daemons.install",
         "params": {
           "path": "/path/to/pocket-hub/sdk/daemon/examples/link-channel"
@@ -12,7 +12,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 35,
+        "id": 37,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "version": "0.1.0",
@@ -31,7 +31,7 @@
           "params": {
             "stage": "installing",
             "message": "Installing the daemon package /path/to/pocket-hub/sdk/daemon/examples/link-channel.",
-            "id": 35
+            "id": 37
           }
         }
       ]
@@ -39,13 +39,13 @@
     "daemons.list": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 37,
+        "id": 39,
         "method": "daemons.list",
         "params": {}
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 37,
+        "id": 39,
         "result": {
           "daemons": [
             {
@@ -65,7 +65,7 @@
     "daemons.logs": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 36,
+        "id": 38,
         "method": "daemons.logs",
         "params": {
           "id": "dev.pocket-nexus.link-channel",
@@ -74,7 +74,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 36,
+        "id": 38,
         "result": {
           "lines": [
             {
@@ -89,7 +89,7 @@
     "daemons.remove": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 43,
+        "id": 45,
         "method": "daemons.remove",
         "params": {
           "id": "dev.pocket-nexus.link-channel"
@@ -97,14 +97,14 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 43,
+        "id": 45,
         "result": {}
       }
     },
     "daemons.restart": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 40,
+        "id": 42,
         "method": "daemons.restart",
         "params": {
           "id": "dev.pocket-nexus.link-channel"
@@ -112,7 +112,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 40,
+        "id": 42,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "version": "0.1.0",
@@ -132,7 +132,7 @@
     "daemons.runtime": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 34,
+        "id": 36,
         "method": "daemons.runtime",
         "params": {
           "install": null
@@ -140,7 +140,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 34,
+        "id": 36,
         "result": {
           "version": "1.4.4",
           "installed": true,
@@ -151,7 +151,7 @@
     "daemons.start": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 39,
+        "id": 41,
         "method": "daemons.start",
         "params": {
           "id": "dev.pocket-nexus.link-channel"
@@ -159,7 +159,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 39,
+        "id": 41,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "version": "0.1.0",
@@ -179,7 +179,7 @@
     "daemons.stop": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 41,
+        "id": 43,
         "method": "daemons.stop",
         "params": {
           "id": "dev.pocket-nexus.link-channel"
@@ -187,7 +187,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 41,
+        "id": 43,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "version": "0.1.0",
@@ -250,6 +250,7 @@
             "features": [
               "runtime",
               "runtime.native",
+              "runtime.remove",
               "apps",
               "channel",
               "net.http",
@@ -308,7 +309,7 @@
     "devices.installProgram": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 21,
+        "id": 23,
         "method": "devices.installProgram",
         "params": {
           "device": "0123456789abcdef",
@@ -317,7 +318,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 21,
+        "id": 23,
         "result": {
           "phase": "installed",
           "name": "pocket-shell.3dsx",
@@ -332,7 +333,7 @@
             "phase": "downloading",
             "done": 65536,
             "total": 65536,
-            "id": 21
+            "id": 23
           }
         },
         {
@@ -342,7 +343,7 @@
             "phase": "sending",
             "done": 0,
             "total": 65536,
-            "id": 21
+            "id": 23
           }
         },
         {
@@ -352,7 +353,7 @@
             "phase": "receiving",
             "done": 65536,
             "total": 65536,
-            "id": 21
+            "id": 23
           }
         }
       ]
@@ -406,6 +407,7 @@
                 "features": [
                   "runtime",
                   "runtime.native",
+                  "runtime.remove",
                   "apps",
                   "channel",
                   "net.http",
@@ -466,7 +468,7 @@
     "devices.logs": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 27,
+        "id": 29,
         "method": "devices.logs",
         "params": {
           "device": "0123456789abcdef",
@@ -475,7 +477,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 27,
+        "id": 29,
         "result": {}
       }
     },
@@ -545,10 +547,26 @@
         }
       ]
     },
+    "devices.remove": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 21,
+        "method": "devices.remove",
+        "params": {
+          "device": "0123456789abcdef",
+          "app": "app0"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 21,
+        "result": {}
+      }
+    },
     "devices.screenshot": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 25,
+        "id": 27,
         "method": "devices.screenshot",
         "params": {
           "device": "0123456789abcdef",
@@ -557,7 +575,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 25,
+        "id": 27,
         "result": {
           "path": "/tmp/hub-home/cache/screenshots/1767225600000-0123456789abcdef-99.png",
           "width": 400,
@@ -644,13 +662,13 @@
     "hub.shutdown": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 48,
+        "id": 50,
         "method": "hub.shutdown",
         "params": {}
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 48,
+        "id": 50,
         "result": {}
       }
     },
@@ -910,7 +928,7 @@
     "store.apps": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 30,
+        "id": 32,
         "method": "store.apps",
         "params": {
           "device": "0123456789abcdef"
@@ -918,7 +936,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 30,
+        "id": 32,
         "result": {
           "apps": [
             {
@@ -977,7 +995,7 @@
     "store.install": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 29,
+        "id": 31,
         "method": "store.install",
         "params": {
           "device": "0123456789abcdef",
@@ -986,7 +1004,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 29,
+        "id": 31,
         "result": {
           "app": {
             "id": "dev.pocket-nexus.notes",
@@ -1005,7 +1023,7 @@
             "phase": "downloading",
             "done": 131576,
             "total": 131576,
-            "id": 29
+            "id": 31
           }
         },
         {
@@ -1015,7 +1033,7 @@
             "phase": "sending",
             "done": 0,
             "total": 131576,
-            "id": 29
+            "id": 31
           }
         },
         {
@@ -1025,7 +1043,7 @@
             "phase": "receiving",
             "done": 131576,
             "total": 131576,
-            "id": 29
+            "id": 31
           }
         },
         {
@@ -1035,7 +1053,7 @@
             "phase": "received",
             "done": 131576,
             "total": 131576,
-            "id": 29
+            "id": 31
           }
         },
         {
@@ -1045,7 +1063,7 @@
             "phase": "staged",
             "done": 131576,
             "total": 131576,
-            "id": 29
+            "id": 31
           }
         }
       ]
@@ -1056,7 +1074,7 @@
       "jsonrpc": "2.0",
       "method": "cancel",
       "params": {
-        "id": 33
+        "id": 35
       }
     }
   },
@@ -1121,6 +1139,7 @@
             "features": [
               "runtime",
               "runtime.native",
+              "runtime.remove",
               "apps",
               "channel",
               "net.http",
@@ -1299,7 +1318,7 @@
     "busy": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 24,
+        "id": 26,
         "method": "devices.launch",
         "params": {
           "device": "0123456789abcdef",
@@ -1308,7 +1327,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 24,
+        "id": 26,
         "error": {
           "code": 1,
           "message": "The device is busy: Pocket Hub (gui) is running devices.installProgram.",
@@ -1326,7 +1345,7 @@
     "cancelled": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 33,
+        "id": 35,
         "method": "devices.push",
         "params": {
           "device": "0123456789abcdef",
@@ -1335,7 +1354,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 33,
+        "id": 35,
         "error": {
           "code": 1,
           "message": "The call was cancelled.",
@@ -1348,7 +1367,7 @@
     "daemon": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 46,
+        "id": 48,
         "method": "daemons.start",
         "params": {
           "id": "dev.test.broken"
@@ -1356,7 +1375,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 46,
+        "id": 48,
         "error": {
           "code": 1,
           "message": "The daemon did not start: the process exited before its daemon.hello (exited with code 3).",
@@ -1385,6 +1404,30 @@
           "message": "/tmp/work/notes.txt is not a Pocket package: the package is truncated.",
           "data": {
             "kind": "invalid"
+          }
+        }
+      }
+    },
+    "link": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 22,
+        "method": "devices.remove",
+        "params": {
+          "device": "0123456789abcdef",
+          "app": "home"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 22,
+        "error": {
+          "code": 1,
+          "message": "The device answered rejected: the launcher is never removed.",
+          "data": {
+            "kind": "link",
+            "code": "rejected",
+            "reason": "home"
           }
         }
       }
@@ -1434,7 +1477,7 @@
     "release": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 22,
+        "id": 24,
         "method": "devices.installProgram",
         "params": {
           "device": "0123456789abcdef",
@@ -1445,7 +1488,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 22,
+        "id": 24,
         "error": {
           "code": 1,
           "message": "There is no release v1999.01.01 of the 3DS's software.",
@@ -1486,7 +1529,7 @@
     "store": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 32,
+        "id": 34,
         "method": "store.install",
         "params": {
           "device": "0123456789abcdef",
@@ -1495,7 +1538,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 32,
+        "id": 34,
         "error": {
           "code": 1,
           "message": "The package of io.example.forged 1.0.0 is rejected: the publisher's signature of io.example.forged 1.0.0 does not verify.",

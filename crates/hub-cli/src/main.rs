@@ -59,7 +59,7 @@ enum Command {
     /// The paired devices.
     Devices,
     /// One device: `device [<id>] <command>`. The id may be left out when exactly one device is paired.
-    #[command(after_help = "Commands: status, apps, push <file.pocket>, launch <app>, shot [out.png], logs [-f], update [--program <file.3dsx> | --release <tag>] [--no-launch], forget.\nExample: pocket-hub device 0123456789abcdef push build/demo.pocket")]
+    #[command(after_help = "Commands: status, apps, push <file.pocket>, launch <app>, remove <app>, shot [out.png], logs [-f], update [--program <file.3dsx> | --release <tag>] [--no-launch], forget.\nExample: pocket-hub device 0123456789abcdef push build/demo.pocket")]
     Device {
         /// [<id>] <command> [arguments]
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true, value_name = "ARGS")]
@@ -158,6 +158,8 @@ enum DeviceCommand {
     Push { file: PathBuf },
     /// Launch an installed applet by its output name or id.
     Launch { app: String },
+    /// Delete an installed applet, and its data on the device, by its id or output name.
+    Remove { app: String },
     /// Save a screenshot of both screens (into Hub's cache without OUT).
     Shot { out: Option<PathBuf> },
     /// Print the device's log lines as they come (Ctrl-C ends; logs go off when no client wants them).
@@ -182,7 +184,7 @@ enum DeviceCommand {
     Forget,
 }
 
-const DEVICE_COMMANDS: [&str; 8] = ["status", "apps", "push", "launch", "shot", "logs", "update", "forget"];
+const DEVICE_COMMANDS: [&str; 9] = ["status", "apps", "push", "launch", "remove", "shot", "logs", "update", "forget"];
 
 #[derive(Subcommand, Debug)]
 enum DaemonCommand {
@@ -396,6 +398,10 @@ async fn device_command(client: &Client, out: &Out, id: &str, command: DeviceCom
         DeviceCommand::Launch { app } => {
             let value = client.call(methods::DEVICES_LAUNCH, &LaunchParams { device: id.into(), app }).await?;
             out.result(&value, || Ok(format!("Launched {}.", decode::<LaunchResult>(&value)?.output)))
+        }
+        DeviceCommand::Remove { app } => {
+            let value = client.call(methods::DEVICES_REMOVE, &RemoveParams { device: id.into(), app: app.clone() }).await?;
+            out.result(&value, || Ok(format!("Removed {app}.")))
         }
         DeviceCommand::Shot { out: path } => {
             let path = path.map(|path| absolute(&path)).transpose()?;

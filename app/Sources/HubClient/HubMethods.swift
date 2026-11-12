@@ -61,6 +61,12 @@ extension HubCalling {
         try await call("devices.launch", params: ["device": .string(device), "app": .string(app)]).decoded()
     }
 
+    /// Deletes an installed applet, and its data, on the device
+    /// (`devices.remove`); `app` is its id or output name.
+    public func remove(device: String, app: String) async throws {
+        _ = try await call("devices.remove", params: ["device": .string(device), "app": .string(app)])
+    }
+
     /// Takes a screenshot; without `path` Hub writes it into its cache folder.
     public func screenshot(device: String, path: String? = nil) async throws -> ScreenshotResult {
         var params: [String: JSONValue] = ["device": .string(device)]

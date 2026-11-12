@@ -73,9 +73,10 @@ pub const APP_EVENT_WINDOW: u32 = 48;
 pub const APP_EVENT_WINDOW_HUB: u32 = 256;
 
 // §6 System messages
-pub const FEATURES: [&str; 9] = [
+pub const FEATURES: [&str; 10] = [
     "runtime",
     "runtime.native",
+    "runtime.remove",
     "devtools",
     "catalog",
     "install",

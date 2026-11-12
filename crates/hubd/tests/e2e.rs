@@ -201,6 +201,15 @@ async fn the_vertical_slice_through_the_binary() {
 
     let launched: LaunchResult = client.call_as(methods::DEVICES_LAUNCH, &LaunchParams { device: id.clone(), app: "dev.app.1".into() }).await.unwrap();
     assert_eq!(launched.output, "app1");
+    // Deleting an applet by its output name: the device's next report drops
+    // its row (link specification §6.2 `runtime.remove`). Its home screen is
+    // refused with the device's reason.
+    client.call(methods::DEVICES_REMOVE, &RemoveParams { device: id.clone(), app: "app0".into() }).await.unwrap();
+    assert_eq!(device.expect("removed").await["id"], "dev.app.0");
+    device_where(&client, &id, |d| d.apps.as_ref().is_some_and(|apps| apps.len() == 2 && apps.iter().all(|app| app.id != "dev.app.0"))).await;
+    let refused = rpc(client.call(methods::DEVICES_REMOVE, &RemoveParams { device: id.clone(), app: "home".into() }).await.unwrap_err());
+    let data = refused.data.unwrap();
+    assert_eq!((data.kind, data.code.as_deref(), data.reason.as_deref()), (ErrorKind::Link, Some("rejected"), Some("home")));
     // The latest release, under the name of the program the device runs.
     let mut update = client.start(methods::DEVICES_INSTALL_PROGRAM, &InstallProgramParams { device: id.clone(), program: None, launch: Some(false) }).await.unwrap();
     let mut update_phases = Vec::new();

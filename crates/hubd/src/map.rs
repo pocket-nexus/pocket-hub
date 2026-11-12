@@ -162,9 +162,12 @@ pub fn op_error(error: OpError) -> RpcError {
             _ => {
                 let text = if message.is_empty() { format!("the device answered {code}") } else { format!("the device answered {code}: {message}") };
                 let phase = extra.get("phase").and_then(|phase| phase.as_str()).map(str::to_owned);
+                // `runtime.remove` refuses with a `reason` (`running`, `home`).
+                let reason = extra.get("reason").and_then(|reason| reason.as_str()).map(str::to_owned);
                 RpcError::op(ErrorKind::Link, sentence(&text)).with(|data| {
                     data.code = Some(code);
                     data.phase = phase;
+                    data.reason = reason;
                 })
             }
         },

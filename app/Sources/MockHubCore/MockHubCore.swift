@@ -433,6 +433,33 @@ public actor MockHubCore {
                 await self.setRunning(device.id, row: row)
                 return ["output": row["output"] ?? .null]
             }
+        case "devices.remove":
+            // CONTROL-API.md `devices.remove`: the device refuses its home
+            // screen and the running applet, as §6.2 `runtime.remove` does.
+            let device = try linked(params)
+            guard let app = params["app"]?.stringValue else { throw MockError.invalidParams("app") }
+            guard case .array(let features)? = device.link["features"], features.contains(.string("runtime.remove")) else {
+                throw MockError.operation("link", "The device does not support runtime.remove.", ["code": "unsupported"])
+            }
+            guard let row = device.installedApps.first(where: { $0["id"]?.stringValue == app || $0["output"]?.stringValue == app }),
+                  let appId = row["id"]?.stringValue
+            else {
+                throw MockError.operation("not_found", "The device has no such app: \(app).", [:])
+            }
+            if row["home"]?.boolValue == true {
+                throw MockError.operation("link", "The device answered rejected: the launcher is never removed.",
+                                          ["code": "rejected", "reason": "home"])
+            }
+            if device.status["app"]?["id"]?.stringValue == appId {
+                throw MockError.operation("link", "The device answered rejected: the applet is running.",
+                                          ["code": "rejected", "reason": "running"])
+            }
+            let hold = scenario.mutexHold
+            return try await holdingMutex(device.id, session: id, method: method) {
+                try await Task.sleep(for: hold)
+                await self.removeApp(device.id, id: appId)
+                return [:]
+            }
         case "devices.screenshot":
             let device = try linked(params)
             frame += 60
@@ -738,6 +765,12 @@ public actor MockHubCore {
             var rows = value.installedApps.filter { $0["id"]?.stringValue != id }
             rows.append(["id": .string(id), "output": .string(output), "version": "0.0.1", "hash": "abcdef0123456789"])
             value.apps = .array(rows)
+        }
+    }
+
+    private func removeApp(_ device: String, id: String) {
+        modify(device) { value in
+            value.apps = .array(value.installedApps.filter { $0["id"]?.stringValue != id })
         }
     }
 

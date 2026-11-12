@@ -14,7 +14,7 @@ import SwiftUI
 ///   select daemons | device <id>             tab applets | screenshot | log | details
 ///   store refresh | install <app> | cancel <app> | details <app> | close-details
 ///                                            (the store of the selected device's Applets page)
-///   screenshot | logs on | logs off | open <app id> | home | update | update-dismiss
+///   screenshot | logs on | logs off | open <app id> | delete <app id> | home | update | update-dismiss
 ///                                            (on the selected device)
 ///   menu-preview | menu-preview-close        (the menu bar menu's views in a window)
 ///   window | window-size <width> <height>
@@ -78,6 +78,12 @@ enum DebugCommands {
             onDevice { id in
                 guard let app = state.model.device(id)?.apps?.first(where: { $0.id == appId }) else { return }
                 try await state.model.launch(app, on: id)
+            }
+        case let w where w.count == 2 && w[0] == "delete":
+            let appId = w[1]
+            onDevice { id in
+                guard let app = state.model.device(id)?.apps?.first(where: { $0.id == appId }) else { return }
+                try await state.model.remove(app, from: id)
             }
         case ["home"]:
             onDevice { id in
