@@ -8,7 +8,6 @@ import SwiftUI
 enum SidebarItem: Hashable {
     case device(String)
     case daemons
-    case store
 }
 
 /// The sections of a device's page.

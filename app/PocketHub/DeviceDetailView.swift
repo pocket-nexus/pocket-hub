@@ -89,6 +89,13 @@ struct DeviceDetailView: View {
                     .allowsHitTesting(false)
             }
         }
+        .sheet(item: $state.storeDetails) { app in
+            StoreAppDetails(app: app) { state.storeDetails = nil }
+        }
+        .alert(item: Binding(get: { model.store.installFailure }, set: { model.store.installFailure = $0 })) { failure in
+            Alert(title: Text(verbatim: failure.title),
+                  message: Text(verbatim: [failure.advice, failure.detail].compactMap { $0 }.joined(separator: "\n\n")))
+        }
         .confirmationDialog("Remove \(device.displayName) from Pocket Hub?", isPresented: $state.confirmingRemoveDevice) {
             Button("Remove", role: .destructive) { forget() }
         } message: {
@@ -272,7 +279,10 @@ struct ConnectionLine: View {
 }
 
 /// The Applets page: the device's card, its software update when there is
-/// one, and the installed applets with Open, as grouped cards.
+/// one, the applets it holds (Open, and Update when the store has a newer
+/// version), and the store's applets it does not hold yet (Install), as
+/// grouped cards. The two groups of applets follow the Apple Watch app's
+/// "installed" and "available".
 struct DeviceOverview: View {
     let device: Device
     let unlink: DeviceUnlinked?
@@ -287,10 +297,10 @@ struct DeviceOverview: View {
                              updating: model.programUpdates[device.id]?.isActive == true)
             }
             SoftwareUpdateSection(device: device)
-            // One group of rows, as System Settings lists items with an action
+            // A group of rows, as System Settings lists items with an action
             // each. Alternating row colours are for multicolumn tables (HIG,
             // Lists and tables), which this is not.
-            Section("Applets") {
+            Section("Installed") {
                 let apps = device.sortedApps
                 if apps.isEmpty {
                     EmptySectionNote(
@@ -307,8 +317,16 @@ struct DeviceOverview: View {
                     }
                 }
             }
+            AvailableAppletsSection(device: device)
         }
         .formStyle(.grouped)
+        // The store's list is for one device at a time: this one, while its
+        // page is shown.
+        .task(id: device.id) {
+            let store = model.store
+            store.choose(device: device.id)
+            if store.page == .idle { store.reload() }
+        }
     }
 
     private func launch(_ app: InstalledApp) {
@@ -379,14 +397,33 @@ struct AppletRow: View {
             if isRunning {
                 Text("Running").font(.caption).foregroundStyle(.green)
             }
-            if isLaunching {
-                ProgressView().controlSize(.small)
+            let store = state.model.store
+            if let update, let install = store.install(for: update, on: device.id) {
+                InstallProgressView(install: install) { store.cancelInstall(of: update, on: device.id) }
             } else {
-                Button("Open", action: open)
-                    .disabled(!device.isLinked || device.busy != nil || isRunning)
-                    .accessibilityLabel(Text("Open \(listed?.title ?? app.displayName)"))
+                if let update {
+                    Button("Update") { store.install(update, on: device.id) }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!device.isLinked || device.busy != nil)
+                        .help(String(localized: "Install version \(update.version)"))
+                }
+                if isLaunching {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Open", action: open)
+                        .disabled(!device.isLinked || device.busy != nil || isRunning)
+                        .accessibilityLabel(Text("Open \(listed?.title ?? app.displayName)"))
+                }
             }
         }
         .padding(.vertical, 2)
+    }
+
+    /// The store's entry for this applet when it offers this device a newer
+    /// version (`update` in the device's list, CONTROL-API.md §3 "Store").
+    private var update: StoreApp? {
+        let store = state.model.store
+        guard !app.isHome, store.deviceId == device.id else { return nil }
+        return store.apps.first { $0.id == app.id && $0.action == .update }
     }
 }

@@ -42,14 +42,14 @@ struct HubCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("Add a 3DS…") { state.startSetup() }
+            Button("Add a Device…") { state.startSetup() }
                 .keyboardShortcut("n")
                 .disabled(!state.model.isLive)
         }
         CommandGroup(after: .toolbar) {
             Button("Refresh Store") { state.model.store.reload(refresh: true) }
                 .keyboardShortcut("r")
-                .disabled(state.selection != .store || !state.model.isLive)
+                .disabled(state.selectedDeviceID == nil || !state.model.isLive)
         }
         CommandMenu("Device") {
             Button("Take Screenshot") {

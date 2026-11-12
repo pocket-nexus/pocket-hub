@@ -149,7 +149,7 @@ extension UserFacingError {
                           detail: detail)
             case "unsupported":
                 self.init(title: String(localized: "This 3DS can't be updated from this Mac."),
-                          advice: String(localized: "Set it up again with Add a 3DS… to bring its software up to date."),
+                          advice: String(localized: "Set it up again with Add a Device… to bring its software up to date."),
                           detail: detail)
             default:
                 self.init(title: String(localized: "The connection to your 3DS was lost during the update."),
