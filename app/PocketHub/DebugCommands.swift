@@ -19,6 +19,8 @@ import SwiftUI
 ///   menu-preview | menu-preview-close        (the menu bar menu's views in a window)
 ///   window | window-size <width> <height>
 ///   settings | language system | en | zh-Hans | reopen   (the Settings window and its language)
+///   link <url>                               (what the system does with a pocket-hub: link, docs/DEEP-LINKS.md)
+///   store pick <device id> | store add-device            (the open applet sheet's device menu and its Add a Device…)
 @MainActor
 enum DebugCommands {
     static func startIfRequested(_ state: AppState) {
@@ -98,6 +100,11 @@ enum DebugCommands {
         case let w where w.count == 2 && w[0] == "language":
             if let choice = AppLanguage.Choice(rawValue: w[1]) { state.language.choose(choice) }
         case ["reopen"]: state.relaunch()
+        case let w where w.count == 2 && w[0] == "link":
+            if let url = URL(string: w[1]) { state.open(url) } else { print("debug command: not a URL: \(w[1])") }
+        case ["store", "add-device"]:
+            state.storeDetails = nil
+            state.startSetup()
         case ["store", "refresh"]: store.reload(refresh: true)
         case ["store", "close-details"]: state.storeDetails = nil
         case let w where w.count == 3 && w[0] == "store":
@@ -105,6 +112,7 @@ enum DebugCommands {
             case "install": if let app = storeApp(w[2]), let device = store.deviceId { store.install(app, on: device) }
             case "cancel": if let app = storeApp(w[2]), let device = store.deviceId { store.cancelInstall(of: app, on: device) }
             case "details": state.storeDetails = storeApp(w[2])
+            case "pick": if let app = state.storeDetails { state.show(app, on: w[2]) }
             default: print("debug command not understood: \(line)")
             }
         default: print("debug command not understood: \(line)")

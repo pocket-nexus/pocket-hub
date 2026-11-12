@@ -39,6 +39,12 @@ are clients of one control API and hold no device logic, so a device is never
 held by two processes and a later remote client (Pocket Studio's agents) is
 one more client of the same surface.
 
+**The applet store's website opens the app on an applet.** Each applet's page
+at [applets.pocket.nexus](https://applets.pocket.nexus) has a button that is
+a `pocket-hub://store/app/<id>` link (`docs/DEEP-LINKS.md`): the app comes to
+the front on that applet, on a device that can run it, and the owner installs
+it from there. A link only shows; it never installs by itself.
+
 **A daemon is the computer side of one applet**: a Bun process Hub starts when
 a device opens that applet's channel and stops when it is idle. Applet and
 daemon exchange requests, events and credited byte streams whose content is
@@ -59,7 +65,7 @@ device is on.
 | `crates/hub-cli` | `pocket-hub`, the command line |
 | `sdk/daemon` | The TypeScript SDK a daemon is written with; Hub ships it to every daemon |
 | `app` | The macOS app: `PocketHub.xcodeproj` (the app target, sources in `app/PocketHub`) and a Swift package with its libraries, a mock core and the tests |
-| `docs` | The two contracts, and real examples of every control API message |
+| `docs` | The contracts (the control API, the daemon protocol, the links that open the app), and real examples of every control API message |
 
 ## Building and running
 
@@ -79,6 +85,9 @@ target/debug/pocket-hub store install dev.pocket-nexus.hn
 target/debug/pocket-hub device shot out.png
 target/debug/pocket-hub --help
 ```
+
+With the app built (below), `open pocket-hub://store/app/dev.pocket-nexus.hn`
+does what the website's button does.
 
 The core keeps its files in `~/Library/Application Support/nexus.pocket.hub`
 (`$POCKET_HUB_HOME` overrides it) and listens for devices on TCP 8628. **It does

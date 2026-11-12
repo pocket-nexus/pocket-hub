@@ -35,8 +35,12 @@ final class AppState {
     /// menu command).
     var importingApplet = false
     var confirmingRemoveDevice = false
-    /// The store applet whose details sheet is open.
+    /// The store applet whose sheet is open: from a row's Details, or from a
+    /// link (docs/DEEP-LINKS.md §2).
     var storeDetails: StoreApp?
+    /// Counts the links followed, so one still waiting for the core gives way
+    /// to a newer one.
+    private var linksFollowed = 0
     /// An error to show in the window, from an action started anywhere.
     var presentedError: UserFacingError?
     /// Set by the first SwiftUI view that has `openWindow`; used by the delegate
@@ -85,6 +89,61 @@ final class AppState {
     func startSetup() {
         showingSetup = true
         showWindow()
+    }
+
+    // MARK: - Links (docs/DEEP-LINKS.md §2)
+
+    /// Follows a link the app was opened with. The window comes to the front
+    /// first: whatever the link turns out to be, the owner asked for Hub.
+    /// Nothing here changes a device; the applet's sheet holds the action.
+    func open(_ url: URL) {
+        showWindow()
+        linksFollowed += 1
+        let mine = linksFollowed
+        guard let link = DeepLink(url) else {
+            presentedError = .linkNotUnderstood
+            return
+        }
+        Task {
+            // A link can be what starts the app, and so the core.
+            await model.whenLive()
+            guard mine == linksFollowed else { return }
+            switch link {
+            case .storeApp(let id):
+                do {
+                    let app = try await model.store.lookUp(appId: id)
+                    guard mine == linksFollowed else { return }
+                    if let app { show(storeApp: app) } else { presentedError = .appletNotInStore }
+                } catch {
+                    guard mine == linksFollowed else { return }
+                    presentedError = UserFacingError(storeError: error)
+                }
+            }
+        }
+    }
+
+    /// Opens the store's sheet of an applet, on a device that can run it when
+    /// there is one.
+    func show(storeApp app: StoreApp) {
+        showDevice(for: app)
+        storeDetails = app
+        showWindow()
+    }
+
+    /// Puts the window on the Applets page of the device that fits `app` best
+    /// (StoreModel.device(for:preferring:)), where the store's list says what
+    /// that device holds of it. With no device that can run it, the window
+    /// stays where it is.
+    func showDevice(for app: StoreApp) {
+        guard let device = model.store.device(for: app, preferring: selectedDeviceID) else { return }
+        show(app, on: device.id)
+    }
+
+    /// The same, for a device the owner chose in the sheet.
+    func show(_ app: StoreApp, on deviceId: String) {
+        selection = .device(deviceId)
+        deviceTab = .applets
+        model.store.choose(device: deviceId)
     }
 
     /// Takes a screenshot from anywhere (menu bar, keyboard), copies it and shows it.
@@ -160,6 +219,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         {
             Self.launchedAsLoginItem = true
         }
+    }
+
+    /// A pocket-hub: link (docs/DEEP-LINKS.md §1): the system hands the app
+    /// every URL of the scheme it is registered for, starting it when it was
+    /// not running. It arrives here with the window open and with Hub in the
+    /// menu bar only (measured on both, and on a launch by a link). Each
+    /// link names one thing to show, so of several the last is the one followed.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.last else { return }
+        MainActor.assumeIsolated { AppState.shared.open(url) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

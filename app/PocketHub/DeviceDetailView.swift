@@ -89,10 +89,10 @@ struct DeviceDetailView: View {
                     .allowsHitTesting(false)
             }
         }
-        .sheet(item: $state.storeDetails) { app in
-            StoreAppDetails(app: app) { state.storeDetails = nil }
-        }
-        .alert(item: Binding(get: { model.store.installFailure }, set: { model.store.installFailure = $0 })) { failure in
+        // While an applet's sheet is open it shows this failure itself: an
+        // alert of this page would wait behind the sheet.
+        .alert(item: Binding(get: { state.storeDetails == nil ? model.store.installFailure : nil },
+                             set: { model.store.installFailure = $0 })) { failure in
             Alert(title: Text(verbatim: failure.title),
                   message: Text(verbatim: [failure.advice, failure.detail].compactMap { $0 }.joined(separator: "\n\n")))
         }

@@ -49,6 +49,22 @@
         }
       }
     },
+    "%@ hasn't connected yet, so Pocket Hub can't tell whether it runs this applet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hasn't connected yet, so Pocket Hub can't tell whether it runs this applet."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 还没有连接过，Pocket Hub 无法判断它能否运行这个小程序。"
+          }
+        }
+      }
+    },
     "%@ hasn't reconnected after the update.": {
       "localizations": {
         "en": {
@@ -141,6 +157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ 不适用于 %2$@。"
+          }
+        }
+      }
+    },
+    "%@ isn't available for any of your devices.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ isn't available for any of your devices."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 不适用于你的任何一台设备。"
           }
         }
       }
@@ -385,6 +417,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "添加 Nintendo 3DS"
+          }
+        }
+      }
+    },
+    "Add a device to Pocket Hub to install this applet on it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a device to Pocket Hub to install this applet on it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先在 Pocket Hub 中添加一台设备，才能把这个小程序安装到设备上。"
           }
         }
       }
@@ -1809,6 +1857,38 @@
         }
       }
     },
+    "It may be incomplete, or made for a newer version of Pocket Hub.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It may be incomplete, or made for a newer version of Pocket Hub."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它可能不完整，或者是为更新版本的 Pocket Hub 生成的。"
+          }
+        }
+      }
+    },
+    "It may have been removed since the link was made.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It may have been removed since the link was made."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它可能在链接生成之后被下架了。"
+          }
+        }
+      }
+    },
     "It may have been removed.": {
       "localizations": {
         "en": {
@@ -2737,6 +2817,22 @@
         }
       }
     },
+    "Open %@ on %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %@ on %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 %2$@ 上打开 %1$@"
+          }
+        }
+      }
+    },
     "Open **Pocket Shell** from the Homebrew Launcher.": {
       "localizations": {
         "en": {
@@ -2941,6 +3037,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pocket Hub 找不到 SD 卡。"
+          }
+        }
+      }
+    },
+    "Pocket Hub can't open this link.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pocket Hub can't open this link."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pocket Hub 无法打开这个链接。"
           }
         }
       }
@@ -4669,6 +4781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "这个小程序没有通过 Pocket Hub 的安全检查。"
+          }
+        }
+      }
+    },
+    "This applet isn't in the store.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This applet isn't in the store."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "商店里没有这个小程序。"
           }
         }
       }

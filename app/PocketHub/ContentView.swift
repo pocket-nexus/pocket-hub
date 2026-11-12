@@ -20,6 +20,12 @@ struct ContentView: View {
                 .toolbar(removing: .sidebarToggle)
         } detail: {
             Detail()
+                // An applet's sheet belongs to the window, not to a device's
+                // page: a link opens it whatever the window shows, with no
+                // device paired too (docs/DEEP-LINKS.md §2).
+                .sheet(item: $state.storeDetails) { app in
+                    StoreAppDetails(app: app) { state.storeDetails = nil }
+                }
         }
         .sheet(isPresented: $state.showingSetup) {
             SetupSheet()
@@ -34,6 +40,11 @@ struct ContentView: View {
         .onDisappear {
             // With the window closed Hub lives in the menu bar only, out of the Dock and the app switcher.
             NSApp.setActivationPolicy(.accessory)
+        }
+        .onChange(of: state.model.isLive) { _, live in
+            // The sheet speaks of devices and what they hold: with the core
+            // away it has nothing true to say.
+            if !live { state.storeDetails = nil }
         }
         .onChange(of: state.model.devices.map(\.id), initial: true) { _, ids in
             guard state.model.isLive else { return }
