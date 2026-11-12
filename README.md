@@ -107,9 +107,16 @@ A build of the app also builds the core and the command line with cargo, in
 the matching profile, into the app's `Contents/Helpers`
 (`app/scripts/embed-core.sh`). cargo builds them for the Mac it runs on, and
 the script stops a build whose app is for another architecture: the Release
-configuration is arm64 alone. After changing owner-facing text, run
-`app/scripts/check-strings.sh`: it brings the String Catalog in line with the
-source and fails when a string has no Simplified Chinese.
+configuration is arm64 alone.
+
+**The app's words are in one file**, the String Catalog
+`app/Localization/Localizable.xcstrings`: a key is the English sentence as the
+source writes it, and the catalog holds its Simplified Chinese. After changing
+owner-facing text, run `app/scripts/check-strings.sh`. It asks the compiler
+which strings the source uses, brings the catalog in line with them, and
+fails naming each string that has no Simplified Chinese yet and each one the
+source no longer uses. A translation is written into the catalog itself, in
+Xcode's String Catalog editor or in the file.
 
 ## Tests
 

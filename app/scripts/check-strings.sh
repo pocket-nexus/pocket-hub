@@ -1,6 +1,12 @@
 #!/bin/sh
-# Brings Localization/Localizable.xcstrings in line with the source and checks
-# that every key has English and Simplified Chinese.
+# Brings Localization/Localizable.xcstrings in line with the source, then
+# checks it.
+#
+# The catalog is the one place the app's words are kept. A key is the English
+# sentence as the source writes it, and the catalog holds its Simplified
+# Chinese; a string with a count also has its English plural forms there, as
+# variations. A translation is written into the catalog itself, in Xcode's
+# String Catalog editor or in the file.
 #
 # The keys come from the compiler itself (SWIFT_EMIT_LOC_STRINGS), so every
 # Text("…"), Button("…"), String(localized: "…") and other LocalizedStringKey
@@ -9,7 +15,11 @@
 # libraries' String(localized:) are looked up in the app's catalog too
 # (Bundle.main). Ordinary builds leave it off, so Xcode never syncs the
 # catalog from the app target's strings alone and marks the libraries' stale.
-# Keys no longer in the source are marked stale; fill-catalog.py lists them.
+#
+# The sync adds each new key with no translation and marks stale each key the
+# source no longer uses. The catalog's test then says which keys still need
+# their Simplified Chinese and which stale ones to delete, and fails until
+# neither is left.
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -31,4 +41,4 @@ xcodebuild -quiet -project PocketHub.xcodeproj -scheme PocketHub -configuration 
     -u "$derived/Build/Products/Debug/Pocket Hub.app"
 find "$derived/Build/Intermediates.noindex" -name '*.stringsdata' -print0 |
     xargs -0 xcrun xcstringstool sync Localization/Localizable.xcstrings --stringsdata
-python3 scripts/fill-catalog.py
+swift test --filter LocalizationTests
