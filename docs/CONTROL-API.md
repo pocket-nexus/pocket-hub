@@ -55,7 +55,11 @@ method.
 
 `pocket-hubd` with no argument is the resident core: it stays in the
 foreground of whatever started it, so a client that starts it detaches it (its
-own session, no terminal). **One core runs per home**: a second `pocket-hubd`
+own session, no terminal). **The core also ends at `SIGINT` and `SIGTERM`**,
+shutting down as it does for `hub.shutdown`, so a client starts it with no
+signal blocked: a process inherits the signal mask of the thread that starts
+it, and a core started with `SIGTERM` blocked never sees one. **One core runs
+per home**: a second `pocket-hubd`
 that finds a live one answering on the socket exits with status 0 at once, so
 two clients starting it together are both served by the one that won. The
 answer to `hub.shutdown` is written before the socket closes; **the core is
