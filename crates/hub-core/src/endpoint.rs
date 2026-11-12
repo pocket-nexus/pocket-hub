@@ -71,10 +71,11 @@ impl Shared {
         self.host.read().unwrap().clone()
     }
 
-    /// The groups Hub serves (§6.1): the runtime operations always, `channel`
-    /// while a channel host is installed, and those of `DeviceRequests`.
+    /// The groups Hub serves (§6.1): the runtime operations always (the
+    /// removal of an applet among them), `channel` while a channel host is
+    /// installed, and those of `DeviceRequests`.
     pub fn hub_features(&self) -> Vec<String> {
-        let mut list: Vec<String> = ["runtime", "runtime.native", "apps"].iter().map(|s| s.to_string()).collect();
+        let mut list: Vec<String> = ["runtime", "runtime.native", "runtime.remove", "apps"].iter().map(|s| s.to_string()).collect();
         if self.host().is_some() {
             list.push("channel".into());
         }

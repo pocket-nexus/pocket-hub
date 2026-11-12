@@ -124,6 +124,13 @@ const device = new LinkDevice({
       if (request.app === "missing") throw new LinkError("not_found", "no such output");
       return { phase: "switching", output: request.app };
     },
+    // The reference has refused the launcher's row, the running applet
+    // (`status().app`, "dev.demo") and an id it does not hold; it drops the
+    // row and reports the set after this (§6.2 runtime.remove).
+    remove: async ({ id }) => {
+      out({ ev: "removed", id });
+      installed.delete(id);
+    },
     screenshot: () => ({
       frame: 99,
       surfaces: surfaces.map((surface, index) => {

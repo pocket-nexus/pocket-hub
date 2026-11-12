@@ -78,6 +78,57 @@ async fn apps_reports_and_pages() {
     device.kill().await;
 }
 
+/// `runtime.remove` (§6.2): Hub deletes an installed applet under the mutex,
+/// and the device's next report no longer lists it. The device refuses its
+/// launcher and the running applet with `rejected` and a `reason`, and an
+/// applet it does not hold with `not_found`.
+#[tokio::test(flavor = "multi_thread")]
+async fn remove_an_applet_and_the_refusals() {
+    let mut hub = Hub::start(fast_config(), None).await;
+    let (dir, id, _) = hub.pair();
+    let mut device = Device::spawn(&hub, &dir, json!({})).await;
+    hub.linked(&id).await;
+    device.send(json!({"cmd":"apps","count":2,"home":"2026.11.2"})).await;
+    hub.event(|e| matches!(e, HubEvent::Apps { apps, .. } if apps.len() == 3)).await;
+    let handle = hub.endpoint.device(&id).unwrap();
+
+    let reply = handle.remove("cli", "dev.app.0").await.unwrap();
+    assert_eq!(reply["id"], "dev.app.0");
+    assert_eq!(device.expect("removed").await["id"], "dev.app.0");
+    let HubEvent::Apps { apps, .. } = hub.event(|e| matches!(e, HubEvent::Apps { apps, .. } if apps.len() == 2)).await else { unreachable!() };
+    assert!(apps.iter().all(|app| app.id != "dev.app.0"));
+    assert!(handle.snapshot().unwrap().mutex_holder.is_none(), "the mutex is released at the reply");
+
+    let reason = |error: OpError| match error {
+        OpError::Link { code, extra, .. } => (code, extra.get("reason").and_then(Value::as_str).map(str::to_owned)),
+        other => panic!("not a link error: {other:?}"),
+    };
+    let home = handle.remove("cli", "dev.pocket-nexus.shell").await.unwrap_err();
+    assert_eq!(reason(home), ("rejected".into(), Some("home".into())));
+    let running = handle.remove("cli", "dev.demo").await.unwrap_err();
+    assert_eq!(reason(running), ("rejected".into(), Some("running".into())));
+    let missing = handle.remove("cli", "dev.app.9").await.unwrap_err();
+    assert_eq!(reason(missing), ("not_found".into(), None));
+    // An id over the link's 128 bytes is refused before anything is sent.
+    assert!(matches!(handle.remove("cli", &"x".repeat(129)).await, Err(OpError::Invalid { .. })));
+    assert!(matches!(handle.remove("cli", "").await, Err(OpError::Invalid { .. })));
+    device.kill().await;
+}
+
+/// A device whose software predates `runtime.remove` does not list it: Hub
+/// refuses locally, and the device is never sent the request (§6.1).
+#[tokio::test(flavor = "multi_thread")]
+async fn remove_needs_the_group() {
+    let mut hub = Hub::start(fast_config(), None).await;
+    let (dir, id, _) = hub.pair();
+    let _device = Device::spawn(&hub, &dir, json!({"features":["runtime","runtime.native","apps"]})).await;
+    hub.linked(&id).await;
+    let handle = hub.endpoint.device(&id).unwrap();
+    assert!(!handle.snapshot().unwrap().link.unwrap().features_in_use.contains(&"runtime.remove".to_owned()));
+    let error = handle.remove("cli", "dev.app.0").await.unwrap_err();
+    assert_eq!(error, OpError::Unsupported { feature: "runtime.remove".into() });
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn push_with_progress_and_a_rejected_push() {
     let mut hub = Hub::start(fast_config(), None).await;

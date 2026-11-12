@@ -35,6 +35,7 @@ pub mod methods {
     pub const DEVICES_STATUS: &str = "devices.status";
     pub const DEVICES_PUSH: &str = "devices.push";
     pub const DEVICES_LAUNCH: &str = "devices.launch";
+    pub const DEVICES_REMOVE: &str = "devices.remove";
     pub const DEVICES_SCREENSHOT: &str = "devices.screenshot";
     pub const DEVICES_LOGS: &str = "devices.logs";
     pub const DEVICES_INSTALL_PROGRAM: &str = "devices.installProgram";

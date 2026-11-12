@@ -34,6 +34,11 @@ extension Device {
     /// Hub knows a newer release of the device's software than it runs.
     public var offersSoftwareUpdate: Bool { program.update && program.latest != nil }
 
+    /// The device deletes an applet at Hub's request: its link uses
+    /// `runtime.remove` (link specification §6.1), which software older than
+    /// that request does not list.
+    public var deletesApplets: Bool { link?.features.contains("runtime.remove") == true }
+
     /// Applets sorted for display: the launcher first, then by id.
     public var sortedApps: [InstalledApp] {
         (apps ?? []).sorted { lhs, rhs in
@@ -135,6 +140,7 @@ extension MutexHolder {
         switch method {
         case "devices.push", "store.install": String(localized: "installing an applet")
         case "devices.launch": String(localized: "opening an applet")
+        case "devices.remove": String(localized: "deleting an applet")
         case "devices.installProgram": String(localized: "updating this 3DS's software")
         default: String(localized: "using it")
         }

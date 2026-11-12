@@ -102,7 +102,8 @@ pub(crate) struct Op {
     pub progress: Option<mpsc::UnboundedSender<Value>>,
     /// The count of body bytes written to the carrier so far goes here.
     pub sent: Option<mpsc::UnboundedSender<u64>>,
-    /// `runtime.push`, `runtime.native.install`, `runtime.launch` (§8.3).
+    /// `runtime.push`, `runtime.native.install`, `runtime.launch`,
+    /// `runtime.remove` (§8.3).
     pub state_changing: bool,
     pub done: oneshot::Sender<Result<OpOutcome, OpError>>,
 }
@@ -809,7 +810,7 @@ impl Conn {
     ///
     /// The window is open:
     /// - while a state-changing request of Hub (`runtime.push`,
-    ///   `runtime.native.install`, `runtime.launch`) is in `out`: from the
+    ///   `runtime.native.install`, `runtime.launch`, `runtime.remove`) is in `out`: from the
     ///   moment its REQUEST is queued (`start_op`) until its REPLY, the end
     ///   of a cancelled one's grace, or the connection's end;
     /// - after a `switching` reply to a `runtime.launch` of an app, which the

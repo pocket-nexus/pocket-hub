@@ -87,6 +87,7 @@ struct ExamplesTests {
                 #expect(!result.hash.isEmpty)
                 #expect(phases.value.first == "sending", "push progress starts at sending")
             case "devices.launch": _ = try await replay.launch(device: device, app: p["app"]?.stringValue ?? "")
+            case "devices.remove": try await replay.remove(device: device, app: p["app"]?.stringValue ?? "")
             case "devices.screenshot":
                 let shot = try await replay.screenshot(device: device, path: p["path"]?.stringValue)
                 #expect(shot.width > 0 && shot.height > 0)
@@ -144,7 +145,7 @@ struct ExamplesTests {
         }
         let contract: Set<String> = ["hub.hello", "hub.status", "hub.setName", "hub.subscribe", "hub.shutdown",
             "devices.list", "devices.get", "devices.forget", "devices.status", "devices.push", "devices.launch",
-            "devices.screenshot", "devices.logs", "devices.installProgram", "setup.discover", "setup.install",
+            "devices.remove", "devices.screenshot", "devices.logs", "devices.installProgram", "setup.discover", "setup.install",
             "setup.card", "daemons.list", "daemons.install", "daemons.remove", "daemons.start", "daemons.stop",
             "daemons.restart", "daemons.logs", "daemons.runtime", "store.apps", "store.install"]
         #expect(covered == contract)
@@ -177,6 +178,10 @@ struct ExamplesTests {
                 }
                 if name == "release", case .operation(let e) = error {
                     #expect(["unreachable", "not_found", "rejected"].contains(e.reason ?? ""))
+                }
+                if name == "link", case .operation(let e) = error {
+                    // The example is devices.remove refused: the device's code and reason.
+                    #expect(e.linkCode == "rejected" && ["running", "home"].contains(e.reason ?? ""))
                 }
             }
         }

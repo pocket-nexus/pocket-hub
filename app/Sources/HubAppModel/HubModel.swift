@@ -41,6 +41,8 @@ public final class HubModel {
     public private(set) var takingScreenshot: Set<String> = []
     /// The applet being launched per device.
     public private(set) var launching: [String: String] = [:]
+    /// The applet being deleted per device.
+    public private(set) var removing: [String: String] = [:]
     public private(set) var daemonInstall: DaemonInstallActivity?
     public private(set) var bunInstallProgress: Double??
     /// Software updates per device, from the click until it is dismissed.
@@ -275,6 +277,14 @@ public final class HubModel {
         launching[deviceId] = appId
         defer { launching[deviceId] = nil }
         _ = try await client.launch(device: deviceId, app: appId)
+    }
+
+    /// Deletes an installed applet and its data on the device. The device's
+    /// next apps report, and so `device.changed`, drops its row.
+    public func remove(_ app: InstalledApp, from deviceId: String) async throws {
+        removing[deviceId] = app.id
+        defer { removing[deviceId] = nil }
+        try await client.remove(device: deviceId, app: app.id)
     }
 
     @discardableResult

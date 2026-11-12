@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ can't delete applets from this Mac.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ can't delete applets from this Mac."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 无法从这台 Mac 删除小程序。"
+          }
+        }
+      }
+    },
     "%@ didn't respond.": {
       "localizations": {
         "en": {
@@ -93,6 +109,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ 正忙。"
+          }
+        }
+      }
+    },
+    "%@ is open on %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is open on %@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 正在 %2$@ 上运行。"
           }
         }
       }
@@ -1109,6 +1141,70 @@
         }
       }
     },
+    "Delete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除"
+          }
+        }
+      }
+    },
+    "Delete %@ from %@?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete %@ from %@?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要从 %2$@ 删除 %1$@ 吗？"
+          }
+        }
+      }
+    },
+    "Delete it on the console instead: hold its icon on the home screen. A newer version of its software deletes applets from here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete it on the console instead: hold its icon on the home screen. A newer version of its software deletes applets from here."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请改在主机上删除：在主屏幕上按住它的图标。它的软件更新到更新的版本后，就能从这里删除小程序。"
+          }
+        }
+      }
+    },
+    "Delete…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除…"
+          }
+        }
+      }
+    },
     "Details": {
       "localizations": {
         "en": {
@@ -1453,6 +1549,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在准备更新…"
+          }
+        }
+      }
+    },
+    "Go back to the home screen on the console, then delete it again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go back to the home screen on the console, then delete it again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在主机上回到主屏幕，然后再删除。"
           }
         }
       }
@@ -1805,6 +1917,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "此应用副本缺少后台服务。请重新安装 Pocket Hub。"
+          }
+        }
+      }
+    },
+    "Its data on the device is deleted with it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its data on the device is deleted with it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它在设备上的数据也会一并删除。"
           }
         }
       }
@@ -4225,6 +4353,22 @@
         }
       }
     },
+    "The console opens its applets from it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The console opens its applets from it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机要通过它打开小程序。"
+          }
+        }
+      }
+    },
     "The console stopped responding.": {
       "localizations": {
         "en": {
@@ -4333,6 +4477,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "下载没有完成。"
+          }
+        }
+      }
+    },
+    "The home screen can't be deleted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The home screen can't be deleted."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主屏幕无法删除。"
           }
         }
       }
@@ -5549,6 +5709,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "另一个应用"
+          }
+        }
+      }
+    },
+    "deleting an applet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "deleting an applet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除小程序"
           }
         }
       }

@@ -85,7 +85,7 @@ public struct MockDevice: Sendable {
         lastSeen = now
         setupUnconfirmed = false
         link = ["carrier": .string(carrier), "peer": .string("\(address):51234"), "since": .number(Double(now)),
-                "payloadLimit": 16384, "features": ["runtime", "runtime.native", "apps", "channel", "devtools"]]
+                "payloadLimit": 16384, "features": ["runtime", "runtime.native", "runtime.remove", "apps", "channel", "devtools"]]
         status = [
             "phase": "accepted", "target": "3ds", "hostAbi": .number(Double(hostAbi)), "slot": "00000000000000a1",
             "address": .string(address), "generation": 3, "active": "1f2e3d4c5b6a7980", "lastGood": "1f2e3d4c5b6a7980",

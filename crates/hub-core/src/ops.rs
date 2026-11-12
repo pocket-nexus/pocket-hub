@@ -129,7 +129,7 @@ impl DeviceHandle {
         progress: Option<mpsc::UnboundedSender<Value>>,
         sent: Option<mpsc::UnboundedSender<u64>>,
     ) -> Result<OpOutcome, OpError> {
-        let state_changing = matches!(request["t"].as_str(), Some("runtime.push" | "runtime.native.install" | "runtime.launch"));
+        let state_changing = matches!(request["t"].as_str(), Some("runtime.push" | "runtime.native.install" | "runtime.launch" | "runtime.remove"));
         if self.shared.store.device(&self.id).is_none() {
             return Err(OpError::Unknown);
         }
@@ -276,6 +276,18 @@ impl DeviceHandle {
         let reply = self.request(request, group, None, None, None).await?.reply;
         self.after_launch(guard, &reply);
         Ok(reply)
+    }
+
+    /// `runtime.remove` (§6.2): deletes an installed applet by its manifest
+    /// id, its data with it, under the mutex. The device refuses the running
+    /// applet and the launcher (`rejected` with `reason`), and its next
+    /// `runtime.apps` report no longer lists the applet.
+    pub async fn remove(&self, holder: &str, id: &str) -> Result<Map<String, Value>, OpError> {
+        if id.is_empty() || pocket_link::text::encoded_bytes(id) > APP_ID_BYTES {
+            return Err(OpError::Invalid { message: "an applet id is 1 to 128 bytes".into() });
+        }
+        let _guard = self.lock(holder).await?;
+        Ok(self.request(json!({"t": "runtime.remove", "id": id}), "runtime.remove", None, None, None).await?.reply)
     }
 
     fn after_launch(&self, guard: LockGuard, reply: &Map<String, Value>) {

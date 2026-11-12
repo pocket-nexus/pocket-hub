@@ -108,6 +108,7 @@ pub async fn dispatch(core: &Arc<Core>, client: &Client, id: &Value, method: &st
         }
         methods::DEVICES_PUSH => push(core, client, method, params(method, value)?, &progress).await,
         methods::DEVICES_LAUNCH => launch(core, client, method, params(method, value)?).await,
+        methods::DEVICES_REMOVE => remove(core, client, method, params(method, value)?).await,
         methods::DEVICES_SCREENSHOT => screenshot(core, params(method, value)?).await,
         methods::DEVICES_LOGS => logs(core, client, params(method, value)?).await,
         methods::DEVICES_INSTALL_PROGRAM => install_program(core, client, method, params(method, value)?, &progress).await,
@@ -287,6 +288,20 @@ async fn launch(core: &Core, client: &Client, method: &str, p: LaunchParams) -> 
     let output = handle.apps().and_then(|apps| apps.into_iter().find(|app| app.id == p.app).map(|app| app.output)).unwrap_or_else(|| p.app.clone());
     let reply = handle.launch(&holder(client, method), LaunchTarget::App(output.clone())).await.map_err(map::op_error)?;
     ok(LaunchResult { output: reply.get("output").and_then(Value::as_str).map(str::to_owned).unwrap_or(output) })
+}
+
+async fn remove(core: &Core, client: &Client, method: &str, p: RemoveParams) -> Result<Value, RpcError> {
+    let handle = device(core, &p.device)?;
+    // The link names an applet by its manifest id: an installed applet's
+    // output name is turned into its id; anything else is sent as an id.
+    let apps = handle.apps().unwrap_or_default();
+    let id = if apps.iter().any(|app| app.id == p.app) {
+        p.app.clone()
+    } else {
+        apps.into_iter().find(|app| app.output == p.app).map(|app| app.id).unwrap_or_else(|| p.app.clone())
+    };
+    handle.remove(&holder(client, method), &id).await.map_err(map::op_error)?;
+    ok(Empty {})
 }
 
 async fn screenshot(core: &Core, p: ScreenshotParams) -> Result<Value, RpcError> {

@@ -359,11 +359,16 @@ struct AppletRow: View {
     let isLaunching: Bool
     let open: () -> Void
     @Environment(AppState.self) private var state
+    @State private var confirmingDelete = false
+
+    /// The device's own rows carry no title; the store's entry for the same
+    /// id gives one, and an icon. Applets the store does not know keep `output`.
+    private var listed: StoreApp? { app.isHome ? nil : state.model.store.known[app.id] }
+    private var title: String { listed?.title ?? app.displayName }
+    private var isDeleting: Bool { state.model.removing[device.id] == app.id }
 
     var body: some View {
-        // The device's own rows carry no title; the store's entry for the same
-        // id gives one, and an icon. Applets the store does not know keep `output`.
-        let listed = app.isHome ? nil : state.model.store.known[app.id]
+        let listed = self.listed
         HStack {
             if let listed {
                 StoreIcon(path: listed.icon, size: 28)
@@ -398,7 +403,9 @@ struct AppletRow: View {
                 Text("Running").font(.caption).foregroundStyle(.green)
             }
             let store = state.model.store
-            if let update, let install = store.install(for: update, on: device.id) {
+            if isDeleting {
+                ProgressView().controlSize(.small)
+            } else if let update, let install = store.install(for: update, on: device.id) {
                 InstallProgressView(install: install) { store.cancelInstall(of: update, on: device.id) }
             } else {
                 if let update {
@@ -412,11 +419,54 @@ struct AppletRow: View {
                 } else {
                     Button("Open", action: open)
                         .disabled(!device.isLinked || device.busy != nil || isRunning)
-                        .accessibilityLabel(Text("Open \(listed?.title ?? app.displayName)"))
+                        .accessibilityLabel(Text("Open \(title)"))
+                }
+                if !app.isHome {
+                    // The row's other actions, in the toolbar's own symbol;
+                    // the same items are the row's context menu.
+                    Menu { actions } label: { Image(systemName: "ellipsis") }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("More actions")
                 }
             }
         }
         .padding(.vertical, 2)
+        .contextMenu { if !app.isHome { actions } }
+        .confirmationDialog(Text("Delete \(title) from \(device.displayName)?"), isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive, action: delete)
+        } message: {
+            Text("Its data on the device is deleted with it.")
+        }
+    }
+
+    /// The device refuses to delete the applet it runs, and the home screen
+    /// has no row actions (link specification §6.2 `runtime.remove`).
+    @ViewBuilder
+    private var actions: some View {
+        Button("Open", action: open)
+            .disabled(!device.isLinked || device.busy != nil || isRunning)
+        Divider()
+        Button("Delete…", role: .destructive) {
+            if device.deletesApplets {
+                confirmingDelete = true
+            } else {
+                // Software that predates deleting from Hub: say the console's way.
+                state.presentedError = .deletingNeedsNewerSoftware(deviceName: device.displayName)
+            }
+        }
+        .disabled(!device.isLinked || device.busy != nil || isRunning || isDeleting)
+    }
+
+    private func delete() {
+        Task {
+            do { try await state.model.remove(app, from: device.id) } catch {
+                if let failure = UserFacingError(deleteError: error, appTitle: title, deviceName: device.displayName) {
+                    state.presentedError = failure
+                }
+            }
+        }
     }
 
     /// The store's entry for this applet when it offers this device a newer

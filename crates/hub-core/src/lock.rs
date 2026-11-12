@@ -1,7 +1,7 @@
 //! §8.3 The device mutex: at most one state-changing request open per device.
 //!
 //! Hub's own clients take it before Hub sends `runtime.push`,
-//! `runtime.native.install` or `runtime.launch`. A second caller waits in a
+//! `runtime.native.install`, `runtime.launch` or `runtime.remove`. A second caller waits in a
 //! bounded FIFO queue and gets `busy` naming the holder when its wait times
 //! out (the recommendation of §11); a caller that finds the queue full gets
 //! `busy` at once. The holder is visible in the device's status.

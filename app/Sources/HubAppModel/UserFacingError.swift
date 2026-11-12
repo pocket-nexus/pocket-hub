@@ -107,6 +107,41 @@ extension UserFacingError {
                                                           advice: String(localized: "Try again."))
     }
 
+    /// A failure of `devices.remove`, worded for the applet and the device.
+    /// nil for a cancellation.
+    public init?(deleteError error: any Error, appTitle: String, deviceName: String?) {
+        let name = deviceName ?? String(localized: "This device")
+        if let hubError = error as? HubError, case .operation(let operation) = hubError, operation.kind == .link {
+            let detail = operation.message.isEmpty ? nil : operation.message
+            // The device's refusals (link specification §6.2 `runtime.remove`).
+            switch (operation.linkCode, operation.reason) {
+            case ("rejected", "running"):
+                self.init(title: String(localized: "\(appTitle) is open on \(name)."),
+                          advice: String(localized: "Go back to the home screen on the console, then delete it again."),
+                          detail: detail)
+                return
+            case ("rejected", "home"):
+                self.init(title: String(localized: "The home screen can't be deleted."),
+                          advice: String(localized: "The console opens its applets from it."),
+                          detail: detail)
+                return
+            case ("unsupported", _):
+                self = .deletingNeedsNewerSoftware(deviceName: name)
+                return
+            default:
+                break
+            }
+        }
+        self.init(error, deviceName: deviceName)
+    }
+
+    /// What deleting says for a device whose software predates deleting from
+    /// Hub (its link does not use `runtime.remove`): the console's own way.
+    public static func deletingNeedsNewerSoftware(deviceName: String) -> UserFacingError {
+        UserFacingError(title: String(localized: "\(deviceName) can't delete applets from this Mac."),
+                        advice: String(localized: "Delete it on the console instead: hold its icon on the home screen. A newer version of its software deletes applets from here."))
+    }
+
     /// A failure of `store.install`, worded for the applet and the device.
     /// nil for a cancellation the owner asked for.
     public init?(storeInstallError error: any Error, appTitle: String, deviceName: String?) {
