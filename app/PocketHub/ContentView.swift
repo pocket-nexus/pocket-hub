@@ -10,9 +10,14 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var state = state
-        NavigationSplitView {
+        // The sidebar is the window's only navigation and holds a handful of
+        // rows, so it stays shown: no toggle in the toolbar, no collapsing.
+        // (HIG, Sidebars: letting people hide one is a "consider", for
+        // windows whose content wants the room.)
+        NavigationSplitView(columnVisibility: .constant(.all)) {
             Sidebar()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 280)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             Detail()
         }
@@ -94,9 +99,9 @@ struct Sidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom) {
-            ConnectionFooter()
-        }
+        // Nothing sits at the sidebar's foot (HIG, Sidebars: the bottom edge
+        // is often off screen). Whether the core answers is told where it
+        // matters: the Devices section and the page on the right.
     }
 }
 
@@ -123,41 +128,15 @@ struct DeviceRow: View {
             }
         } icon: {
             // The controller glyph is wider than the sidebar's icon column;
-            // at full scale it runs into the name.
+            // at full scale it runs into the name. A connected device keeps the
+            // sidebar's tint (the owner's accent colour, as every sidebar icon
+            // does; HIG, Sidebars); one that is away is dimmed.
             Image(systemName: device.isLinked ? "gamecontroller.fill" : "gamecontroller")
                 .imageScale(.small)
-                .foregroundStyle(device.isLinked ? Color.green : Color.secondary)
+                .foregroundStyle(device.isLinked ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
         }
         .accessibilityElement(children: .combine)
         .accessibilityValue(device.isLinked ? Text("Connected") : Text("Not connected"))
-    }
-}
-
-/// The core's reachability, at the bottom of the sidebar.
-struct ConnectionFooter: View {
-    @Environment(AppState.self) private var state
-
-    var body: some View {
-        let model = state.model
-        HStack(spacing: 6) {
-            Circle()
-                .fill(model.isLive ? Color.green : Color.orange)
-                .frame(width: 7, height: 7)
-                .accessibilityHidden(true)
-            switch model.connection {
-            case .connected:
-                Text(verbatim: model.hub?.name ?? "")
-            case .connecting, .startingCore:
-                Text("Connecting…")
-            case .unreachable, .stopped:
-                Text("Not running")
-            }
-            Spacer()
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
     }
 }
 

@@ -981,22 +981,6 @@
         }
       }
     },
-    "Connecting…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connecting…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在连接…"
-          }
-        }
-      }
-    },
     "Connection": {
       "localizations": {
         "en": {

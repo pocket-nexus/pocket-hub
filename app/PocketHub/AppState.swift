@@ -29,6 +29,12 @@ final class AppState {
     /// keyboard commands can choose it, whichever page is open.
     var deviceTab: DeviceTab = .applets
     var showingSetup = false
+    /// The device page's file picker for a .pocket applet, and its question
+    /// before removing the device: here so the Device menu can open them as
+    /// the toolbar does (HIG, Toolbars › macOS: every toolbar item is also a
+    /// menu command).
+    var importingApplet = false
+    var confirmingRemoveDevice = false
     /// The store applet whose details sheet is open.
     var storeDetails: StoreApp?
     /// An error to show in the window, from an action started anywhere.
@@ -99,9 +105,10 @@ final class AppState {
     }
 
     /// Starts updating a device's software from anywhere (the menu bar) and
-    /// shows its page, where the progress and the outcome are.
+    /// shows its Applets page, where the progress and the outcome are.
     func updateSoftware(of deviceId: String) {
         model.updateProgram(on: deviceId)
+        deviceTab = .applets
         show(device: deviceId)
     }
 

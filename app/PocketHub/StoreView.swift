@@ -11,18 +11,9 @@ struct StoreView: View {
     private var store: StoreModel { state.model.store }
 
     var body: some View {
-        let model = state.model
         @Bindable var state = state
-        VStack(spacing: 0) {
-            if case .device(let id, _) = store.context, let device = model.device(id) {
-                DeviceBanner(device: device, interrupted: store.interrupted?.deviceId == id ? store.interrupted : nil)
-            } else {
-                NoDeviceBanner()
-            }
-            Divider()
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Applet Store")
         .toolbar { toolbar }
         .sheet(item: $state.storeDetails) { app in
@@ -62,15 +53,30 @@ struct StoreView: View {
                     .keyboardShortcut(.defaultAction)
             }
         case (let context, .loaded(let catalog)):
-            if catalog.apps.isEmpty {
-                ContentUnavailableView("No Applets", systemImage: "bag",
-                                       description: Text("The store offers nothing for this device yet."))
-            } else {
-                List(catalog.apps) { app in
-                    StoreRow(app: app, context: context) { state.storeDetails = app }
+            // The page's device (or the lack of one) is the first card; the
+            // applets are one group of rows under it, as a System Settings
+            // pane lists its items.
+            Form {
+                Section {
+                    if case .device(let id, _) = context, let device = state.model.device(id) {
+                        DeviceBanner(device: device,
+                                     interrupted: store.interrupted?.deviceId == id ? store.interrupted : nil)
+                    } else {
+                        NoDeviceBanner()
+                    }
                 }
-                .listStyle(.inset(alternatesRowBackgrounds: true))
+                Section {
+                    if catalog.apps.isEmpty {
+                        EmptySectionNote(title: Text("No Applets"),
+                                         detail: Text("The store offers nothing for this device yet."))
+                    } else {
+                        ForEach(catalog.apps) { app in
+                            StoreRow(app: app, context: context) { state.storeDetails = app }
+                        }
+                    }
+                }
             }
+            .formStyle(.grouped)
         }
     }
 
@@ -105,7 +111,7 @@ private struct DeviceBanner: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: device.isLinked ? "gamecontroller.fill" : "gamecontroller")
-                .foregroundStyle(device.isLinked ? Color.green : Color.secondary)
+                .foregroundStyle(device.isLinked ? Color.accentColor : Color.secondary)
                 .accessibilityHidden(true)
             if let interrupted, !device.isLinked {
                 // The one message for it: no alert, and not "turn it on".
@@ -126,8 +132,7 @@ private struct DeviceBanner: View {
             }
         }
         .font(.callout)
-        .padding(.horizontal)
-        .padding(.vertical, 10)
+        .padding(.vertical, 2)
     }
 }
 
@@ -143,8 +148,7 @@ private struct NoDeviceBanner: View {
             Button("Add a 3DS…") { state.showingSetup = true }
         }
         .font(.callout)
-        .padding(.horizontal)
-        .padding(.vertical, 10)
+        .padding(.vertical, 2)
     }
 }
 

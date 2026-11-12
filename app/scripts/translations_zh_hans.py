@@ -119,7 +119,6 @@ ZH = {
     "Connected over %@ since %@": "自 %2$@ 起通过 %1$@ 连接",
     "Connecting to Pocket Hub…": "正在连接 Pocket Hub…",
     "Connecting to your 3DS…": "正在连接你的 3DS…",
-    "Connecting…": "正在连接…",
     "Continue": "继续",
     "Copy": "拷贝",
     "Copy All": "全部拷贝",

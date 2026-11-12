@@ -13,8 +13,6 @@ extension UTType {
 struct DeviceDetailView: View {
     let device: Device
     @Environment(AppState.self) private var state
-    @State private var importing = false
-    @State private var confirmingForget = false
     @State private var dropTargeted = false
 
     private var model: HubModel { state.model }
@@ -33,42 +31,34 @@ struct DeviceDetailView: View {
 
     var body: some View {
         @Bindable var state = state
-        VStack(spacing: 0) {
-            DeviceHeader(device: device, unlink: unlinkNote, push: model.pushes[device.id],
-                         updating: model.programUpdates[device.id]?.isActive == true)
-                .padding()
-            SoftwareUpdateBanner(device: device)
-            Divider()
-            Picker("Section", selection: $state.deviceTab) {
-                Text("Applets").tag(DeviceTab.applets)
-                Text("Screenshot").tag(DeviceTab.screenshot)
-                Text("Log").tag(DeviceTab.log)
-                Text("Details").tag(DeviceTab.details)
+        // Each section is a page of its own under the toolbar. The device's
+        // state (its card, its software update, its applets) is the Applets
+        // page, laid out as System Settings lays out a pane: grouped cards
+        // that scroll beneath the toolbar.
+        Group {
+            switch state.deviceTab {
+            case .applets:
+                DeviceOverview(device: device, unlink: unlinkNote, report: report)
+            case .screenshot:
+                ScreenshotView(device: device, shot: model.screenshots[device.id],
+                               isTaking: model.takingScreenshot.contains(device.id), take: takeScreenshot)
+                    .padding(20)
+            case .log:
+                DeviceLogView(device: device)
+            case .details:
+                DeviceDetailsForm(device: device)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 440)
-            .padding(.vertical, 10)
-            Group {
-                switch state.deviceTab {
-                case .applets:
-                    AppletList(device: device)
-                case .screenshot:
-                    ScreenshotView(device: device, shot: model.screenshots[device.id],
-                                   isTaking: model.takingScreenshot.contains(device.id), take: takeScreenshot)
-                        .padding()
-                case .log:
-                    DeviceLogView(device: device)
-                case .details:
-                    DeviceDetailsForm(device: device)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The window keeps the device's name (Window menu, Mission Control);
+        // the toolbar leaves it out, as the sidebar's selection and the
+        // device's card already say it (HIG, Toolbars › Titles: a redundant
+        // title can be left out). The room goes to the sections and actions,
+        // which otherwise fold into the overflow menu at narrow widths.
         .navigationTitle(device.displayName)
-        .navigationSubtitle(device.isLinked ? Text("Connected") : Text("Not connected"))
+        .toolbar(removing: .title)
         .toolbar { toolbar }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.pocketApplet]) { result in
+        .fileImporter(isPresented: $state.importingApplet, allowedContentTypes: [.pocketApplet]) { result in
             if case .success(let url) = result { push(url) }
         }
         .dropDestination(for: URL.self) { urls, _ in
@@ -99,7 +89,7 @@ struct DeviceDetailView: View {
                     .allowsHitTesting(false)
             }
         }
-        .confirmationDialog("Remove \(device.displayName) from Pocket Hub?", isPresented: $confirmingForget) {
+        .confirmationDialog("Remove \(device.displayName) from Pocket Hub?", isPresented: $state.confirmingRemoveDevice) {
             Button("Remove", role: .destructive) { forget() }
         } message: {
             Text("The console disconnects. To use it with this Mac again, you will need to set it up again.")
@@ -108,15 +98,21 @@ struct DeviceDetailView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItemGroup {
+        // On a Mac a segmented control switches views from the toolbar, not
+        // from the window's content (HIG, Segmented controls › macOS).
+        ToolbarItem(placement: .principal) {
+            DeviceTabPicker()
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
             Button("Take Screenshot", systemImage: "camera", action: takeScreenshot)
                 .disabled(!device.isLinked || model.takingScreenshot.contains(device.id))
                 .help("Take a screenshot of both screens")
-            Button("Install Applet…", systemImage: "square.and.arrow.down") { importing = true }
+            Button("Install Applet…", systemImage: "square.and.arrow.down") { state.importingApplet = true }
                 .disabled(!device.isLinked || model.pushes[device.id] != nil)
                 .help("Install a .pocket applet on this console")
-            Menu("More", systemImage: "ellipsis.circle") {
-                Button("Remove from Pocket Hub…", role: .destructive) { confirmingForget = true }
+            // Toolbar symbols carry no border of their own (HIG, Toolbars).
+            Menu("More", systemImage: "ellipsis") {
+                Button("Remove from Pocket Hub…", role: .destructive) { state.confirmingRemoveDevice = true }
             }
             .help("More actions")
         }
@@ -153,6 +149,24 @@ struct DeviceDetailView: View {
     }
 }
 
+/// The sections of a device's page, in the toolbar.
+struct DeviceTabPicker: View {
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        @Bindable var state = state
+        Picker("Section", selection: $state.deviceTab) {
+            Text("Applets").tag(DeviceTab.applets)
+            Text("Screenshot").tag(DeviceTab.screenshot)
+            Text("Log").tag(DeviceTab.log)
+            Text("Details").tag(DeviceTab.details)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+    }
+}
+
 /// The device's name, link and activity at a glance.
 struct DeviceHeader: View {
     let device: Device
@@ -163,15 +177,18 @@ struct DeviceHeader: View {
     var updating = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: 14) {
+            // A pane's icon as System Settings draws one: a white glyph on a
+            // filled rounded square, in the accent colour while connected.
             Image(systemName: "gamecontroller.fill")
-                .font(.system(size: 34))
-                .foregroundStyle(device.isLinked ? Color.accentColor : .secondary)
-                .frame(width: 56, height: 56)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background((device.isLinked ? Color.accentColor : Color.gray).gradient,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(device.displayName).font(.title2.bold())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(device.displayName).font(.title3.weight(.semibold))
                 if !device.model.isEmpty {
                     Text(device.model).foregroundStyle(.secondary)
                 }
@@ -254,39 +271,66 @@ struct ConnectionLine: View {
     }
 }
 
-/// The installed applets, with Open.
-struct AppletList: View {
+/// The Applets page: the device's card, its software update when there is
+/// one, and the installed applets with Open, as grouped cards.
+struct DeviceOverview: View {
     let device: Device
+    let unlink: DeviceUnlinked?
+    let report: (any Error) -> Void
     @Environment(AppState.self) private var state
 
     var body: some View {
-        let apps = device.sortedApps
-        if apps.isEmpty {
-            if device.isLinked {
-                ContentUnavailableView("No Applets", systemImage: "square.grid.2x2",
-                                       description: Text("Drop a .pocket file here to install one."))
-            } else {
-                ContentUnavailableView("Applets Unknown", systemImage: "square.grid.2x2",
-                                       description: Text("The list appears when the console connects."))
+        let model = state.model
+        Form {
+            Section {
+                DeviceHeader(device: device, unlink: unlink, push: model.pushes[device.id],
+                             updating: model.programUpdates[device.id]?.isActive == true)
             }
-        } else {
-            List(apps) { app in
-                AppletRow(app: app, device: device,
-                          isRunning: device.runningApp?.id == app.id,
-                          isLaunching: state.model.launching[device.id] == app.id) {
-                    launch(app)
+            SoftwareUpdateSection(device: device)
+            // One group of rows, as System Settings lists items with an action
+            // each. Alternating row colours are for multicolumn tables (HIG,
+            // Lists and tables), which this is not.
+            Section("Applets") {
+                let apps = device.sortedApps
+                if apps.isEmpty {
+                    EmptySectionNote(
+                        title: device.isLinked ? Text("No Applets") : Text("Applets Unknown"),
+                        detail: device.isLinked ? Text("Drop a .pocket file here to install one.")
+                                                : Text("The list appears when the console connects."))
+                } else {
+                    ForEach(apps) { app in
+                        AppletRow(app: app, device: device,
+                                  isRunning: device.runningApp?.id == app.id,
+                                  isLaunching: model.launching[device.id] == app.id) {
+                            launch(app)
+                        }
+                    }
                 }
             }
-            .listStyle(.inset(alternatesRowBackgrounds: true))
         }
+        .formStyle(.grouped)
     }
 
     private func launch(_ app: InstalledApp) {
         Task {
-            do { try await state.model.launch(app, on: device.id) } catch {
-                state.presentedError = UserFacingError(error, deviceName: device.displayName)
-            }
+            do { try await state.model.launch(app, on: device.id) } catch { report(error) }
         }
+    }
+}
+
+/// What an empty section of a grouped page says in place of its rows.
+struct EmptySectionNote: View {
+    let title: Text
+    let detail: Text
+
+    var body: some View {
+        VStack(spacing: 4) {
+            title.font(.headline)
+            detail.font(.callout).foregroundStyle(.secondary)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
     }
 }
 

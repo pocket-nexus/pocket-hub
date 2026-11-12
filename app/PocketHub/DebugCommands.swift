@@ -54,7 +54,7 @@ enum DebugCommands {
         switch words {
         case ["window"]: state.showWindow()
         case let w where w.count == 3 && w[0] == "window-size":
-            // The window clamps the size to its minimum (720 × 480).
+            // The window clamps the size to its minimum (800 × 480).
             if let width = Double(w[1]), let height = Double(w[2]),
                let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true })
                    ?? NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 400 })

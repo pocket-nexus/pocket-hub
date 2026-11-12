@@ -30,9 +30,8 @@ struct DeviceLogView: View {
                     .disabled(entries.isEmpty)
             }
             .labelStyle(.iconOnly)
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            Divider()
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
             if entries.isEmpty {
                 ContentUnavailableView {
                     Label("No Log Lines", systemImage: "text.alignleft")
@@ -59,6 +58,12 @@ struct DeviceLogView: View {
                         }
                     }
                 }
+                // The lines sit in a text area's own background, rounded as
+                // the grouped pages' cards are, rather than under a divider.
+                .scrollContentBackground(.hidden)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding([.horizontal, .bottom], 20)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
