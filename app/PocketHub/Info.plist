@@ -9,6 +9,9 @@
   must not end it as an idle app with no windows (automatic termination) nor
   kill it without asking (sudden termination): quitting goes through the
   app, which decides whether the core stops too.
+
+  CFBundleURLTypes registers the app for pocket-hub: links, which a web page
+  opens it with (docs/DEEP-LINKS.md §1).
 -->
 <plist version="1.0">
 <dict>
@@ -33,6 +36,19 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>pocket-hub</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSApplicationCategoryType</key>

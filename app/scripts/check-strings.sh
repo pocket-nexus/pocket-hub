@@ -22,6 +22,13 @@ rm -rf "$derived"
 xcodebuild -quiet -project PocketHub.xcodeproj -scheme PocketHub -configuration Debug \
     -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath "$derived" \
     SWIFT_EMIT_LOC_STRINGS=YES build
+# This build is compiled for its strings, not to be opened. Like every build
+# of the app it claims pocket-hub: links (Info.plist, docs/DEEP-LINKS.md), and
+# Xcode registers what it builds with Launch Services, which may then open a
+# link in this copy, with the default home, instead of the app the developer
+# runs. So it is taken out of Launch Services again.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+    -u "$derived/Build/Products/Debug/Pocket Hub.app"
 find "$derived/Build/Intermediates.noindex" -name '*.stringsdata' -print0 |
     xargs -0 xcrun xcstringstool sync Localization/Localizable.xcstrings --stringsdata
 python3 scripts/fill-catalog.py

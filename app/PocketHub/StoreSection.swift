@@ -136,20 +136,22 @@ struct StoreRow: View {
         if let install = store.install(for: app, on: device.id) {
             InstallProgressView(install: install) { store.cancelInstall(of: app, on: device.id) }
         } else {
-            let unavailable = unavailableReason(state.model.device(device.id))
+            let unavailable = installUnavailableReason(state.model.device(device.id))
             Button("Install") { store.install(app, on: device.id) }
                 .disabled(unavailable != nil)
                 .help(unavailable ?? String(localized: "Install \(app.title) on \(device.displayName)"))
         }
     }
+}
 
-    /// Why the action cannot run now, in the owner's words; nil when it can.
-    private func unavailableReason(_ device: Device?) -> String? {
-        guard let device else { return String(localized: "The device is no longer paired.") }
-        if !device.isLinked { return String(localized: "\(device.displayName) isn't connected right now.") }
-        if let busy = device.busy { return busy.displayText }
-        return nil
-    }
+/// Why an install cannot run on the device now, in the owner's words; nil
+/// when it can.
+@MainActor
+private func installUnavailableReason(_ device: Device?) -> String? {
+    guard let device else { return String(localized: "The device is no longer paired.") }
+    if !device.isLinked { return String(localized: "\(device.displayName) isn't connected right now.") }
+    if let busy = device.busy { return busy.displayText }
+    return nil
 }
 
 struct InstallProgressView: View {
@@ -199,13 +201,40 @@ struct AuthorLabel: View {
     }
 }
 
-/// What the store declares about an applet. Nothing here is invented: every
-/// line is a field of the store's entry.
+/// One applet of the store: what the store declares about it, and the one
+/// action that fits the device. A row's Details opens it, and so does a link
+/// from the store's website (docs/DEEP-LINKS.md §2), which is why the action
+/// is here: the link shows this sheet and the owner installs from it.
+///
+/// The sheet acts on the device whose page the window shows, and the store's
+/// list for that device says what it holds (`installed`, `update`). Nothing
+/// here is invented: every line is a field of the store's entry.
 struct StoreAppDetails: View {
     let app: StoreApp
     let close: () -> Void
+    @Environment(AppState.self) private var state
+    /// A failure of Open, shown over this sheet like one of an install.
+    @State private var failure: UserFacingError?
+
+    private var store: StoreModel { state.model.store }
+    /// The paired devices that can run the applet.
+    private var able: [Device] { store.devices(running: app) }
+    /// The device the sheet acts on: the one shown, when it can run the applet.
+    private var device: Device? { able.first { $0.id == state.selectedDeviceID } }
+    /// The applet as the store offers it to that device now; nil until its
+    /// list is here.
+    private var offer: StoreApp? {
+        guard let device, store.deviceId == device.id else { return nil }
+        return store.apps.first { $0.id == app.id }
+    }
+    /// Install or Update is on offer: then it is the sheet's one prominent button.
+    private var offersInstall: Bool { offer?.action == .install || offer?.action == .update }
+    /// The store's entry as it is now. The sheet stays open across an install,
+    /// which changes what the entry says (`cached`), and across a refresh.
+    private var entry: StoreApp { offer ?? store.known[app.id] ?? app }
 
     var body: some View {
+        let app = entry
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 14) {
                 StoreIcon(path: app.icon, size: 64)
@@ -213,9 +242,22 @@ struct StoreAppDetails: View {
                     Text(verbatim: app.title).font(.title2.bold())
                     AuthorLabel(app: app)
                 }
+                Spacer(minLength: 12)
+                if let device { action(on: device) }
             }
             Text(verbatim: app.summary)
+            note
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Form {
+                if able.count > 1 {
+                    // Several devices can run it: the owner says which one.
+                    Picker("Device", selection: Binding(get: { device?.id ?? "" },
+                                                        set: { state.show(app, on: $0) })) {
+                        ForEach(able) { Text($0.displayName).tag($0.id) }
+                    }
+                }
                 LabeledContent("Version") { Text(verbatim: app.version) }
                 LabeledContent("Size") { Text(verbatim: app.sizeText) }
                 LabeledContent("Runs on") {
@@ -241,12 +283,104 @@ struct StoreAppDetails: View {
             }
             .formStyle(.grouped)
             HStack {
+                if state.model.devices.isEmpty {
+                    Button("Add a Device…") {
+                        close()
+                        state.startSetup()
+                    }
+                }
                 Spacer()
-                Button("Done", action: close).keyboardShortcut(.defaultAction)
+                // Return closes the sheet and never installs: a link can bring
+                // this sheet up while the owner is typing somewhere else
+                // (docs/DEEP-LINKS.md §2, "a link shows; it never installs").
+                // With Install on offer Done steps back to Esc, so the sheet
+                // keeps one prominent button.
+                Button("Done", action: close)
+                    .keyboardShortcut(offersInstall ? .cancelAction : .defaultAction)
             }
         }
         .padding(20)
         .frame(width: 480)
+        // The window may show another page, or a device that cannot run the
+        // applet (it was removed, or one that can has just linked for the
+        // first time): the sheet moves it to one that can.
+        .onChange(of: able.map(\.id), initial: true) {
+            if device == nil { state.showDevice(for: app) }
+        }
+        .alert(item: Binding(get: { failure ?? store.installFailure },
+                             set: { _ in failure = nil; store.installFailure = nil })) { failure in
+            Alert(title: Text(verbatim: failure.title),
+                  message: Text(verbatim: [failure.advice, failure.detail].compactMap { $0 }.joined(separator: "\n\n")))
+        }
+    }
+
+    /// Install, Update or Open, as the store's list for the device says; the
+    /// progress of an install while one runs.
+    @ViewBuilder
+    private func action(on device: Device) -> some View {
+        if let install = store.install(for: app, on: device.id) {
+            InstallProgressView(install: install) { store.cancelInstall(of: app, on: device.id) }
+        } else if let offer {
+            let unavailable = installUnavailableReason(device)
+            switch offer.action {
+            case .install:
+                Button("Install") { store.install(offer, on: device.id) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(unavailable != nil)
+                    .help(unavailable ?? String(localized: "Install \(app.title) on \(device.displayName)"))
+            case .update:
+                Button("Update") { store.install(offer, on: device.id) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(unavailable != nil)
+                    .help(unavailable ?? String(localized: "Install version \(offer.version)"))
+            case .installed:
+                if state.model.launching[device.id] == app.id {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Open") { open(on: device) }
+                        .controlSize(.large)
+                        .disabled(unavailable != nil || device.runningApp?.id == app.id)
+                        .help(unavailable ?? String(localized: "Open \(app.title) on \(device.displayName)"))
+                }
+            case nil:
+                EmptyView()
+            }
+        } else if case .failed = store.page {
+            // The device's page, under this sheet, says why its list is not here.
+            EmptyView()
+        } else {
+            ProgressView().controlSize(.small)
+        }
+    }
+
+    /// Why the sheet has no action, or why its action cannot run now.
+    @ViewBuilder
+    private var note: some View {
+        let devices = state.model.devices
+        if devices.isEmpty {
+            Text("Add a device to Pocket Hub to install this applet on it.")
+        } else if able.isEmpty {
+            // A device that has never linked has no known target yet (StoreApp.runs(on:)).
+            if let unknown = devices.first(where: { !$0.hasKnownTarget }) {
+                Text("\(unknown.displayName) hasn't connected yet, so Pocket Hub can't tell whether it runs this applet.")
+            } else if devices.count == 1, let only = devices.first {
+                Text("\(app.title) isn't available for \(only.displayName).")
+            } else {
+                Text("\(app.title) isn't available for any of your devices.")
+            }
+        } else if let device, !device.isLinked {
+            Text("\(device.displayName) isn't connected. Turn it on and open Pocket Shell to install applets.")
+        }
+    }
+
+    private func open(on device: Device) {
+        Task {
+            do { try await store.open(app, on: device.id) } catch {
+                failure = UserFacingError(error, deviceName: device.displayName)
+            }
+        }
     }
 
     /// The 3DS's targets get the console's name; others keep the target's own.

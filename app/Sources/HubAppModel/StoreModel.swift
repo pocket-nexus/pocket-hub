@@ -300,6 +300,34 @@ public final class StoreModel {
         guard let model else { return }
         try await model.launch(appId: app.id, on: device)
     }
+
+    // MARK: - Opened from a link (docs/DEEP-LINKS.md §2)
+
+    /// The store's entry for an applet id, out of the whole catalog; nil when
+    /// the store does not list it. An id the catalog Hub holds lacks is asked
+    /// for once more with a fresh catalog: the applet may have been published
+    /// since Hub last fetched, and Hub answers from the catalog it holds for
+    /// 10 minutes (CONTROL-API.md §3 "Store").
+    public func lookUp(appId: String) async throws -> StoreApp? {
+        let held = try await client.storeApps(device: nil, refresh: false)
+        if let app = held.apps.first(where: { $0.id == appId }) { return app }
+        return try await client.storeApps(device: nil, refresh: true).apps.first { $0.id == appId }
+    }
+
+    /// The paired devices that can run `app`, in the model's order (linked first).
+    public func devices(running app: StoreApp) -> [Device] {
+        (model?.devices ?? []).filter(app.runs(on:))
+    }
+
+    /// The device a link's applet is shown for: one that is linked before one
+    /// that is not, since only a linked device can take the install now, and
+    /// the device whose page is open (`shown`) before another. nil when no
+    /// paired device can run the applet.
+    public func device(for app: StoreApp, preferring shown: String?) -> Device? {
+        let able = devices(running: app)
+        let linked = able.filter(\.isLinked)
+        return linked.first { $0.id == shown } ?? linked.first ?? able.first { $0.id == shown } ?? able.first
+    }
 }
 
 extension Device {

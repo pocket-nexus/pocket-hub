@@ -94,6 +94,19 @@ public final class HubModel {
 
     public var linkedDevices: [Device] { devices.filter(\.isLinked) }
 
+    /// Returns once the core answers and its lists are here (`isLive`). What
+    /// arrives from outside while the core is still starting, a link the app
+    /// was opened with (docs/DEEP-LINKS.md §2), waits here for it.
+    public func whenLive() async {
+        while !isLive {
+            await withCheckedContinuation { continuation in
+                // Told once, just before `connection` next changes; the loop
+                // then reads the new value.
+                withObservationTracking { _ = connection } onChange: { continuation.resume() }
+            }
+        }
+    }
+
     /// Starts connecting and applying updates. Idempotent.
     public func start() {
         guard updatesTask == nil else { return }

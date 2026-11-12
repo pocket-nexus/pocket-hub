@@ -388,6 +388,15 @@ ZH = {
     "Version %@ · Not from the store": "版本 %@ · 非商店提供",
     "Lines appear here while the applet writes them.": "小程序写出日志时，会显示在这里。",
     "The connection to %@ ended while installing %@. When it reconnects, this list shows whether %@ was installed.": "安装 %2$@ 时与 %1$@ 的连接断开了。它重新连接后，这个列表会显示 %3$@ 是否已安装。",
+    # A link that opens the app, and the applet sheet's action (docs/DEEP-LINKS.md).
+    "Pocket Hub can't open this link.": "Pocket Hub 无法打开这个链接。",
+    "It may be incomplete, or made for a newer version of Pocket Hub.": "它可能不完整，或者是为更新版本的 Pocket Hub 生成的。",
+    "This applet isn't in the store.": "商店里没有这个小程序。",
+    "It may have been removed since the link was made.": "它可能在链接生成之后被下架了。",
+    "Add a device to Pocket Hub to install this applet on it.": "先在 Pocket Hub 中添加一台设备，才能把这个小程序安装到设备上。",
+    "%@ hasn't connected yet, so Pocket Hub can't tell whether it runs this applet.": "%@ 还没有连接过，Pocket Hub 无法判断它能否运行这个小程序。",
+    "%@ isn't available for any of your devices.": "%@ 不适用于你的任何一台设备。",
+    "Open %@ on %@": "在 %2$@ 上打开 %1$@",
 }
 
 # English plural forms for keys with a count (the key itself is the "other" form).

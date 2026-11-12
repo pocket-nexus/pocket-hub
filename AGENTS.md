@@ -15,6 +15,11 @@ daemons it runs for applets. `README.md` has the layout.
   command line and the app implement that page; a change starts there, and
   `docs/control-api-examples.json` is regenerated from the end-to-end test.
 - **Between the core and daemons**: `docs/DAEMON-PROTOCOL.md`.
+- **Between a web page and the app**: `docs/DEEP-LINKS.md`, the `pocket-hub:`
+  links the applet store's website opens Hub with. The website's side is in
+  [pocket-nexus/applets](https://github.com/pocket-nexus/applets)
+  (`store/site/src/hub.ts`) and changes with that page. A link shows; it
+  never changes a device.
 - **Measure before naming a cause.** A stall on a device was first blamed on
   the wrong step from reading code; the timing run found the real one.
 
@@ -56,6 +61,14 @@ project's target and only `xcodebuild` (or Xcode) compiles it.
 Tests use temp homes and ephemeral ports (`--link-port 0`), never TCP 8628 or
 the default home: a core for a real device may be running there. Stop only
 processes a test started, by pid.
+
+**A `pocket-hub:` link opened by the system goes to whichever build Launch
+Services picks, started with the default home.** In the middle of a run
+against the mock core, `open pocket-hub://…` once started a second copy of
+the app, and with it a core in the default home that the owner's real device
+linked to. To try a link against a mock core or a temp home, hand it to the
+build that is running there: `open -a "<path>/Pocket Hub.app" "pocket-hub://…"`,
+or the `link <url>` debug command.
 
 `hub-core`'s tests run the reference device under Bun; one of them
 (`screenshot_png_and_the_unsolicited_one`) fails rarely until the pin includes

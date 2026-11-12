@@ -156,6 +156,24 @@ extension UserFacingError {
     }
 }
 
+// MARK: - Links (docs/DEEP-LINKS.md §2)
+
+extension UserFacingError {
+    /// A link that is not one of the specification's: another host, a path of
+    /// another shape, an id outside its grammar. Nothing of the link is shown:
+    /// it is text from outside Hub.
+    public static var linkNotUnderstood: UserFacingError {
+        UserFacingError(title: String(localized: "Pocket Hub can't open this link."),
+                        advice: String(localized: "It may be incomplete, or made for a newer version of Pocket Hub."))
+    }
+
+    /// A link to an applet the store does not list, asked with a fresh catalog.
+    public static var appletNotInStore: UserFacingError {
+        UserFacingError(title: String(localized: "This applet isn't in the store."),
+                        advice: String(localized: "It may have been removed since the link was made."))
+    }
+}
+
 // MARK: - Updating a device's software
 
 extension UserFacingError {
