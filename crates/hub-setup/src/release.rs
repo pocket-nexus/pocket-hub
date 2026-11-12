@@ -155,24 +155,44 @@ fn check_magic(bytes: &[u8]) -> Result<(), ReleaseError> {
     Ok(())
 }
 
-/// The order of two program versions, or None when either is not a dotted
-/// numeric version.
+/// The order of two program versions, or None when either has no place in it.
 ///
-/// Pocket Shell's versions are dates in dotted numbers: a release is
-/// `2026.11.02` (`build-info.json`'s `version`), and the manifest the device
-/// reports from may write the same build `2026.11.2`. Each part is compared
-/// as a number, so leading zeros do not count, and a missing part counts as
-/// 0 (`2026.11` equals `2026.11.0`). A version with anything but ASCII digits
-/// between its dots (a `v`, a suffix such as `-dev`, an empty part) has no
-/// place in this order: it is never older or newer than another.
+/// Pocket Shell named its releases by date up to `v2026.11.12` and by SemVer
+/// after that (its README, "Releases"). **Every dated build predates every
+/// SemVer build**, so a date orders below any SemVer version.
+///
+/// - A date is three dotted runs of ASCII digits whose first is a year (2000
+///   or more): `build-info.json` writes `2026.11.02`, and the manifest the
+///   device reports from writes the same build `2026.11.2`. Dates compare
+///   part by part as numbers, so leading zeros do not count.
+/// - Anything else is SemVer 2.0.0 (`0.1.1`, `0.3.0-rc.1`) and orders by
+///   SemVer precedence: a pre-release below its release, build metadata
+///   ignored.
+///
+/// A version that is neither (a `v`, two parts, an empty part, a leading
+/// zero in SemVer) is never older or newer than another.
 pub fn version_order(a: &str, b: &str) -> Option<std::cmp::Ordering> {
-    fn parts(version: &str) -> Option<Vec<u64>> {
-        version.split('.').map(|part| if !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()) { part.parse().ok() } else { None }).collect()
+    enum Program {
+        Dated([u64; 3]),
+        Release(semver::Version),
     }
-    let (a, b) = (parts(a)?, parts(b)?);
-    let length = a.len().max(b.len());
-    let at = |parts: &[u64], index: usize| parts.get(index).copied().unwrap_or(0);
-    Some((0..length).map(|index| at(&a, index).cmp(&at(&b, index))).find(|order| order.is_ne()).unwrap_or(std::cmp::Ordering::Equal))
+    fn parse(version: &str) -> Option<Program> {
+        let parts: Vec<&str> = version.split('.').collect();
+        if parts.len() == 3 && parts.iter().all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit())) {
+            let numbers: Vec<u64> = parts.iter().map(|part| part.parse().ok()).collect::<Option<_>>()?;
+            if numbers[0] >= 2000 {
+                return Some(Program::Dated([numbers[0], numbers[1], numbers[2]]));
+            }
+        }
+        semver::Version::parse(version).ok().map(Program::Release)
+    }
+    use std::cmp::Ordering::{Greater, Less};
+    Some(match (parse(a)?, parse(b)?) {
+        (Program::Dated(a), Program::Dated(b)) => a.cmp(&b),
+        (Program::Dated(_), Program::Release(_)) => Less,
+        (Program::Release(_), Program::Dated(_)) => Greater,
+        (Program::Release(a), Program::Release(b)) => a.cmp_precedence(&b),
+    })
 }
 
 /// True when `latest` orders above `current` (`version_order`).
@@ -454,16 +474,26 @@ mod tests {
     }
 
     #[test]
-    fn dotted_numeric_versions_order_by_number() {
+    fn dated_and_semver_versions_order() {
         use std::cmp::Ordering::*;
+        // Dates: part by part, leading zeros not counted.
         assert_eq!(version_order("2026.11.11", "2026.11.2"), Some(Greater));
         assert_eq!(version_order("2026.11.02", "2026.11.2"), Some(Equal));
-        assert_eq!(version_order("2026.11", "2026.11.0"), Some(Equal));
         assert_eq!(version_order("2026.11.11", "2026.12.1"), Some(Less));
         assert_eq!(version_order("2027.1.1", "2026.12.31"), Some(Greater));
-        assert_eq!(version_order("10", "9"), Some(Greater));
+        // Every SemVer build follows every dated one: the update from the last
+        // dated release to the first SemVer one is an update.
+        assert_eq!(version_order("0.1.1", "2026.11.12"), Some(Greater));
+        assert_eq!(version_order("2026.11.12", "0.1.1"), Some(Less));
+        assert!(is_newer("0.1.1", "2026.11.12") && !is_newer("2026.11.12", "0.1.1"));
+        // SemVer precedence: a pre-release below its release, build metadata ignored.
+        assert_eq!(version_order("0.1.10", "0.1.9"), Some(Greater));
+        assert_eq!(version_order("0.3.0-rc.1", "0.3.0"), Some(Less));
+        assert_eq!(version_order("0.3.0-rc.2", "0.3.0-rc.10"), Some(Less));
+        assert_eq!(version_order("0.3.0-rc.1", "0.2.9"), Some(Greater));
+        assert_eq!(version_order("0.1.1+3ds", "0.1.1"), Some(Equal));
         // Another form is never older or newer.
-        for other in ["v2026.11.11", "2026.11.11-dev", "", "2026..11", "abc", "2026.11.x", "99999999999999999999999"] {
+        for other in ["v2026.11.11", "2026.11", "", "2026..11", "abc", "2026.11.x", "v0.1.1", "0.1", "01.1.1", "99999999999999999999999"] {
             assert_eq!(version_order(other, "2026.11.1"), None, "{other}");
             assert_eq!(version_order("2026.11.1", other), None, "{other}");
             assert!(!is_newer(other, "2026.11.1") && !is_newer("2026.11.1", other));

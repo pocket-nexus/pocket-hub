@@ -88,8 +88,8 @@ pub fn device(snapshot: &DeviceSnapshot, latest: Option<String>) -> api::Device 
 /// marks `home` in its last apps report (its own program, §6.2), null
 /// before a report, without such a row, or when the row's version is empty;
 /// `latest` is the newest release Hub knows; `update` is true when `latest`
-/// orders above `version` (`pocket_hub_setup::version_order`: dotted
-/// numbers; any other form is never an update).
+/// orders above `version` (`pocket_hub_setup::version_order`: dated
+/// versions below SemVer ones; any other form is never an update).
 pub fn program(snapshot: &DeviceSnapshot, latest: Option<String>) -> api::ProgramState {
     let version = snapshot.apps.iter().flatten().find(|app| app.home == Some(true)).map(|app| app.version.clone()).filter(|version| !version.is_empty());
     let update = matches!((&latest, &version), (Some(latest), Some(version)) if pocket_hub_setup::is_newer(latest, version));

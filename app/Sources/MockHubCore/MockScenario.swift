@@ -30,25 +30,27 @@ public struct MockDevice: Sendable {
         installedApps.first { $0["home"]?.boolValue == true }?["version"]?.stringValue
     }
 
-    /// `{version, latest, update}`, with the contract's ordering: numbers
-    /// joined by dots, compared part by part; any other form is never newer.
+    /// `{version, latest, update}`, with the contract's ordering: every dated
+    /// version (three numbers, the first a year) below every SemVer one, dates
+    /// part by part, SemVer `major.minor.patch` by number. The mock leaves
+    /// pre-releases and any other form unordered: never newer.
     public var program: JSONValue {
         let version = programVersion
         var update = false
-        if let version, let latestProgram, let a = Self.dotted(latestProgram), let b = Self.dotted(version) {
-            for i in 0..<max(a.count, b.count) {
-                let x = i < a.count ? a[i] : 0, y = i < b.count ? b[i] : 0
-                if x != y { update = x > y; break }
-            }
+        if let version, let latestProgram, let a = Self.ordered(latestProgram), let b = Self.ordered(version) {
+            update = a.lexicographicallyPrecedes(b) == false && a != b
         }
         return ["version": version.map(JSONValue.string) ?? .null,
                 "latest": latestProgram.map(JSONValue.string) ?? .null, "update": .bool(update)]
     }
 
-    static func dotted(_ version: String) -> [Int]? {
+    /// A program version as a key that sorts as the contract orders: a leading
+    /// 0 for a date, 1 for SemVer; nil for a form the mock does not order.
+    static func ordered(_ version: String) -> [Int]? {
         let parts = version.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
-        guard !parts.isEmpty, parts.allSatisfy({ $0 != nil }) else { return nil }
-        return parts.compactMap { $0 }
+        guard parts.count == 3, parts.allSatisfy({ $0 != nil }) else { return nil }
+        let numbers = parts.compactMap { $0 }
+        return [numbers[0] >= 2000 ? 0 : 1] + numbers
     }
 
     /// Sets the version of the `home` row, as a device that restarted into a new program reports it.

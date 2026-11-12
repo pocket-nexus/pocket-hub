@@ -1505,6 +1505,7 @@ dependencies = [
  "pocket-hub-store",
  "pocket-link",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "sha2",
