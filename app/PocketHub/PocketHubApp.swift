@@ -17,6 +17,16 @@ struct PocketHubApp: App {
         // The window is opened by the menu bar label at launch, so a launch at
         // login can start in the menu bar only.
         .defaultLaunchBehavior(.suppressed)
+        // No external event opens this scene: a pocket-hub: link is followed
+        // by the app delegate, which shows the window itself (AppState.open,
+        // docs/DEEP-LINKS.md §2). Left to SwiftUI, a link is also an external
+        // event that presents this scene again. With the window already open
+        // that rebuilt its content and played its opening animation, which
+        // looked like the window closing and opening (measured: the title
+        // fell back to the scene's and the frame animated before the sheet
+        // came; with this line neither happens, and the delegate still gets
+        // the link with the window open, with it closed and at launch).
+        .handlesExternalEvents(matching: [])
         .defaultSize(width: 940, height: 620)
         .commands { HubCommands(state: state) }
 
