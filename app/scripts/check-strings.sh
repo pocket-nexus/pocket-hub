@@ -2,20 +2,26 @@
 # Brings Localization/Localizable.xcstrings in line with the source and checks
 # that every key has English and Simplified Chinese.
 #
-# The keys come from the compiler itself (-emit-localized-strings), so every
+# The keys come from the compiler itself (SWIFT_EMIT_LOC_STRINGS), so every
 # Text("…"), Button("…"), String(localized: "…") and other LocalizedStringKey
 # use is found, interpolations included, exactly as SwiftUI will look it up.
+# The app and the package's libraries are compiled with it alike: the
+# libraries' String(localized:) are looked up in the app's catalog too
+# (Bundle.main). Ordinary builds leave it off, so Xcode never syncs the
+# catalog from the app target's strings alone and marks the libraries' stale.
 # Keys no longer in the source are marked stale; fill-catalog.py lists them.
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-scratch="$here/.build/strings-build"
+derived="$here/.build/strings-derived-data"
 
 cd "$here"
-# A clean scratch build: an incremental one would not re-emit the strings of
+# A clean build: an incremental one would not re-emit the strings of
 # unchanged files, and would keep those of deleted ones.
-rm -rf "$scratch"
-swift build --product PocketHub --scratch-path "$scratch" \
-    -Xswiftc -emit-localized-strings >/dev/null
-find "$scratch" -name '*.stringsdata' -print0 | xargs -0 xcrun xcstringstool sync Localization/Localizable.xcstrings --stringsdata
+rm -rf "$derived"
+xcodebuild -quiet -project PocketHub.xcodeproj -scheme PocketHub -configuration Debug \
+    -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath "$derived" \
+    SWIFT_EMIT_LOC_STRINGS=YES build
+find "$derived/Build/Intermediates.noindex" -name '*.stringsdata' -print0 |
+    xargs -0 xcrun xcstringstool sync Localization/Localizable.xcstrings --stringsdata
 python3 scripts/fill-catalog.py

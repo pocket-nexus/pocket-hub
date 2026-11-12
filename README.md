@@ -58,7 +58,7 @@ device is on.
 | `crates/hubd` | `pocket-hubd`, the resident core and the control API's server |
 | `crates/hub-cli` | `pocket-hub`, the command line |
 | `sdk/daemon` | The TypeScript SDK a daemon is written with; Hub ships it to every daemon |
-| `app` | The macOS app |
+| `app` | The macOS app: `PocketHub.xcodeproj` (the app target, sources in `app/PocketHub`) and a Swift package with its libraries, a mock core and the tests |
 | `docs` | The two contracts, and real examples of every control API message |
 
 ## Building and running
@@ -84,14 +84,21 @@ The core keeps its files in `~/Library/Application Support/nexus.pocket.hub`
 (`$POCKET_HUB_HOME` overrides it) and listens for devices on TCP 8628. **It does
 not fall back when that port or its home is unusable**: it says why and exits.
 
-The app:
+The app: open `app/PocketHub.xcodeproj` in Xcode and run the PocketHub scheme,
+or from a terminal:
 
 ```sh
 cd app
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-swift build && swift test
-./scripts/bundle.sh          # app/build/Pocket Hub.app, with both binaries in Contents/Helpers
+xcodebuild -scheme PocketHub -configuration Release -destination "platform=macOS,arch=$(uname -m)" \
+    -derivedDataPath build build     # build/Build/Products/Release/Pocket Hub.app
 ```
+
+A build of the app also builds the core and the command line with cargo, in
+the matching profile, into the app's `Contents/Helpers`
+(`app/scripts/embed-core.sh`). After changing owner-facing text, run
+`app/scripts/check-strings.sh`: it brings the String Catalog in line with the
+source and fails when a string has no Simplified Chinese.
 
 ## Tests
 
@@ -99,7 +106,7 @@ swift build && swift test
 cargo test --workspace       # the vectors, the reference device under Bun, the real binaries end to end
 cargo clippy --workspace --all-targets
 (cd sdk/daemon && bun test)
-(cd app && swift test)
+(cd app && swift test)       # the app's libraries, against the mock core
 ```
 
 The workspace suite needs no network and no device. A few tests that reach

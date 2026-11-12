@@ -4,7 +4,7 @@ import ServiceManagement
 
 /// "Open Pocket Hub at login", through `SMAppService.mainApp`.
 ///
-/// Registration only works from a signed app bundle; from `swift run` the
+/// Registration only works from a signed app bundle; outside one the
 /// service reports itself unavailable and the toggle says so.
 @MainActor
 @Observable
@@ -14,7 +14,7 @@ public final class LaunchAtLogin {
         case disabled
         /// Registered, waiting for the owner's approval in System Settings › Login Items.
         case requiresApproval
-        /// Not possible: the app is not running from an app bundle (`swift run`).
+        /// Not possible: the app is not running from an app bundle.
         case unavailable
     }
 
