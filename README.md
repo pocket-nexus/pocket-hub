@@ -12,8 +12,8 @@ Hub and devices speak **Pocket Link 2**. The specification is PocketJS's
 pinned here as the submodule `vendor/pocketjs`, whose test vectors and reference
 device this repository's tests run against.
 
-The first device is the **Nintendo 3DS** over Wi-Fi. The app is for macOS; the
-core is portable Rust.
+The first device is the **Nintendo 3DS** over Wi-Fi. The app is for macOS on
+Apple silicon; the core is portable Rust.
 
 ## How it is built
 
@@ -105,7 +105,9 @@ xcodebuild -scheme PocketHub -configuration Release -destination "platform=macOS
 
 A build of the app also builds the core and the command line with cargo, in
 the matching profile, into the app's `Contents/Helpers`
-(`app/scripts/embed-core.sh`). After changing owner-facing text, run
+(`app/scripts/embed-core.sh`). cargo builds them for the Mac it runs on, and
+the script stops a build whose app is for another architecture: the Release
+configuration is arm64 alone. After changing owner-facing text, run
 `app/scripts/check-strings.sh`: it brings the String Catalog in line with the
 source and fails when a string has no Simplified Chinese.
 
@@ -124,6 +126,29 @@ GitHub or the live applet store are marked `#[ignore]`.
 `docs/control-api-examples.json` is written by the end-to-end test
 (`POCKET_HUB_UPDATE_EXAMPLES=1 cargo test -p pocket-hubd --test e2e`) and
 checked by it otherwise; the app's tests decode every object in it.
+
+## Releasing
+
+A release is a tag on `main` and the app built from it:
+
+```sh
+git checkout main && git pull
+app/scripts/package.sh                 # app/dist/Pocket-Hub-<version>-arm64.zip, and its SHA-256
+git tag -a v<version> -m "Pocket Hub v<version>" && git push origin v<version>
+gh release create v<version> --verify-tag --title "Pocket Hub v<version>" \
+    app/dist/Pocket-Hub-<version>-arm64.zip
+```
+
+The version is one number in three places, changed together: `version` of
+`[workspace.package]` in `Cargo.toml`, `version` in `sdk/daemon/package.json`
+and `MARKETING_VERSION` in the Xcode project. `package.sh` refuses a working
+tree with changes, builds the Release configuration from nothing, and checks
+that every executable in the app is arm64 and that the core and the command
+line report the app's version.
+
+**The app is signed ad hoc**: there is no Developer ID yet, so it is not
+notarized. A copy that was downloaded is stopped by macOS the first time; it
+opens after Open Anyway in System Settings › Privacy & Security.
 
 ## What has run on hardware
 
