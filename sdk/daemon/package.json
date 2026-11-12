@@ -1,0 +1,25 @@
+{
+  "name": "@pocket-hub/daemon",
+  "version": "0.1.0",
+  "description": "The daemon side of Pocket Hub's local daemon protocol (docs/DAEMON-PROTOCOL.md): an applet's computer side, running on Bun.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "5.9.3"
+  }
+}

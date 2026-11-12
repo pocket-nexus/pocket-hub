@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "with-lock",
+      "dependencies": {
+        "tiny": "file:./tiny",
+      },
+    },
+  },
+  "packages": {
+    "tiny": ["tiny@file:tiny", {}],
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "with-lock",
+  "private": true,
+  "dependencies": {
+    "tiny": "file:./tiny"
+  }
+}
