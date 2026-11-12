@@ -1905,6 +1905,22 @@
         }
       }
     },
+    "Language": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语言"
+          }
+        }
+      }
+    },
     "Last seen": {
       "localizations": {
         "en": {
@@ -3009,6 +3025,22 @@
         }
       }
     },
+    "Pocket Hub shows the new language after it reopens.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pocket Hub shows the new language after it reopens."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pocket Hub 重新打开后显示新的语言。"
+          }
+        }
+      }
+    },
     "Pocket Hub stopped responding during the setup.": {
       "localizations": {
         "en": {
@@ -3293,6 +3325,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "重命名"
+          }
+        }
+      }
+    },
+    "Reopen Now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen Now"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即重新打开"
           }
         }
       }
@@ -3885,6 +3933,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在停止"
+          }
+        }
+      }
+    },
+    "System Language": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System Language"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟随系统"
           }
         }
       }

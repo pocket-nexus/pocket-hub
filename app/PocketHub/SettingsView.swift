@@ -3,7 +3,7 @@ import HubAppModel
 import HubClient
 import SwiftUI
 
-/// Hub's name, opening at login, and where Hub keeps its files.
+/// Hub's name, the app's language, opening at login, and where Hub keeps its files.
 struct SettingsView: View {
     @Environment(AppState.self) private var state
     @State private var name = ""
@@ -12,6 +12,7 @@ struct SettingsView: View {
     var body: some View {
         let model = state.model
         let login = state.launchAtLogin
+        let language = state.language
         Form {
             Section {
                 LabeledContent("Name") {
@@ -28,6 +29,24 @@ struct SettingsView: View {
                 Text("Your devices show this name. They see a new name the next time they connect.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            Section {
+                // Each language is named in itself, as macOS lists them, so
+                // it can be found whatever language the app is in now.
+                Picker("Language", selection: Binding(get: { language.choice }, set: { language.choose($0) })) {
+                    Text("System Language").tag(AppLanguage.Choice.system)
+                    Text(verbatim: "English").tag(AppLanguage.Choice.english)
+                    Text(verbatim: "简体中文").tag(AppLanguage.Choice.simplifiedChinese)
+                }
+                if language.needsRestart {
+                    HStack {
+                        Text("Pocket Hub shows the new language after it reopens.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Reopen Now") { state.relaunch() }
+                    }
+                }
             }
             Section {
                 Toggle("Open Pocket Hub at login", isOn: Binding(get: { login.isEnabled }, set: { login.setEnabled($0) }))

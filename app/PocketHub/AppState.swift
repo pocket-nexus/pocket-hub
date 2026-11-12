@@ -24,6 +24,7 @@ final class AppState {
 
     let model: HubModel
     let launchAtLogin = LaunchAtLogin()
+    let language = AppLanguage()
     var selection: SidebarItem?
     /// The section shown on a device's page; kept here so the menu bar and the
     /// keyboard commands can choose it, whichever page is open.
@@ -116,6 +117,34 @@ final class AppState {
     func quit(stoppingHub: Bool) {
         stopHubOnQuit = stoppingHub
         NSApp.terminate(nil)
+    }
+
+    /// Opens a new instance of the app and quits this one, the core left
+    /// running: how a language choice takes effect (AppLanguage). The new
+    /// instance is started by Launch Services, so it shares no descriptor with
+    /// this process; if it cannot be opened, this one stays and says why. It
+    /// gets this one's environment (`POCKET_HUB_HOME` and the like) but not its
+    /// arguments: an `-AppleLanguages` there would override the choice.
+    func relaunch() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        configuration.environment = ProcessInfo.processInfo.environment
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+            Task { @MainActor in
+                if let error {
+                    self.presentedError = UserFacingError(error)
+                    self.showWindow()
+                    return
+                }
+                // terminate(_:) waits in a nested event loop for the
+                // delegate's reply, which a main-actor task sends
+                // (AppDelegate.applicationShouldTerminate). Called from this
+                // task, it would hold the main queue that reply needs and
+                // never return, so it runs on the next turn of the run loop.
+                self.stopHubOnQuit = false
+                NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)
+            }
+        }
     }
 }
 

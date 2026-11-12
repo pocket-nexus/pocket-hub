@@ -17,6 +17,7 @@ import SwiftUI
 ///                                            (on the selected device)
 ///   menu-preview | menu-preview-close        (the menu bar menu's views in a window)
 ///   window | window-size <width> <height>
+///   settings | language system | en | zh-Hans | reopen   (the Settings window and its language)
 @MainActor
 enum DebugCommands {
     static func startIfRequested(_ state: AppState) {
@@ -87,6 +88,10 @@ enum DebugCommands {
         case ["update-dismiss"]: if let device { state.model.dismissProgramUpdate(of: device) }
         case ["menu-preview"]: MenuPreview.show(state)
         case ["menu-preview-close"]: MenuPreview.close()
+        case ["settings"]: NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        case let w where w.count == 2 && w[0] == "language":
+            if let choice = AppLanguage.Choice(rawValue: w[1]) { state.language.choose(choice) }
+        case ["reopen"]: state.relaunch()
         case ["store", "refresh"]: store.reload(refresh: true)
         case ["store", "close-details"]: state.storeDetails = nil
         case let w where w.count == 3 && w[0] == "store":
