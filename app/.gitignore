@@ -1,5 +1,4 @@
 /build/
 /dist/
-__pycache__/
 # Xcode keeps per-user state (window layout, breakpoints, scheme choice) here.
 xcuserdata/
