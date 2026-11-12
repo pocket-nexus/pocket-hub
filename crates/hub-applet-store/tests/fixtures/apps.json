@@ -1,0 +1,56 @@
+{
+ "apps": [
+  {
+   "id": "dev.pocket-nexus.hn",
+   "version": "0.3.0",
+   "title": "Hacker News",
+   "summary": "Hacker News: top stories and threads.",
+   "author": "pocket-nexus",
+   "key": "tF8Q_hSXiYfxDdlQrpJfleDcKmkZPtQ20G_SNjtOquQ",
+   "official": true,
+   "services": [],
+   "hosts": [
+    "hacker-news.firebaseio.com"
+   ],
+   "profile": "84a4e81b80a221a061a5ec2338b0abf3dcba6db63dde65fe242f84d7dae96ded",
+   "package": "558db3fdffac809e08329993d1714c64253305bc7a048ba60a4239aacb4929cf",
+   "icon": "b64225a9e2f62f6244488aa109487b8d79cb0ec926a4bed7f43fdb1b30155762",
+   "bytes": 2210904,
+   "signature": "xgnZ_2japRmgwLKDtTKbJkupN-h7Iv1qtymuJbe1RHDtejuwq5R456rMdFhnlmWmYabXlC3rJwjaVVpkrNl1BQ",
+   "created": 1793668744673,
+   "target": "3ds-dev",
+   "targets": [
+    "3ds-dev",
+    "rg-ds-plus",
+    "tab5-home"
+   ],
+   "mock": "f336d48e28def690ebf8300da975060c2c1ed33ea87324a6b4d46d1f02be1026"
+  },
+  {
+   "id": "dev.pocket-nexus.youtube",
+   "version": "0.3.0",
+   "title": "YouTube",
+   "summary": "YouTube: feeds, search and playback.",
+   "author": "pocket-nexus",
+   "key": "tF8Q_hSXiYfxDdlQrpJfleDcKmkZPtQ20G_SNjtOquQ",
+   "official": true,
+   "services": [
+    "youtube"
+   ],
+   "hosts": [],
+   "profile": "84a4e81b80a221a061a5ec2338b0abf3dcba6db63dde65fe242f84d7dae96ded",
+   "package": "48709553de18c2dc96a7376574512dda058a34286896edc47b2c10127383170e",
+   "icon": "794611ad30cd0cf7df320faf0c740b27be08870baeab5933cb8bc8ebfe662b2b",
+   "bytes": 2477464,
+   "signature": "JkyygXskhgDjD9URHMdKh5DTl62fLuv1lsuYyZ4Nje37QJHowkxqDxanfnAR9dvhkpE__KxkMaCdvI4SOrTJBQ",
+   "created": 1793668753730,
+   "target": "3ds-dev",
+   "targets": [
+    "3ds-dev",
+    "rg-ds-plus",
+    "tab5-home"
+   ],
+   "mock": "24a0c283adaf911e6a810dbe4f4a33e9f5e70cc194c2b7d7b75755cda39e3813"
+  }
+ ]
+}

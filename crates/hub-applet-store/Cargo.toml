@@ -1,0 +1,33 @@
+[package]
+name = "pocket-hub-applet-store"
+description = "Pocket Hub as a client of the applet store (applets.pocket.nexus): the catalog, verified packages and icons in a content-addressed cache, and the link's catalog and install (link specification §6.4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# A fake store on loopback for the tests of this crate and of pocket-hubd and the CLI.
+test-support = []
+
+[dependencies]
+pocket-link.workspace = true
+pocket-hub-core.workspace = true
+pocket-package.workspace = true
+base64.workspace = true
+bytes.workspace = true
+ed25519-dalek.workspace = true
+hex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+pocket-hub-applet-store = { workspace = true, features = ["test-support"] }
+pocket-hub-store.workspace = true
+tempfile.workspace = true
