@@ -32,6 +32,19 @@ cd "$repo_root"
 env -i HOME="$HOME" PATH="$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
     "$cargo" build $release_flag -p pocket-hubd -p pocket-hub-cli
 
+# cargo built the helpers for this Mac; Xcode builds the app for $ARCHS. They
+# have to be the same. A Release build used to be a universal app around
+# arm64 helpers: on an Intel Mac it would open and then fail to start its
+# core. The app is built for arm64 alone now (ARCHS of the Release
+# configuration), and a build whose two halves differ stops here.
+for tool in pocket-hubd pocket-hub; do
+    built="$(lipo -archs "$repo_root/target/$profile/$tool")"
+    if [ "$built" != "$ARCHS" ]; then
+        echo "error: $tool is built for $built and the app for $ARCHS: build Pocket Hub on a Mac of the app's architecture" >&2
+        exit 1
+    fi
+done
+
 helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
 mkdir -p "$helpers"
 for tool in pocket-hubd pocket-hub; do
