@@ -37,7 +37,7 @@ its link into Hub is the same path under `pocket-hub://store`.
 ## 2. What Hub does with it
 
 Hub comes to the front with its window, starting first when it was not
-running, and then:
+running, and then (a window that is already open stays as it is):
 
 1. **It finds the applet in the store's catalog** (`store.apps` without a
    device, `docs/CONTROL-API.md` §3 "Store"). An id the catalog Hub holds

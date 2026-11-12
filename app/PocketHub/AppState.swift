@@ -101,7 +101,7 @@ final class AppState {
         linksFollowed += 1
         let mine = linksFollowed
         guard let link = DeepLink(url) else {
-            presentedError = .linkNotUnderstood
+            reportLink(.linkNotUnderstood)
             return
         }
         Task {
@@ -113,13 +113,21 @@ final class AppState {
                 do {
                     let app = try await model.store.lookUp(appId: id)
                     guard mine == linksFollowed else { return }
-                    if let app { show(storeApp: app) } else { presentedError = .appletNotInStore }
+                    if let app { show(storeApp: app) } else { reportLink(.appletNotInStore) }
                 } catch {
                     guard mine == linksFollowed else { return }
-                    presentedError = UserFacingError(storeError: error)
+                    reportLink(UserFacingError(storeError: error))
                 }
             }
         }
+    }
+
+    /// Says what a link could not show. The sheet an earlier link opened
+    /// closes first: the window's alert would wait behind it until the owner
+    /// closed it (measured), and the newer link is the one being answered.
+    private func reportLink(_ failure: UserFacingError) {
+        storeDetails = nil
+        presentedError = failure
     }
 
     /// Opens the store's sheet of an applet, on a device that can run it when
@@ -226,6 +234,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// not running. It arrives here with the window open and with Hub in the
     /// menu bar only (measured on both, and on a launch by a link). Each
     /// link names one thing to show, so of several the last is the one followed.
+    /// This is the only thing that acts on a link: the window's scene takes
+    /// no external event (PocketHubApp).
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let url = urls.last else { return }
         MainActor.assumeIsolated { AppState.shared.open(url) }
