@@ -7,6 +7,8 @@ public enum HubEvent: Sendable, Hashable {
     case deviceUnlinked(DeviceUnlinked)
     case deviceLog(DeviceLogLine)
     case deviceScreenshot(DeviceScreenshot)
+    /// The requests to be paired that wait for a code: the whole list.
+    case pairingChanged([PairRequest])
     case daemonChanged(Daemon)
     case daemonRemoved(id: String)
     case daemonLog(id: String, line: DaemonLogLine)
@@ -22,6 +24,7 @@ public enum HubEvent: Sendable, Hashable {
         case deviceUnlinked = "device.unlinked"
         case deviceLog = "device.log"
         case deviceScreenshot = "device.screenshot"
+        case pairingChanged = "pairing.changed"
         case daemonChanged = "daemon.changed"
         case daemonRemoved = "daemon.removed"
         case daemonLog = "daemon.log"
@@ -46,6 +49,7 @@ public enum HubEvent: Sendable, Hashable {
         case .deviceUnlinked: self = .deviceUnlinked(try params.decode())
         case .deviceLog: self = .deviceLog(try params.decode())
         case .deviceScreenshot: self = .deviceScreenshot(try params.decode())
+        case .pairingChanged: self = .pairingChanged(try member("requests"))
         case .daemonChanged: self = .daemonChanged(try member("daemon"))
         case .daemonRemoved: self = .daemonRemoved(id: try member("id"))
         case .daemonLog: self = .daemonLog(id: try member("id"), line: try params.decode())
@@ -59,6 +63,7 @@ public enum HubEvent: Sendable, Hashable {
     var family: Family {
         switch self {
         case .deviceChanged, .deviceRemoved, .deviceUnlinked, .deviceLog, .deviceScreenshot: .devices
+        case .pairingChanged: .pairing
         case .daemonChanged, .daemonRemoved, .daemonLog: .daemons
         case .hubChanged: .hub
         // A hint to call store.apps again; it carries no state to roll back.
@@ -66,7 +71,7 @@ public enum HubEvent: Sendable, Hashable {
         }
     }
 
-    enum Family { case devices, daemons, hub, other }
+    enum Family { case devices, pairing, daemons, hub, other }
 }
 
 /// `device.unlinked`: the link ended. `code` is the close code's name (link

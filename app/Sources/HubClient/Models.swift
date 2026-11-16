@@ -34,11 +34,43 @@ extension OpenStringEnum {
 
 // MARK: - Device
 
+/// A device family (`kind` of a Device and of a PairRequest). Empty for a
+/// family Hub does not know.
+public struct DeviceKind: OpenStringEnum {
+    public var rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+    /// A Nintendo 3DS.
+    public static let nintendo3ds = DeviceKind(rawValue: "3ds")
+    /// An M5Stack Tab5.
+    public static let tab5 = DeviceKind(rawValue: "tab5")
+}
+
+/// Something Hub can ask of a device of some families and not of others
+/// (`supports` of a Device).
+public struct DeviceOperation: OpenStringEnum {
+    public var rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+    /// `devices.push` and `store.install`: an applet sent from the computer.
+    public static let push = DeviceOperation(rawValue: "push")
+    /// `devices.screenshot`.
+    public static let screenshot = DeviceOperation(rawValue: "screenshot")
+    /// `devices.logs`.
+    public static let logs = DeviceOperation(rawValue: "logs")
+    /// `devices.installProgram`: Hub installs the device's own software.
+    public static let program = DeviceOperation(rawValue: "program")
+
+    public static let all: [DeviceOperation] = [.push, .screenshot, .logs, .program]
+}
+
 /// One paired device, linked or not.
 public struct Device: Codable, Sendable, Hashable, Identifiable {
     public var id: String
-    /// The device family; `3ds` today.
-    public var kind: String
+    /// The device family: `3ds`, `tab5`, or empty for one Hub does not know.
+    public var kind: DeviceKind
+    /// What Hub can ask of a device of this family, linked or not. **A UI
+    /// offers an operation only when this names it**; Hub refuses the others
+    /// (`link` `unsupported`).
+    public var supports: [DeviceOperation]
     /// From the last handshake; empty before the first.
     public var name: String
     public var model: String
@@ -59,7 +91,8 @@ public struct Device: Codable, Sendable, Hashable, Identifiable {
     public var program: DeviceProgram
     public var channels: [AppletChannel]
 
-    public init(id: String, kind: String = "3ds", name: String = "", model: String = "", target: String = "",
+    public init(id: String, kind: DeviceKind = .nintendo3ds, supports: [DeviceOperation] = DeviceOperation.all,
+                name: String = "", model: String = "", target: String = "",
                 hostAbi: Int = 0, lastAddress: String? = nil, lastSeen: EpochMilliseconds? = nil,
                 setupUnconfirmed: Bool = false, duplicateId: Bool = false, link: DeviceLink? = nil,
                 status: RuntimeStatus? = nil, apps: [InstalledApp]? = nil, busy: DeviceBusy? = nil,
@@ -67,6 +100,7 @@ public struct Device: Codable, Sendable, Hashable, Identifiable {
     {
         self.id = id
         self.kind = kind
+        self.supports = supports
         self.name = name
         self.model = model
         self.target = target
@@ -86,7 +120,10 @@ public struct Device: Codable, Sendable, Hashable, Identifiable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
-        kind = try c.decode(String.self, forKey: .kind)
+        kind = try c.decode(DeviceKind.self, forKey: .kind)
+        // The contract always sends `supports`; a core from before it existed
+        // knew the 3DS alone, which takes every operation.
+        supports = try c.decodeIfPresent([DeviceOperation].self, forKey: .supports) ?? DeviceOperation.all
         name = try c.decode(String.self, forKey: .name)
         model = try c.decode(String.self, forKey: .model)
         target = try c.decode(String.self, forKey: .target)
@@ -107,11 +144,48 @@ public struct Device: Codable, Sendable, Hashable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, name, model, target, hostAbi, lastAddress, lastSeen, setupUnconfirmed, duplicateId
+        case id, kind, supports, name, model, target, hostAbi, lastAddress, lastSeen, setupUnconfirmed, duplicateId
         case link, status, apps, busy, program, channels
     }
 
     public var isLinked: Bool { link != nil }
+
+    /// Whether Hub can ask `operation` of this device (`supports`).
+    public func supports(_ operation: DeviceOperation) -> Bool { supports.contains(operation) }
+}
+
+// MARK: - Pairing by a code
+
+/// One device that asks to be paired by the code it shows, and waits for
+/// that code (§2 PairRequest, §3 Pairing).
+public struct PairRequest: Codable, Sendable, Hashable, Identifiable {
+    /// The device id the request names. Nothing has proved it yet.
+    public var device: String
+    /// The family of its target; empty for one Hub does not know.
+    public var kind: DeviceKind
+    public var name: String
+    public var model: String
+    public var target: String
+    /// Where the request came from.
+    public var address: String
+    public var since: EpochMilliseconds
+    /// When Hub closes the request: the device keeps its code as long.
+    public var expires: EpochMilliseconds
+
+    public init(device: String, kind: DeviceKind = .tab5, name: String = "", model: String = "", target: String = "",
+                address: String = "", since: EpochMilliseconds = 0, expires: EpochMilliseconds = 0)
+    {
+        self.device = device
+        self.kind = kind
+        self.name = name
+        self.model = model
+        self.target = target
+        self.address = address
+        self.since = since
+        self.expires = expires
+    }
+
+    public var id: String { device }
 }
 
 /// `program` of a Device: `{version, latest, update}`.

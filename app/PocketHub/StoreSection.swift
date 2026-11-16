@@ -92,10 +92,32 @@ struct AvailableAppletsSection: View {
         if let interrupted = store.interrupted, interrupted.deviceId == device.id, !device.isLinked {
             Text("The connection to \(device.displayName) ended while installing \(interrupted.appTitle). When it reconnects, this list shows whether \(interrupted.appTitle) was installed.")
                 .foregroundStyle(.orange)
+        } else if !device.supports(.push) {
+            // Its applets come from its own store page, which asks this Mac
+            // for them (CONTROL-API.md §2 `supports`): the list shows what
+            // that page offers, and has no Install.
+            Text(installsItself(device))
         } else if device.hasKnownTarget && !device.isLinked {
-            Text("\(device.displayName) isn't connected. Turn it on and open Pocket Shell to install applets.")
+            Text(verbatim: notConnectedForInstall(device))
         }
     }
+}
+
+/// Where a device that takes no applet from the computer installs one: on a
+/// Tab5 the store is the Mac icon of its home screen.
+@MainActor
+func installsItself(_ device: Device) -> LocalizedStringKey {
+    device.kind == .tab5
+        ? "\(device.displayName) installs applets itself: open **Mac** on its home screen. This Mac sends them while Pocket Hub is running."
+        : "\(device.displayName) installs applets itself, from the store on the device. This Mac sends them while Pocket Hub is running."
+}
+
+/// Why nothing can be installed now, and what brings the device back.
+@MainActor
+func notConnectedForInstall(_ device: Device) -> String {
+    device.kind == .nintendo3ds
+        ? String(localized: "\(device.displayName) isn't connected. Turn it on and open Pocket Shell to install applets.")
+        : String(localized: "\(device.displayName) isn't connected. Turn it on to install applets.")
 }
 
 /// One applet: icon, title, author, summary, version and size, and its action.
@@ -133,7 +155,10 @@ struct StoreRow: View {
     @ViewBuilder
     private var action: some View {
         let store = state.model.store
-        if let install = store.install(for: app, on: device.id) {
+        if !device.supports(.push) {
+            // No Install: the section's footer says where this device installs.
+            EmptyView()
+        } else if let install = store.install(for: app, on: device.id) {
             InstallProgressView(install: install) { store.cancelInstall(of: app, on: device.id) }
         } else {
             let unavailable = installUnavailableReason(state.model.device(device.id))
@@ -275,7 +300,7 @@ struct StoreAppDetails: View {
                     }
                 }
                 if !app.cached {
-                    Text("Not on this Mac yet. Installing from here downloads it first; until then the console's own store doesn't list it.")
+                    Text("Not on this Mac yet. Installing from here downloads it first; until then the device's own store doesn't list it.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -323,6 +348,9 @@ struct StoreAppDetails: View {
         } else if let offer {
             let unavailable = installUnavailableReason(device)
             switch offer.action {
+            case .install where !device.supports(.push), .update where !device.supports(.push):
+                // The note below says where this device installs it.
+                EmptyView()
             case .install:
                 Button("Install") { store.install(offer, on: device.id) }
                     .buttonStyle(.borderedProminent)
@@ -370,22 +398,28 @@ struct StoreAppDetails: View {
             } else {
                 Text("\(app.title) isn't available for any of your devices.")
             }
+        } else if let device, !device.supports(.push), offer?.action != .installed {
+            Text(installsItself(device))
         } else if let device, !device.isLinked {
-            Text("\(device.displayName) isn't connected. Turn it on and open Pocket Shell to install applets.")
+            Text(verbatim: notConnectedForInstall(device))
         }
     }
 
     private func open(on device: Device) {
         Task {
             do { try await store.open(app, on: device.id) } catch {
-                failure = UserFacingError(error, deviceName: device.displayName)
+                failure = UserFacingError(error, deviceName: device.displayName, kind: device.kind)
             }
         }
     }
 
-    /// The 3DS's targets get the console's name; others keep the target's own.
+    /// A target of a family Hub knows gets the family's name (`3ds-dev`:
+    /// Nintendo 3DS, `tab5-home`: M5Stack Tab5); others keep the target's own.
     private func targetName(_ target: String) -> String {
-        target == "3ds" || target.hasPrefix("3ds-") ? String(localized: "Nintendo 3DS") : target
+        for kind in [DeviceKind.nintendo3ds, .tab5] where target == kind.rawValue || target.hasPrefix(kind.rawValue + "-") {
+            return kind.displayName
+        }
+        return target
     }
 }
 

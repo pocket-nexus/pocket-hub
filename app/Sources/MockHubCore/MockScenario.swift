@@ -25,6 +25,17 @@ public struct MockDevice: Sendable {
 
     public init(id: String) { self.id = id }
 
+    /// What Hub can ask of a device of this family (CONTROL-API.md §2
+    /// `supports`), written out here as the core's table has it: a 3DS takes
+    /// all four, a Tab5 none, a family Hub does not know all but `program`.
+    public var supports: [String] {
+        switch kind {
+        case "3ds": ["push", "screenshot", "logs", "program"]
+        case "tab5": []
+        default: ["push", "screenshot", "logs"]
+        }
+    }
+
     /// The version the device reports for its own program: its `home` row's.
     public var programVersion: String? {
         installedApps.first { $0["home"]?.boolValue == true }?["version"]?.stringValue
@@ -36,6 +47,8 @@ public struct MockDevice: Sendable {
     /// pre-releases and any other form unordered: never newer.
     public var program: JSONValue {
         let version = programVersion
+        // Hub knows no release for a family whose program it does not install.
+        let latestProgram = supports.contains("program") ? latestProgram : nil
         var update = false
         if let version, let latestProgram, let a = Self.ordered(latestProgram), let b = Self.ordered(version) {
             update = a.lexicographicallyPrecedes(b) == false && a != b
@@ -64,7 +77,8 @@ public struct MockDevice: Sendable {
 
     public var json: JSONValue {
         [
-            "id": .string(id), "kind": .string(kind), "name": .string(name), "model": .string(model),
+            "id": .string(id), "kind": .string(kind), "supports": .array(supports.map(JSONValue.string)),
+            "name": .string(name), "model": .string(model),
             "target": .string(target), "hostAbi": .number(Double(hostAbi)),
             "lastAddress": lastAddress.map(JSONValue.string) ?? .null,
             "lastSeen": lastSeen.map { .number(Double($0)) } ?? .null,
@@ -77,8 +91,12 @@ public struct MockDevice: Sendable {
     public var isLinked: Bool { !link.isNull }
 
     /// Marks the device linked over `carrier`, with a status and applets as a
-    /// fresh 3DS running Pocket Shell would report them.
+    /// fresh 3DS running Pocket Shell would report them, or as a Tab5 does.
     public mutating func linkUp(carrier: String = "tcp", address: String = "192.168.1.42", now: Int64 = MockClock.now()) {
+        if kind == "tab5" {
+            linkUpTab5(carrier: carrier, address: address, now: now)
+            return
+        }
         if name.isEmpty { name = "New 3DS" }
         if model.isEmpty { model = "New Nintendo 3DS XL" }
         if target.isEmpty { target = "3ds" }
@@ -105,6 +123,33 @@ public struct MockDevice: Sendable {
         }
     }
 
+    /// A Tab5 on the link, as the pocket-m5 firmware reports itself: no
+    /// `runtime.native`, `devtools` or `channel`; the launcher's row and what
+    /// it holds; `generation` 0 (it keeps no record of package generations).
+    private mutating func linkUpTab5(carrier: String, address: String, now: Int64) {
+        if name.isEmpty { name = "M5Stack Tab5" }
+        if model.isEmpty { model = "M5Stack Tab5" }
+        if target.isEmpty { target = "tab5-home" }
+        if hostAbi == 0 { hostAbi = 3 }
+        lastAddress = address
+        lastSeen = now
+        setupUnconfirmed = false
+        link = ["carrier": .string(carrier), "peer": .string("\(address):49152"), "since": .number(Double(now)),
+                "payloadLimit": 16384, "features": ["runtime", "runtime.remove", "apps", "net.http", "catalog", "install"]]
+        status = [
+            "phase": "booted", "target": "tab5-home", "hostAbi": .number(Double(hostAbi)), "slot": "",
+            "address": .string(address), "generation": 0, "active": "7c6b5a4938271605", "lastGood": "0000000000000000",
+            "running": "7c6b5a4938271605", "frame": 5120,
+            "app": ["id": "nexus.pocket.home", "output": "home", "title": "Pocket"],
+        ]
+        if apps.isNull {
+            apps = [
+                ["id": "nexus.pocket.home", "output": "home", "version": "0.3.0", "hash": "7c6b5a4938271605", "home": true],
+                ["id": "nexus.pocket.notes", "output": "notes", "version": "1.2.0", "hash": "1122334455667788"],
+            ]
+        }
+    }
+
     public mutating func linkDown(now: Int64 = MockClock.now()) {
         link = .null
         busy = .null
@@ -116,6 +161,43 @@ public struct MockDevice: Sendable {
         if case .array(let rows) = apps { return rows }
         return []
     }
+}
+
+/// A device that asks to be paired by the code it shows, in the mock.
+public struct MockPairRequest: Sendable {
+    public var device: String
+    public var kind = "tab5"
+    public var name = "M5Stack Tab5"
+    public var model = "M5Stack Tab5"
+    public var target = "tab5-home"
+    public var address = "192.168.1.63"
+    public var since: Int64 = MockClock.now()
+    /// The code the device shows.
+    public var code = "314159"
+    /// Wrong codes the device still takes before it drops its code (3 at first).
+    public var tries = 3
+
+    public init(device: String) { self.device = device }
+
+    public var json: JSONValue {
+        [
+            "device": .string(device), "kind": .string(kind), "name": .string(name), "model": .string(model),
+            "target": .string(target), "address": .string(address), "since": .number(Double(since)),
+            "expires": .number(Double(since + 300_000)),
+        ]
+    }
+}
+
+/// What the mock's `pairing.answer` does around the code.
+public struct MockPairingBehavior: Sendable {
+    /// How long the device takes to answer the code.
+    public var answerDelay: Duration = .milliseconds(200)
+    /// After a wrong code, a device with tries left asks again after this delay.
+    public var askAgainAfter: Duration = .milliseconds(500)
+    /// After a pairing, the device links after this delay; nil: it never links.
+    public var linkAfter: Duration? = .seconds(1)
+
+    public init() {}
 }
 
 /// An installed daemon in the mock, rendered by hand like `MockDevice`.
@@ -269,6 +351,9 @@ public struct MockScenario: Sendable {
     public var daemons: [MockDaemon] = []
     public var candidates: [SetupCandidate] = []
     public var setup = MockSetupBehavior()
+    /// The devices that ask to be paired by their code and wait for it.
+    public var pairRequests: [MockPairRequest] = []
+    public var pairing = MockPairingBehavior()
     public var bunInstalled = true
     /// Delay added before answering a method, by method name.
     public var responseDelays: [String: Duration] = [:]
@@ -297,11 +382,12 @@ public struct MockScenario: Sendable {
     public static var storeCatalog: [MockStoreApp] {
         [
             MockStoreApp(id: "nexus.pocket.hackernews", title: "Hacker News", summary: "Top stories from Hacker News.",
-                         version: "1.1.0", bytes: 96_512, services: [], hosts: ["hacker-news.firebaseio.com"], output: "hn"),
+                         version: "1.1.0", targets: ["3ds", "3ds-dev", "tab5-home"], bytes: 96_512, services: [],
+                         hosts: ["hacker-news.firebaseio.com"], output: "hn"),
             MockStoreApp(id: "nexus.pocket.weather", title: "Weather", summary: "Today's forecast where you are.",
                          version: "0.4.0", bytes: 210_944, services: ["weather"], hosts: ["api.open-meteo.com"]),
             MockStoreApp(id: "nexus.pocket.notes", title: "Notes", summary: "Notes on the device.",
-                         version: "1.2.0", bytes: 131_576, services: ["store"]),
+                         version: "1.2.0", targets: ["3ds", "3ds-dev", "tab5-home"], bytes: 131_576, services: ["store"]),
             MockStoreApp(id: "io.example.pixels", title: "Pixels", summary: "A small drawing pad.", author: "someone",
                          version: "0.2.0", official: false, bytes: 48_000, cached: false),
             MockStoreApp(id: "io.example.tabonly", title: "Tab Clock", summary: "A clock for the Tab5.", author: "someone",
@@ -359,6 +445,22 @@ public struct MockScenario: Sendable {
         notes.error = "The daemon exited with code 1 during start."
         notes.log = [["at": .number(Double(MockClock.now() - 3_600_000)), "stream": "stderr", "text": "error: cannot find module './store'"]]
         scenario.daemons = [weather, notes]
+        return scenario
+    }
+}
+
+extension MockScenario {
+    /// The id of the Tab5 of `withTab5`.
+    public static let tab5Id = "7ab5000000000001"
+
+    /// `demo`, and an M5Stack Tab5 that was paired by its code and is linked.
+    public static var withTab5: MockScenario {
+        var scenario = MockScenario.demo
+        var tab5 = MockDevice(id: tab5Id)
+        tab5.kind = "tab5"
+        tab5.name = "Desk Tab5"
+        tab5.linkUp(address: "192.168.1.63")
+        scenario.devices.append(tab5)
         return scenario
     }
 }

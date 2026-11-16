@@ -3,11 +3,15 @@ import HubAppModel
 import HubClient
 import SwiftUI
 
-/// The guided "Add a 3DS" sheet. Every page has one obvious button.
+/// The guided "Add a Device" sheet: a 3DS set up over its storage, or a
+/// device paired by the code it shows. Every page has one obvious button.
 struct SetupFlowView: View {
     @Bindable var flow: SetupFlowModel
+    /// This Mac's name as devices list it, for "choose … on the device".
+    let macName: String
     let done: (String?) -> Void
     @State private var choosingCard = false
+    @FocusState private var codeFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,6 +31,68 @@ struct SetupFlowView: View {
     @ViewBuilder
     private var content: some View {
         switch flow.step {
+        case .chooseDevice:
+            Page(symbol: "plus.circle", title: Text("Add a Device")) {
+                Text("Choose the kind of device to add.")
+                    .foregroundStyle(.secondary)
+                VStack(spacing: 8) {
+                    KindButton(kind: .nintendo3ds, detail: Text("Set up over Wi-Fi, or with its SD card")) { flow.choose(.nintendo3ds) }
+                    KindButton(kind: .tab5, detail: Text("Pair with a code it shows")) { flow.choose(.tab5) }
+                }
+            }
+        case .pairWaiting:
+            Page(symbol: DeviceKind.tab5.symbolName(filled: true), title: Text("Add an M5Stack Tab5")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Step(number: 1, text: Text("Turn on your Tab5 and make sure it is on the same Wi-Fi network as this Mac."))
+                    Step(number: 2, text: Text("On the Tab5, open **Settings**, then **Mac**, and choose **Pair a Computer…**"))
+                    if macName.isEmpty {
+                        Step(number: 3, text: Text("Choose this Mac in the list. The Tab5 then shows a code."))
+                    } else {
+                        Step(number: 3, text: Text("Choose **\(macName)** in the list. The Tab5 then shows a code."))
+                    }
+                }
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Waiting for your Tab5…").foregroundStyle(.secondary)
+                }
+            }
+        case .pairCode(let entry):
+            Page(symbol: "123.rectangle", title: Text("Enter the Code on \(entry.request.displayName)")) {
+                VStack(spacing: 4) {
+                    Text("It asks to connect to this Mac. Type the 6-digit code it shows on its screen.")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                    // What the request says of itself, to tell two devices apart.
+                    Text(verbatim: [entry.request.model, entry.request.address].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                TextField("Code", text: $flow.pairCode, prompt: Text(verbatim: "000000"))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.title2.monospacedDigit())
+                    .multilineTextAlignment(.center)
+                    .frame(width: 150)
+                    .focused($codeFocused)
+                    .disabled(entry.isAnswering)
+                    .onSubmit { flow.submitPairCode() }
+                    .onChange(of: flow.pairCode) { _, typed in
+                        // Digits alone, six of them: what a device shows.
+                        let digits = String(typed.filter { $0.isASCII && $0.isNumber }.prefix(6))
+                        if digits != typed { flow.pairCode = digits }
+                    }
+                    .accessibilityLabel(Text("The code on the device"))
+                    .onAppear { codeFocused = true }
+                    .onChange(of: entry.isAnswering) { _, answering in
+                        if !answering { codeFocused = true }
+                    }
+                PairStatus(entry: entry)
+            }
+        case .paired(let device):
+            Page(symbol: "checkmark.seal.fill", title: Text("\(device.displayName) Is Paired")) {
+                Text("Whenever it is on and this Mac is on, it connects by itself.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         case .instructions:
             Page(symbol: "gamecontroller", title: Text("Add a Nintendo 3DS")) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -146,7 +212,25 @@ struct SetupFlowView: View {
     private var footer: some View {
         HStack {
             switch flow.step {
+            case .chooseDevice:
+                Spacer()
+                Button("Cancel", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+            case .pairWaiting:
+                Button("Back") { flow.chooseAgain() }
+                Spacer()
+                Button("Cancel", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+            case .pairCode:
+                Spacer()
+                // Cancel tells the device, which then stops showing its code.
+                Button("Cancel", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+                Button("Pair") { flow.submitPairCode() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!flow.canSubmitPairCode)
+            case .paired(let device):
+                Spacer()
+                Button("Done") { done(device.id) }.keyboardShortcut(.defaultAction)
             case .instructions:
+                Button("Back") { flow.chooseAgain() }
                 Button("Use the SD Card Instead…") { choosingCard = true }
                     .help("Set up with the 3DS's SD card in this Mac's card reader")
                 Spacer()
@@ -190,6 +274,7 @@ struct SetupFlowView: View {
     }
 
     private func close() {
+        flow.declinePairRequest()
         flow.cancel()
         done(nil)
     }
@@ -218,6 +303,76 @@ private struct Page<Content: View>: View {
             title.font(.title2.bold()).multilineTextAlignment(.center)
             content
         }
+    }
+}
+
+/// One kind of device on the first page: its symbol, its name and how it is
+/// added, as one button.
+private struct KindButton: View {
+    let kind: DeviceKind
+    let detail: Text
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: kind.symbolName(filled: true))
+                    .font(.title2)
+                    .frame(width: 34)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(verbatim: kind.displayName)
+                    detail.font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .frame(width: 300)
+            .padding(.vertical, 4)
+        }
+        .controlSize(.large)
+    }
+}
+
+/// Under the code's field: that the code is on its way, or why the last one
+/// did not pair the device and whether it can be typed again.
+private struct PairStatus: View {
+    let entry: SetupFlowModel.PairEntry
+
+    var body: some View {
+        VStack(spacing: 6) {
+            if entry.isAnswering {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Pairing…").foregroundStyle(.secondary)
+                }
+            } else {
+                switch entry.problem {
+                case .wrongCode?:
+                    Label("That isn't the code on the device. Check it and type it again.", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                case .interrupted?:
+                    Label("The device stopped before the pairing finished.", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                case nil:
+                    EmptyView()
+                }
+                if !entry.isAsking {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Waiting for the device to ask again… If it no longer shows a code, choose this Mac on it again.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .font(.callout)
+        .multilineTextAlignment(.center)
+        // Room for both lines at once, so the page does not move when they come and go.
+        .frame(height: 76, alignment: .top)
     }
 }
 

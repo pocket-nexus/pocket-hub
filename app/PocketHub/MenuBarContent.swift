@@ -59,6 +59,11 @@ struct MenuBarContent: View {
                     DeviceMenuLabel(device: device)
                 }
             }
+            // A device that asks to be paired by its code: the sheet opens
+            // by itself (AppState), and from here when the owner closed it.
+            ForEach(model.pairRequests) { request in
+                Button("Pair \(request.displayName)…") { state.startPairing(request) }
+            }
             Button("Add a Device…") { state.startSetup() }
             Divider()
         }
@@ -114,8 +119,10 @@ struct DeviceMenuItems: View {
                 .disabled(!device.isLinked || device.busy != nil)
             Divider()
         }
-        Button("Take Screenshot") { state.takeScreenshot(of: device.id, reveal: true) }
-            .disabled(!device.isLinked || device.busy != nil)
+        if device.supports(.screenshot) {
+            Button("Take Screenshot") { state.takeScreenshot(of: device.id, reveal: true) }
+                .disabled(!device.isLinked || device.busy != nil)
+        }
         Button("Show in Pocket Hub") { state.show(device: device.id) }
     }
 }

@@ -21,6 +21,8 @@ import SwiftUI
 ///   settings | language system | en | zh-Hans | reopen   (the Settings window and its language)
 ///   link <url>                               (what the system does with a pocket-hub: link, docs/DEEP-LINKS.md)
 ///   store pick <device id> | store add-device            (the open applet sheet's device menu and its Add a Device…)
+///   add | add choose 3ds|tab5 | add back | add code <digits> | add pair | add cancel
+///                                            (the Add a Device sheet: its first page, the code's field and Pair)
 @MainActor
 enum DebugCommands {
     static func startIfRequested(_ state: AppState) {
@@ -51,7 +53,8 @@ enum DebugCommands {
             guard let device else { print("debug command needs a selected device: \(line)"); return }
             Task { @MainActor in
                 do { try await action(device) } catch {
-                    state.presentedError = UserFacingError(error, deviceName: state.model.device(device)?.displayName)
+                    let named = state.model.device(device)
+                    state.presentedError = UserFacingError(error, deviceName: named?.displayName, kind: named?.kind ?? DeviceKind(rawValue: ""))
                 }
             }
         }
@@ -102,6 +105,16 @@ enum DebugCommands {
         case ["reopen"]: state.relaunch()
         case let w where w.count == 2 && w[0] == "link":
             if let url = URL(string: w[1]) { state.open(url) } else { print("debug command: not a URL: \(w[1])") }
+        case ["add"]: state.startSetup()
+        case ["add", "choose", "3ds"]: state.setupFlow?.choose(.nintendo3ds)
+        case ["add", "choose", "tab5"]: state.setupFlow?.choose(.tab5)
+        case ["add", "back"]: state.setupFlow?.chooseAgain()
+        case let w where w.count == 3 && w[0] == "add" && w[1] == "code": state.setupFlow?.pairCode = w[2]
+        case ["add", "pair"]: state.setupFlow?.submitPairCode()
+        case ["add", "cancel"]:
+            state.setupFlow?.declinePairRequest()
+            state.setupFlow?.cancel()
+            state.showingSetup = false
         case ["store", "add-device"]:
             state.storeDetails = nil
             state.startSetup()

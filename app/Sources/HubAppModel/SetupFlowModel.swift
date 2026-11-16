@@ -2,20 +2,35 @@ import Foundation
 import HubClient
 import Observation
 
-/// The guided first install of a 3DS (CONTROL-API.md §3 "Setup").
+/// Adding a device: the guided first install of a 3DS (CONTROL-API.md §3
+/// "Setup"), or the pairing of a device that shows a code, an M5Stack Tab5
+/// (§3 "Pairing").
 ///
-///     instructions ─▶ searching ─▶ found ─▶ installing ─▶ waitingForDevice ─▶ finished
-///                         │                    ▲  │
-///                         └─▶ manualAddress ───┘  └─▶ failed ─▶ (retry)
+///     chooseDevice ─▶ instructions ─▶ searching ─▶ found ─▶ installing ─▶ waitingForDevice ─▶ finished
+///          │                              │                    ▲  │
+///          │                              └─▶ manualAddress ───┘  └─▶ failed ─▶ (retry)
+///          │
+///          └─▶ pairWaiting ─▶ pairCode ─▶ paired
+///                                ▲ │
+///                                └─┘ a wrong code; the device asks again
 ///
-/// The owner opens ftpd on the console, Hub finds it (`setup.discover`, or an
-/// address typed by hand), one button runs `setup.install` with its progress,
-/// and the flow then waits for the console to link: it finishes by itself on
-/// the `device.changed` that carries a `link` for the installed device.
+/// **A 3DS**: the owner opens ftpd on the console, Hub finds it
+/// (`setup.discover`, or an address typed by hand), one button runs
+/// `setup.install` with its progress, and the flow then waits for the console
+/// to link: it finishes by itself on the `device.changed` that carries a
+/// `link` for the installed device.
+///
+/// **A device that shows a code**: its owner opens a pairing on it and
+/// chooses this Mac there; the request reaches Hub (`pairing.changed`), the
+/// owner types the 6 digits the device shows, and `pairing.answer` pairs it.
+/// A request that arrives while no flow is open starts one at `pairCode`
+/// (`HubModel.makeSetupFlow(answering:)`).
 @MainActor
 @Observable
 public final class SetupFlowModel {
     public enum Step: Equatable, Sendable {
+        /// Which kind of device to add.
+        case chooseDevice
         /// "Open ftpd on your 3DS."
         case instructions
         /// Looking for consoles running ftpd; repeats until one answers.
@@ -29,7 +44,33 @@ public final class SetupFlowModel {
         case waitingForDevice(WaitingInfo)
         /// The console linked.
         case finished(deviceId: String)
+        /// What to do on a device that shows a code; the flow waits for its request.
+        case pairWaiting
+        /// A device asks to be paired: its code is typed here.
+        case pairCode(PairEntry)
+        /// The device is paired; it links by itself.
+        case paired(Device)
         case failed(SetupFailure)
+    }
+
+    /// The page on which a device's code is typed.
+    public struct PairEntry: Equatable, Sendable {
+        /// The request being answered: the latest of that device id.
+        public var request: PairRequest
+        /// The request waits for a code now. False while a code is on its
+        /// way, and after a code that did not pair until the device asks again.
+        public var isAsking: Bool
+        /// `pairing.answer` is out.
+        public var isAnswering = false
+        /// Why the last code did not pair the device.
+        public var problem: PairProblem?
+    }
+
+    public enum PairProblem: Equatable, Sendable {
+        /// The code is not the one the device shows.
+        case wrongCode
+        /// The device left, or its request ended, before the pairing finished.
+        case interrupted
     }
 
     public struct InstallProgress: Equatable, Sendable {
@@ -50,9 +91,11 @@ public final class SetupFlowModel {
         case card(path: String)
     }
 
-    public private(set) var step: Step = .instructions
+    public private(set) var step: Step = .chooseDevice
     /// The text field of `manualAddress`: `192.168.1.57` or `192.168.1.57:5000`.
     public var manualAddress = ""
+    /// The text field of `pairCode`: the digits the device shows.
+    public var pairCode = ""
     /// The method of the last install, kept so "Try Again" repeats it.
     public private(set) var lastMethod: Method?
 
@@ -68,6 +111,26 @@ public final class SetupFlowModel {
     }
 
     // MARK: - Owner actions
+
+    /// The owner chose the kind of device to add: a 3DS is set up over its
+    /// storage, every other kind pairs by the code it shows. A device that
+    /// already asks is answered at once.
+    public func choose(_ kind: DeviceKind) {
+        work?.cancel()
+        if kind == .nintendo3ds {
+            step = .instructions
+        } else if let request = model?.pairRequests.first {
+            answer(request)
+        } else {
+            step = .pairWaiting
+        }
+    }
+
+    /// Back to the choice of the kind of device.
+    public func chooseAgain() {
+        cancel()
+        step = .chooseDevice
+    }
 
     /// "My 3DS is ready": starts looking for it.
     public func startSearching() {
@@ -106,7 +169,90 @@ public final class SetupFlowModel {
         case .installAgain:
             if let lastMethod { install(lastMethod) } else { startSearching() }
         case .startOver: step = .instructions
+        case .pairAgain: choose(.tab5)
         }
+    }
+
+    // MARK: - Pairing by a code
+
+    /// Starts at the code of `request`: a device asked.
+    func answer(_ request: PairRequest) {
+        work?.cancel()
+        pairCode = ""
+        step = .pairCode(PairEntry(request: request, isAsking: true))
+    }
+
+    /// The 6 digits of `pairCode`, when it holds exactly that: spaces the
+    /// owner typed between them are dropped, and digits of another script
+    /// are not a code (the device keys its proof with ASCII digits).
+    public var pairCodeDigits: String? {
+        let digits = pairCode.filter { !$0.isWhitespace }
+        guard digits.utf8.count == 6, digits.utf8.allSatisfy({ (48...57).contains($0) }) else { return nil }
+        return digits
+    }
+
+    /// Whether the Pair button can send the code now.
+    public var canSubmitPairCode: Bool {
+        guard case .pairCode(let entry) = step else { return false }
+        return entry.isAsking && !entry.isAnswering && pairCodeDigits != nil
+    }
+
+    /// Sends the code to the device (`pairing.answer`).
+    public func submitPairCode() {
+        guard canSubmitPairCode, case .pairCode(var entry) = step, let code = pairCodeDigits else { return }
+        entry.isAnswering = true
+        entry.problem = nil
+        step = .pairCode(entry)
+        let device = entry.request.device
+        work?.cancel()
+        work = Task { [weak self, client] in
+            do {
+                let paired = try await client.answerPairing(device: device, code: code)
+                self?.didPair(paired)
+            } catch {
+                self?.pairingFailed(error, device: device)
+            }
+        }
+    }
+
+    /// The owner closes the sheet on a request that still waits: the device
+    /// is told (`pairing.decline`), so it does not go on showing a code that
+    /// nobody will enter.
+    public func declinePairRequest() {
+        guard case .pairCode(let entry) = step, entry.isAsking, !entry.isAnswering else { return }
+        let device = entry.request.device
+        Task { [client] in try? await client.declinePairing(device: device) }
+    }
+
+    private func didPair(_ device: Device) {
+        pairCode = ""
+        step = .paired(device)
+    }
+
+    /// A code that did not pair keeps the page: the device asks again while
+    /// it has tries left, and `pairRequestsDidChange` then lets the owner
+    /// type another. Anything else is a failure of its own.
+    private func pairingFailed(_ error: any Error, device: String) {
+        guard case .pairCode(var entry) = step, entry.request.device == device else { return }
+        entry.isAnswering = false
+        pairCode = ""
+        guard let hubError = error as? HubError, case .operation(let operation) = hubError else {
+            step = .failed(SetupFailure(pairingError: error))
+            return
+        }
+        switch operation.kind {
+        case .cancelled:
+            break
+        case .pairing where operation.reason == "wrong_code", .invalid:
+            entry.problem = .wrongCode
+        case .pairing, .notFound:
+            // `gone`, `bad_proof`, or a request that ended before the code reached it.
+            entry.problem = .interrupted
+        default:
+            step = .failed(SetupFailure(pairingError: error))
+            return
+        }
+        step = .pairCode(entry)
     }
 
     /// Stops what the flow is doing. An install in progress is cancelled on Hub.
@@ -122,6 +268,32 @@ public final class SetupFlowModel {
     }
 
     // MARK: - From the model
+
+    /// Called by `HubModel` with the requests that wait for a code, each time
+    /// they change.
+    func pairRequestsDidChange(_ requests: [PairRequest]) {
+        switch step {
+        case .pairWaiting:
+            if let first = requests.first { answer(first) }
+        case .pairCode(var entry):
+            if let again = requests.first(where: { $0.device == entry.request.device }) {
+                // The device asks (again, after a code that did not pair).
+                entry.request = again
+                entry.isAsking = true
+                step = .pairCode(entry)
+            } else if entry.isAnswering {
+                // The code is on its way: Hub lists no request meanwhile.
+                entry.isAsking = false
+                step = .pairCode(entry)
+            } else if entry.isAsking {
+                // The device left, or its request ran out: nothing to answer.
+                pairCode = ""
+                step = .pairWaiting
+            }
+        default:
+            break
+        }
+    }
 
     /// Called by `HubModel` for every Device it learns about.
     func deviceDidChange(_ device: Device) {
@@ -243,6 +415,8 @@ public struct SetupFailure: Equatable, Sendable {
         case installAgain
         /// Go back to the first page.
         case startOver
+        /// Wait for the device to ask again (a pairing by a code).
+        case pairAgain
     }
 
     /// The stage that failed, when Hub said.
@@ -259,7 +433,7 @@ public struct SetupFailure: Equatable, Sendable {
 
     public var recoveryTitle: String {
         switch recovery {
-        case .searchAgain, .installAgain: String(localized: "Try Again")
+        case .searchAgain, .installAgain, .pairAgain: String(localized: "Try Again")
         case .startOver: String(localized: "Start Over")
         }
     }
@@ -281,6 +455,23 @@ public struct SetupFailure: Equatable, Sendable {
                   title: String(localized: "Pocket Hub couldn't look for your 3DS."),
                   advice: String(localized: "Check that this Mac is connected to Wi-Fi, then try again. You can also type the 3DS's address."),
                   recovery: .searchAgain, hubMessage: hubMessage)
+    }
+
+    /// A failure of `pairing.answer` that is not the code's: Hub went away,
+    /// or could not store the device.
+    init(pairingError error: any Error) {
+        let hubError = error as? HubError
+        let message: String? = if case .operation(let operation)? = hubError { operation.message } else { nil }
+        switch hubError {
+        case .notConnected?, .disconnected?:
+            self.init(stage: nil, title: String(localized: "Pocket Hub stopped responding during the pairing."),
+                      advice: String(localized: "Wait a moment for it to restart, then choose this Mac on the device again."),
+                      recovery: .pairAgain, hubMessage: nil)
+        default:
+            self.init(stage: nil, title: String(localized: "The pairing didn't finish."),
+                      advice: String(localized: "Choose this Mac on the device again, then enter the code it shows."),
+                      recovery: .pairAgain, hubMessage: message ?? (hubError == nil ? error.localizedDescription : nil))
+        }
     }
 
     init(installError error: any Error) {

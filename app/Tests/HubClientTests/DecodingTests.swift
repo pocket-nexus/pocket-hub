@@ -40,6 +40,39 @@ struct DecodingTests {
         #expect(device.channels.first?.generation == 1)
         #expect(device.lastSeen?.date == Date(timeIntervalSince1970: 1_762_876_800))
         #expect(device.program == DeviceProgram(version: "2026.11.2", latest: "2026.11.11", update: true))
+        // A core from before `supports` existed knew the 3DS alone, which takes every operation.
+        #expect(device.kind == .nintendo3ds && device.supports == DeviceOperation.all)
+    }
+
+    @Test func aTab5AndADeviceOfAnUnknownFamily() throws {
+        let tab5 = try decode(Device.self, """
+        {"id":"7ab5000000000001","kind":"tab5","supports":[],"name":"Desk Tab5","model":"M5Stack Tab5","target":"tab5-home",
+         "hostAbi":3,"lastAddress":"192.168.1.63","lastSeen":null,"setupUnconfirmed":false,"duplicateId":false,
+         "link":null,"status":null,"apps":null,"busy":null,"program":{"version":null,"latest":null,"update":false},"channels":[]}
+        """)
+        #expect(tab5.kind == .tab5 && tab5.supports.isEmpty)
+        #expect(!tab5.supports(.push) && !tab5.supports(.screenshot) && !tab5.supports(.logs) && !tab5.supports(.program))
+        #expect(try JSONDecoder.hub.decode(Device.self, from: JSONEncoder().encode(tab5)) == tab5)
+        // A family and an operation this client does not know are kept as they came.
+        let other = try decode(Device.self, """
+        {"id":"a","kind":"","supports":["push","screenshot","logs","teleport"],"name":"","model":"","target":"psp","hostAbi":0,
+         "lastAddress":null,"lastSeen":null,"setupUnconfirmed":false,"duplicateId":false,"link":null,"status":null,
+         "apps":null,"busy":null,"program":{"version":null,"latest":null,"update":false},"channels":[]}
+        """)
+        #expect(other.kind.rawValue.isEmpty && other.supports(.push) && !other.supports(.program))
+        #expect(other.supports.contains(DeviceOperation(rawValue: "teleport")))
+    }
+
+    @Test func aPairRequestAndItsEvent() throws {
+        let request = try decode(PairRequest.self, """
+        {"device":"7ab5000000000002","kind":"tab5","name":"Kitchen Tab5","model":"M5Stack Tab5","target":"tab5-home",
+         "address":"192.168.1.63","since":1762876800000,"expires":1762877100000}
+        """)
+        #expect(request.id == "7ab5000000000002" && request.kind == .tab5 && request.address == "192.168.1.63")
+        #expect(request.expires - request.since == 300_000)
+        let event = try HubEvent(params: ["topic": "pairing.changed", "requests": [try JSONValue(encoding: request)]])
+        #expect(event == .pairingChanged([request]))
+        #expect(try HubEvent(params: ["topic": "pairing.changed", "requests": []]) == .pairingChanged([]))
     }
 
     @Test func programBeforeAnyReportOrLook() throws {

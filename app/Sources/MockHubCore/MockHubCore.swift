@@ -163,6 +163,91 @@ public actor MockHubCore {
         scenario.devices.first { $0.id == id }
     }
 
+    // MARK: Pairing by a code
+
+    public func setPairingBehavior(_ behavior: MockPairingBehavior) {
+        scenario.pairing = behavior
+    }
+
+    /// A device asks to be paired: one request a device id, a later one
+    /// replacing the one before, announced with `pairing.changed`.
+    public func askToPair(_ request: MockPairRequest) {
+        scenario.pairRequests.removeAll { $0.device == request.device }
+        scenario.pairRequests.append(request)
+        emitPairRequests()
+    }
+
+    /// The device left, or its request ran out.
+    public func withdrawPairRequest(_ device: String) {
+        guard scenario.pairRequests.contains(where: { $0.device == device }) else { return }
+        scenario.pairRequests.removeAll { $0.device == device }
+        emitPairRequests()
+    }
+
+    private func emitPairRequests() {
+        emit("pairing.changed", ["requests": .array(scenario.pairRequests.map(\.json))])
+    }
+
+    /// A request by its device id, or `"*"` for the only one that waits.
+    private func resolvePairRequest(_ params: JSONValue) throws -> MockPairRequest {
+        guard let id = params["device"]?.stringValue else { throw MockError.invalidParams("device") }
+        if id == "*" {
+            switch scenario.pairRequests.count {
+            case 0: throw MockError.operation("not_found", "No device asks to be paired.", [:])
+            case 1: return scenario.pairRequests[0]
+            default: throw MockError.operation("invalid", "More than one device asks to be paired; name one.", [:])
+            }
+        }
+        guard let request = scenario.pairRequests.first(where: { $0.device == id }) else {
+            throw MockError.operation("not_found", "No device with this id asks to be paired.", [:])
+        }
+        return request
+    }
+
+    /// `pairing.answer`: while the code is on its way the request is not in
+    /// the list. The device's code pairs it (a record, then its link); any
+    /// other costs one of its tries, stores nothing, and the device asks
+    /// again while it has tries left.
+    private func answerPairRequest(_ params: JSONValue) async throws -> JSONValue {
+        var request = try resolvePairRequest(params)
+        guard let code = params["code"]?.stringValue, code.utf8.count == 6, code.utf8.allSatisfy({ (48...57).contains($0) }) else {
+            throw MockError.operation("invalid", "A pairing code is the 6 digits the device shows.", [:])
+        }
+        let behavior = scenario.pairing
+        scenario.pairRequests.removeAll { $0.device == request.device }
+        emitPairRequests()
+        try? await Task.sleep(for: behavior.answerDelay)
+        guard code == request.code else {
+            request.tries -= 1
+            if request.tries > 0 {
+                let again = request
+                Task {
+                    try? await Task.sleep(for: behavior.askAgainAfter)
+                    var asking = again
+                    asking.since = MockClock.now()
+                    self.askToPair(asking)
+                }
+            }
+            throw MockError.operation("pairing", "The code is not the one the device shows. Nothing was stored.", ["reason": "wrong_code"])
+        }
+        var record = device(request.device) ?? MockDevice(id: request.device)
+        record.kind = request.kind
+        record.name = request.name
+        record.model = request.model
+        record.target = request.target
+        record.lastAddress = request.address
+        record.setupUnconfirmed = false
+        upsert(record)
+        if let delay = behavior.linkAfter {
+            let (id, address) = (request.device, request.address)
+            Task {
+                try? await Task.sleep(for: delay)
+                self.modify(id) { $0.linkUp(address: address) }
+            }
+        }
+        return record.json
+    }
+
     /// Adds or replaces a device and announces it.
     public func upsert(_ device: MockDevice) {
         if let index = scenario.devices.firstIndex(where: { $0.id == device.id }) {
@@ -399,6 +484,7 @@ public actor MockHubCore {
             let device = try linked(params)
             return device.status
         case "devices.push":
+            try supporting("push", params)
             let device = try linked(params)
             guard let path = params["path"]?.stringValue else { throw MockError.invalidParams("path") }
             guard path.hasSuffix(".pocket") else {
@@ -461,6 +547,7 @@ public actor MockHubCore {
                 return [:]
             }
         case "devices.screenshot":
+            try supporting("screenshot", params)
             let device = try linked(params)
             frame += 60
             let path = params["path"]?.stringValue
@@ -469,10 +556,12 @@ public actor MockHubCore {
             return ["path": .string(path), "width": 400, "height": 480, "frame": .number(Double(frame))]
         case "devices.logs":
             // Accepted while the device is not linked: the lines start when it links.
+            try supporting("logs", params)
             let device = try resolve(params)
             setLogs(device.id, on: params["on"]?.boolValue ?? false)
             return [:]
         case "devices.installProgram":
+            try supporting("program", params)
             return try await installProgram(params, session: id, progress: progress)
 
         case "setup.discover":
@@ -493,6 +582,15 @@ public actor MockHubCore {
             }
             return try await runSetup(host: nil, progress: progress)
 
+        case "pairing.list":
+            return ["requests": .array(scenario.pairRequests.map(\.json))]
+        case "pairing.answer":
+            return try await answerPairRequest(params)
+        case "pairing.decline":
+            let request = try resolvePairRequest(params)
+            withdrawPairRequest(request.device)
+            return [:]
+
         case "store.apps":
             guard scenario.storeReachable else { throw storeUnreachable() }
             if params["refresh"]?.boolValue == true { storeFetchedAt = MockClock.now() }
@@ -506,6 +604,7 @@ public actor MockHubCore {
             return ["apps": .array(offered.map { $0.json(icon: storeIconPath($0.id), device: device) }),
                     "fetchedAt": .number(Double(storeFetchedAt))]
         case "store.install":
+            try supporting("push", params)
             let device = try linked(params)
             guard let appId = params["app"]?.stringValue else { throw MockError.invalidParams("app") }
             guard let index = scenario.store.firstIndex(where: { $0.id == appId }),
@@ -618,6 +717,19 @@ public actor MockHubCore {
         }
         guard let device = device(id) else { throw MockError.operation("not_found", "No such device.", [:]) }
         return device
+    }
+
+    /// Refuses an operation the device's family does not take (§2
+    /// `supports`): `link` with `code` `unsupported`, before anything else.
+    private func supporting(_ operation: String, _ params: JSONValue) throws {
+        guard try !resolve(params).supports.contains(operation) else { return }
+        let message: String = switch operation {
+        case "push": "This device takes no applet sent from the computer: install it from the store page on the device itself."
+        case "screenshot": "This device takes no screenshot."
+        case "logs": "This device sends no log."
+        default: "Hub does not install this device's software."
+        }
+        throw MockError.operation("link", message, ["code": "unsupported"])
     }
 
     private func linked(_ params: JSONValue) throws -> MockDevice {

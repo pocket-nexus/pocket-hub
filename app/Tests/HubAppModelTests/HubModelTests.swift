@@ -26,7 +26,7 @@ struct HubModelTests {
         await h.core.unlink(living, code: "going_away", reason: "sleep")
         await eventually("unlinked") { h.model.device(living)?.isLinked == false }
         #expect(h.model.lastUnlink[living]?.code == "going_away")
-        #expect(h.model.lastUnlink[living]?.explanation == String(localized: "The console was turned off or went to sleep."))
+        #expect(h.model.lastUnlink[living]?.explanation == String(localized: "The device was turned off or went to sleep."))
         #expect(h.model.devices.allSatisfy { !$0.isLinked })
         #expect(h.model.device(living)?.channels.isEmpty == true)
 

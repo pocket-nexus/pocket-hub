@@ -118,6 +118,26 @@ extension HubCalling {
                        progress: typed(progress)).decoded()
     }
 
+    // MARK: Pairing by a code
+
+    /// The devices that ask to be paired and wait for their code, oldest first.
+    public func pairRequests() async throws -> [PairRequest] {
+        try await call("pairing.list")["requests"].orThrow("requests").decoded()
+    }
+
+    /// Answers a device's request with the 6 digits it shows. The answer is
+    /// the device, now paired; a wrong code is the error `pairing` with
+    /// `reason` `wrong_code`, and stores nothing.
+    public func answerPairing(device: String, code: String) async throws -> Device {
+        try await call("pairing.answer", params: ["device": .string(device), "code": .string(code)]).decoded()
+    }
+
+    /// Dismisses a device's request: the device says that this computer's
+    /// owner declined.
+    public func declinePairing(device: String) async throws {
+        _ = try await call("pairing.decline", params: ["device": .string(device)])
+    }
+
     // MARK: Store
 
     /// The store's applets; with `device`, those that have a variant for its

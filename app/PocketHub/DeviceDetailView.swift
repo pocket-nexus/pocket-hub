@@ -17,7 +17,14 @@ struct DeviceDetailView: View {
 
     private var model: HubModel { state.model }
 
-    /// How the last link ended, for the header. "The console is restarting"
+    /// The section shown: the one chosen, unless this device has no such
+    /// section (`supports`), which shows its applets. The choice is the
+    /// window's and outlives a change of device.
+    private var tab: DeviceTab {
+        DeviceTab.offered(by: device).contains(state.deviceTab) ? state.deviceTab : .applets
+    }
+
+    /// How the last link ended, for the header. "The device is restarting"
     /// holds only while Hub holds the device for that restart; once the hold
     /// is over it is no longer true, and while this app updates the device
     /// the update's own banner tells the restart.
@@ -36,7 +43,7 @@ struct DeviceDetailView: View {
         // page, laid out as System Settings lays out a pane: grouped cards
         // that scroll beneath the toolbar.
         Group {
-            switch state.deviceTab {
+            switch tab {
             case .applets:
                 DeviceOverview(device: device, unlink: unlinkNote, report: report)
             case .screenshot:
@@ -62,12 +69,15 @@ struct DeviceDetailView: View {
             if case .success(let url) = result { push(url) }
         }
         .dropDestination(for: URL.self) { urls, _ in
-            guard let url = urls.first(where: { $0.pathExtension.lowercased() == "pocket" }), device.isLinked else { return false }
+            // A device that takes no applet from the computer takes no drop.
+            guard device.supports(.push), device.isLinked,
+                  let url = urls.first(where: { $0.pathExtension.lowercased() == "pocket" })
+            else { return false }
             push(url)
             return true
         } isTargeted: { dropTargeted = $0 }
         .overlay {
-            if dropTargeted {
+            if dropTargeted && device.supports(.push) {
                 RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(Color.accentColor, lineWidth: 3)
                     .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
@@ -99,7 +109,7 @@ struct DeviceDetailView: View {
         .confirmationDialog("Remove \(device.displayName) from Pocket Hub?", isPresented: $state.confirmingRemoveDevice) {
             Button("Remove", role: .destructive) { forget() }
         } message: {
-            Text("The console disconnects. To use it with this Mac again, you will need to set it up again.")
+            Text("The device disconnects. To use it with this Mac again, you will need to add it again.")
         }
     }
 
@@ -108,15 +118,22 @@ struct DeviceDetailView: View {
         // On a Mac a segmented control switches views from the toolbar, not
         // from the window's content (HIG, Segmented controls › macOS).
         ToolbarItem(placement: .principal) {
-            DeviceTabPicker()
+            DeviceTabPicker(device: device, selection: tab)
         }
+        // The toolbar holds what this device can do (`supports`): a device
+        // that takes no screenshot or no applet from the computer has no
+        // button for it.
         ToolbarItemGroup(placement: .primaryAction) {
-            Button("Take Screenshot", systemImage: "camera", action: takeScreenshot)
-                .disabled(!device.isLinked || model.takingScreenshot.contains(device.id))
-                .help("Take a screenshot of both screens")
-            Button("Install Applet…", systemImage: "square.and.arrow.down") { state.importingApplet = true }
-                .disabled(!device.isLinked || model.pushes[device.id] != nil)
-                .help("Install a .pocket applet on this console")
+            if device.supports(.screenshot) {
+                Button("Take Screenshot", systemImage: "camera", action: takeScreenshot)
+                    .disabled(!device.isLinked || model.takingScreenshot.contains(device.id))
+                    .help("Take a screenshot of both screens")
+            }
+            if device.supports(.push) {
+                Button("Install Applet…", systemImage: "square.and.arrow.down") { state.importingApplet = true }
+                    .disabled(!device.isLinked || model.pushes[device.id] != nil)
+                    .help("Install a .pocket applet on this device")
+            }
             // Toolbar symbols carry no border of their own (HIG, Toolbars).
             Menu("More", systemImage: "ellipsis") {
                 Button("Remove from Pocket Hub…", role: .destructive) { state.confirmingRemoveDevice = true }
@@ -152,21 +169,38 @@ struct DeviceDetailView: View {
     }
 
     private func report(_ error: any Error) {
-        state.presentedError = UserFacingError(error, deviceName: device.displayName)
+        state.presentedError = UserFacingError(error, deviceName: device.displayName, kind: device.kind)
+    }
+}
+
+extension DeviceTab {
+    /// The sections a device's page has: Screenshot and Log for a device
+    /// that takes them (`supports`), Applets and Details for every device.
+    static func offered(by device: Device) -> [DeviceTab] {
+        var tabs: [DeviceTab] = [.applets]
+        if device.supports(.screenshot) { tabs.append(.screenshot) }
+        if device.supports(.logs) { tabs.append(.log) }
+        return tabs + [.details]
     }
 }
 
 /// The sections of a device's page, in the toolbar.
 struct DeviceTabPicker: View {
+    let device: Device
+    /// The section shown (DeviceDetailView.tab).
+    let selection: DeviceTab
     @Environment(AppState.self) private var state
 
     var body: some View {
-        @Bindable var state = state
-        Picker("Section", selection: $state.deviceTab) {
-            Text("Applets").tag(DeviceTab.applets)
-            Text("Screenshot").tag(DeviceTab.screenshot)
-            Text("Log").tag(DeviceTab.log)
-            Text("Details").tag(DeviceTab.details)
+        Picker("Section", selection: Binding(get: { selection }, set: { state.deviceTab = $0 })) {
+            ForEach(DeviceTab.offered(by: device), id: \.self) { tab in
+                switch tab {
+                case .applets: Text("Applets").tag(tab)
+                case .screenshot: Text("Screenshot").tag(tab)
+                case .log: Text("Log").tag(tab)
+                case .details: Text("Details").tag(tab)
+                }
+            }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
@@ -187,7 +221,7 @@ struct DeviceHeader: View {
         HStack(alignment: .top, spacing: 14) {
             // A pane's icon as System Settings draws one: a white glyph on a
             // filled rounded square, in the accent colour while connected.
-            Image(systemName: "gamecontroller.fill")
+            Image(systemName: device.kind.symbolName(filled: true))
                 .font(.system(size: 26, weight: .medium))
                 .foregroundStyle(.white)
                 .frame(width: 52, height: 52)
@@ -217,7 +251,7 @@ struct DeviceHeader: View {
                     .foregroundStyle(.orange)
                 }
                 if device.setupUnconfirmed {
-                    Label("The last setup may not have finished. If the console doesn't connect, set it up again.",
+                    Label("The last setup may not have finished. If the device doesn't connect, set it up again.",
                           systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 }
@@ -271,7 +305,7 @@ struct ConnectionLine: View {
                 if let unlink {
                     Text(unlink.explanation).font(.caption).foregroundStyle(.secondary)
                 } else if device.lastSeen == nil {
-                    Text("Open Pocket Shell on the console to connect it.").font(.caption).foregroundStyle(.secondary)
+                    Text(verbatim: device.kind.howToConnect).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
@@ -305,8 +339,9 @@ struct DeviceOverview: View {
                 if apps.isEmpty {
                     EmptySectionNote(
                         title: device.isLinked ? Text("No Applets") : Text("Applets Unknown"),
-                        detail: device.isLinked ? Text("Drop a .pocket file here to install one.")
-                                                : Text("The list appears when the console connects."))
+                        detail: !device.isLinked ? Text("The list appears when the device connects.")
+                            : device.supports(.push) ? Text("Drop a .pocket file here to install one.")
+                            : Text("Install one from the store on the device itself."))
                 } else {
                     ForEach(apps) { app in
                         AppletRow(app: app, device: device,
@@ -408,7 +443,11 @@ struct AppletRow: View {
             } else if let update, let install = store.install(for: update, on: device.id) {
                 InstallProgressView(install: install) { store.cancelInstall(of: update, on: device.id) }
             } else {
-                if let update {
+                // A device that takes no applet from the computer updates
+                // from its own store page; the row says so in place of a button.
+                if update != nil, !device.supports(.push) {
+                    Text("Update on the device").font(.caption).foregroundStyle(.secondary)
+                } else if let update {
                     Button("Update") { store.install(update, on: device.id) }
                         .buttonStyle(.borderedProminent)
                         .disabled(!device.isLinked || device.busy != nil)
@@ -452,7 +491,7 @@ struct AppletRow: View {
             if device.deletesApplets {
                 confirmingDelete = true
             } else {
-                // Software that predates deleting from Hub: say the console's way.
+                // Software that predates deleting from Hub: say the device's way.
                 state.presentedError = .deletingNeedsNewerSoftware(deviceName: device.displayName)
             }
         }
@@ -462,7 +501,7 @@ struct AppletRow: View {
     private func delete() {
         Task {
             do { try await state.model.remove(app, from: device.id) } catch {
-                if let failure = UserFacingError(deleteError: error, appTitle: title, deviceName: device.displayName) {
+                if let failure = UserFacingError(deleteError: error, appTitle: title, deviceName: device.displayName, kind: device.kind) {
                     state.presentedError = failure
                 }
             }

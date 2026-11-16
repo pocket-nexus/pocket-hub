@@ -41,6 +41,8 @@ public struct HubSnapshot: Sendable {
     public var hello: HelloResult
     public var status: HubStatus
     public var devices: [Device]
+    /// The devices that ask to be paired by the code they show.
+    public var pairRequests: [PairRequest]
     /// nil when `daemons.list` failed; the devices still work.
     public var daemons: [Daemon]?
     /// nil when `daemons.runtime` failed.
@@ -296,8 +298,10 @@ public actor HubClient: HubCalling {
         try await connection.subscribe()
         let (statusValue, statusSequence) = try await connection.callSequenced("hub.status")
         let (devicesValue, devicesSequence) = try await connection.callSequenced("devices.list")
+        let (pairingValue, pairingSequence) = try await connection.callSequenced("pairing.list")
         let status: HubStatus = try statusValue.decoded()
         let devices: [Device] = try devicesValue["devices"].orThrow("devices").decoded()
+        let pairRequests: [PairRequest] = try pairingValue["requests"].orThrow("requests").decoded()
         var daemons: [Daemon]?
         var daemonsSequence: UInt64 = 0
         if let (value, sequence) = try? await connection.callSequenced("daemons.list") {
@@ -305,12 +309,13 @@ public actor HubClient: HubCalling {
             daemonsSequence = sequence
         }
         let bun = try? await connection.bunRuntime()
-        let snapshot = HubSnapshot(hello: hello, status: status, devices: devices, daemons: daemons, bun: bun)
-        return (snapshot, Thresholds(devices: devicesSequence, daemons: daemonsSequence, hub: statusSequence))
+        let snapshot = HubSnapshot(hello: hello, status: status, devices: devices, pairRequests: pairRequests, daemons: daemons, bun: bun)
+        return (snapshot, Thresholds(devices: devicesSequence, pairing: pairingSequence, daemons: daemonsSequence, hub: statusSequence))
     }
 
     struct Thresholds {
         var devices: UInt64
+        var pairing: UInt64
         var daemons: UInt64
         var hub: UInt64
     }
@@ -319,6 +324,7 @@ public actor HubClient: HubCalling {
         for await item in connection.events {
             let threshold: UInt64 = switch item.event.family {
             case .devices: thresholds.devices
+            case .pairing: thresholds.pairing
             case .daemons: thresholds.daemons
             case .hub: thresholds.hub
             case .other: 0

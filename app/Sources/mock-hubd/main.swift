@@ -1,6 +1,6 @@
 // mock-hubd: the mock core as a process, so the app can be run against it.
 //
-//   mock-hubd [--home DIR] [--scenario demo|first-run] [--fail-setup-at STAGE]
+//   mock-hubd [--home DIR] [--scenario demo|first-run|tab5] [--fail-setup-at STAGE]
 //             [--fail-reason REASON] [--link-after SECONDS | --no-link] [--unconfirmed]
 //
 // It listens at `<home>/hubd.sock`, home from --home or `$POCKET_HUB_HOME`.
@@ -14,6 +14,8 @@
 //   release <version>|none     (the newest release of the devices' program, learned at their next link)
 //   update ok | fail <unreachable|not_found|rejected> | drop | launch-fails | no-relink | stale
 //                              (what the next devices.installProgram does)
+//   pair-ask [code]            (a Tab5 asks to be paired by the code it shows, 314159 without one)
+//   pair-gone                  (that Tab5 leaves)
 //
 // It exits on `quit`, on `hub.shutdown`, and on SIGINT/SIGTERM, removing its socket.
 
@@ -23,7 +25,7 @@ import MockHubCore
 
 func usage() -> Never {
     FileHandle.standardError.write(Data("""
-    usage: mock-hubd [--home DIR] [--scenario demo|first-run] [--fail-setup-at STAGE]
+    usage: mock-hubd [--home DIR] [--scenario demo|first-run|tab5] [--fail-setup-at STAGE]
                      [--fail-reason REASON] [--link-after SECONDS | --no-link] [--unconfirmed]
 
     """.utf8))
@@ -46,6 +48,7 @@ while !arguments.isEmpty {
     case "--scenario":
         switch value() {
         case "demo": scenario = .demo
+        case "tab5": scenario = .withTab5
         case "first-run": scenario = .firstRun
         default: usage()
         }
@@ -117,6 +120,13 @@ Task {
             await core.failNext(rest[0], with: .init(kind: rest[1], message: rest.count > 2 ? rest.dropFirst(2).joined(separator: " ") : "Injected failure."))
         case "candidates": await core.setCandidates(rest.map { SetupCandidate(address: $0, port: 5000, banner: "220 Hello!", ftpd: true) })
         case "drop": await core.dropConnections()
+        // A Tab5 asks to be paired: `pair-ask [code]`, 314159 without one; `pair-gone` takes it back.
+        case "pair-ask":
+            var request = MockPairRequest(device: "7ab5000000000002")
+            request.name = "Kitchen Tab5"
+            if let code = rest.first { request.code = code }
+            await core.askToPair(request)
+        case "pair-gone": await core.withdrawPairRequest("7ab5000000000002")
         case "store-link-loss": await core.setStoreLinkLoss(Set(rest))
         case "release" where rest.count == 1:
             await core.setProgramRelease(version: rest[0] == "none" ? nil : rest[0])
