@@ -9,9 +9,10 @@ This page is for changing Pocket Hub itself. Using it is in the
 Pocket Hub stands between physical devices, the
 [Pocket Applets](https://github.com/pocket-nexus/applets) they run, and the
 tools that make applets. A device only has to reach Hub: Hub puts the runtime
-on a new device, keeps the link to it, carries applets to it, performs the
-network requests the device cannot make itself, and runs the computer side of
-an applet (its daemon) beside it.
+on a new device (a 3DS) or pairs one that carries its own (a Tab5), keeps the
+link to it, carries applets to it, performs the network requests the device
+cannot make itself, and runs the computer side of an applet (its daemon)
+beside it.
 
 Hub and devices speak **Pocket Link 2**. The specification is PocketJS's
 [`docs/POCKET-LINK.md`](https://github.com/pocket-nexus/pocketjs/blob/main/docs/POCKET-LINK.md),
@@ -41,6 +42,16 @@ are clients of one control API and hold no device logic, so a device is never
 held by two processes and a later remote client is one more client of the same
 surface.
 
+**A device is one of two families, and Hub's core says what each takes.** A
+Nintendo 3DS is set up through its storage and takes everything Hub offers. An
+M5Stack Tab5 pairs on the link by a code it shows (link specification §3.11),
+installs applets from its own store page, and takes no pushed package,
+screenshot, log or software update from Hub. A link's feature list cannot say
+this (one group covers several requests), so the table is
+`crates/hub-core/src/family.rs`, each Device carries its answer (`supports`,
+`CONTROL-API.md` §2), and the command line and the app hold no table of their
+own.
+
 **The applet store's website opens the app on an applet.** Each applet's page
 at [applets.pocket.nexus](https://applets.pocket.nexus) has a button that is
 a `pocket-hub://store/app/<id>` link (`docs/DEEP-LINKS.md`): the app comes to
@@ -55,10 +66,10 @@ device is on.
 
 | Path | What it is |
 | --- | --- |
-| `crates/pocket-link` | The Pocket Link 2 wire: beacon, preamble, frames and their streaming decoder, handshake proofs, pairing files and the setup as a plan of storage operations. No I/O |
+| `crates/pocket-link` | The Pocket Link 2 wire: beacon, preamble, frames and their streaming decoder, handshake proofs, pairing files and the setup as a plan of storage operations, the messages and HMACs of a pairing by a code. No I/O |
 | `crates/hub-store` | Hub's own files: its identity, one record per paired device, the channel generation |
-| `crates/hub-core` | The link endpoint: carriers, beacons, the handshake, requests, streams and credit, runtime operations, the device mutex, applet channels relayed to daemons |
-| `crates/hub-setup` | The first install: finding a console's ftpd, its software and the pairing written onto its storage, software releases |
+| `crates/hub-core` | The link endpoint: carriers, beacons, the handshake, a device's request to be paired by the code it shows, requests, streams and credit, runtime operations, the device mutex, applet channels relayed to daemons; the device families and what each takes (`family.rs`) |
+| `crates/hub-setup` | The first install of a 3DS: finding a console's ftpd, its software and the pairing written onto its storage, software releases |
 | `crates/hub-daemons` | The Bun runtime (downloaded on demand), daemon packages, their processes and the daemon socket |
 | `crates/hub-net` | `net.http`: a device's HTTP requests performed by Hub, with the destination policy |
 | `crates/hub-applet-store` | The applet store's client, and the link's `catalog` and `install` served from it |
