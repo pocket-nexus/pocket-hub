@@ -70,6 +70,9 @@ enum Command {
         #[command(subcommand)]
         kind: SetupKind,
     },
+    /// Pair a device that shows a code (an M5Stack Tab5): list the devices that ask, or answer one with its code.
+    #[command(after_help = "On the device, open its pairing page and choose this computer; the device shows a code of 6 digits, good for 5 minutes.\nExamples:\n  pocket-hub pair                 # the devices that ask to be paired\n  pocket-hub pair --code 314159   # the code the device shows\n  pocket-hub pair --decline       # dismiss the request")]
+    Pair(PairArgs),
     /// The installed daemons.
     Daemons,
     /// One daemon.
@@ -117,6 +120,19 @@ struct SetupArgs {
     /// Install this release of the 3DS's software (a tag) instead of the latest.
     #[arg(long, value_name = "TAG")]
     release: Option<String>,
+}
+
+#[derive(Args, Debug)]
+struct PairArgs {
+    /// The 6 digits the device shows.
+    #[arg(long, value_name = "DIGITS", conflicts_with = "decline")]
+    code: Option<String>,
+    /// Dismiss the device's request instead of pairing it.
+    #[arg(long)]
+    decline: bool,
+    /// The device, by the id `pocket-hub pair` lists; may be left out when exactly one device asks.
+    #[arg(long, value_name = "ID")]
+    device: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -298,6 +314,7 @@ async fn run(cli: Cli, out: &Out) -> Outcome {
             device_command(&client, out, &id, command).await
         }
         Command::Setup { kind: SetupKind::ThreeDs(args) } => setup(&client, out, args).await,
+        Command::Pair(args) => pair(&client, out, args).await,
         Command::Daemons => {
             let value = client.call(methods::DAEMONS_LIST, &json!({})).await?;
             out.result(&value, || Ok(output::daemons(&decode::<DaemonList>(&value)?.daemons)))
@@ -532,6 +549,22 @@ async fn setup(client: &Client, out: &Out, args: SetupArgs) -> Outcome {
     bar.done();
     let value = result?;
     out.result(&value, || Ok(output::report(&decode(&value)?)))
+}
+
+/// `pair`: the devices that ask to be paired by the code they show, an
+/// answer to one with its code, or its dismissal (CONTROL-API.md §3 Pairing).
+async fn pair(client: &Client, out: &Out, args: PairArgs) -> Outcome {
+    let device = args.device.unwrap_or_else(|| "*".into());
+    if let Some(code) = args.code {
+        let value = client.call(methods::PAIRING_ANSWER, &PairAnswerParams { device, code }).await?;
+        return out.result(&value, || Ok(output::paired(&decode(&value)?)));
+    }
+    if args.decline {
+        let value = client.call(methods::PAIRING_DECLINE, &DeviceParams { device }).await?;
+        return out.result(&value, || Ok("The request was dismissed; the device says so.".into()));
+    }
+    let value = client.call(methods::PAIRING_LIST, &json!({})).await?;
+    out.result(&value, || Ok(output::pair_requests(&decode::<PairRequests>(&value)?.requests)))
 }
 
 fn split_host(text: &str) -> Result<(String, Option<u16>), Failure> {

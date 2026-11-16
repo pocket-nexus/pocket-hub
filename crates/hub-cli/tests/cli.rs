@@ -184,7 +184,7 @@ fn devices_setup_and_daemons_in_both_modes() {
     std::fs::write(&shell, &program).unwrap();
 
     let none = run(home.path(), &["devices"]);
-    assert_eq!((none.status, none.stdout.trim()), (0, "No device is paired. Set one up with: pocket-hub setup 3ds"));
+    assert_eq!((none.status, none.stdout.trim()), (0, "No device is paired. Set a 3DS up with: pocket-hub setup 3ds\nA device that shows a code (an M5Stack Tab5) is paired with: pocket-hub pair"));
     assert_eq!(run(home.path(), &["--json", "devices"]).json(), serde_json::json!({"devices": []}));
     let no_device = run(home.path(), &["device", "status"]);
     assert_eq!(no_device.status, 1);
@@ -375,6 +375,127 @@ fn the_store_in_both_modes() {
     let _ = linked.kill();
     let _ = linked.wait();
     drop(runtime);
+}
+
+/// The reference device with no pairing, as a Tab5 that never met a Hub: it
+/// opens a pairing with the code `code` and asks the Hub. Returns once it
+/// has asked; `pair` lines it writes later go to `said`.
+fn asking_tab5(dir: &Path, hub: &str, port: u64, code: &str) -> (Child, std::sync::mpsc::Receiver<Value>) {
+    std::fs::create_dir_all(dir).unwrap();
+    let config = serde_json::json!({"dir": dir, "hub": hub, "address": "127.0.0.1", "port": port, "autoConnect": false, "name": "Desk Tab5", "model": "M5Stack Tab5", "target": "tab5-home", "features": ["apps", "runtime", "runtime.remove", "catalog", "install", "net.http"]});
+    let harness = concat!(env!("CARGO_MANIFEST_DIR"), "/../hub-core/tests/harness/device.ts");
+    let mut child = Command::new(bun()).arg(harness).arg(config.to_string()).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).spawn().unwrap();
+    {
+        use std::io::Write;
+        let stdin = child.stdin.as_mut().unwrap();
+        writeln!(stdin, "{}", serde_json::json!({"cmd": "pairOpen", "code": code})).unwrap();
+        writeln!(stdin, "{}", serde_json::json!({"cmd": "pairAsk"})).unwrap();
+        stdin.flush().unwrap();
+    }
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    for line in lines.by_ref() {
+        if line.unwrap().contains("\"ev\":\"pair-ask\",\"ok\":true") {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the device did not ask to be paired");
+    }
+    let (tx, said) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in lines.map_while(Result::ok) {
+            if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                let _ = tx.send(value);
+            }
+        }
+    });
+    (child, said)
+}
+
+/// `pair`: a device that shows a code is listed, dismissed, and paired by
+/// its code, in both output modes.
+#[test]
+fn pairing_a_device_by_its_code() {
+    let home = home();
+    let _stop = Stop(home.path());
+    let none = run(home.path(), &["pair"]);
+    assert_eq!((none.status, none.stdout.trim()), (0, "No device asks to be paired. On the device, open its pairing page and choose this computer; then run this again."));
+    assert_eq!(run(home.path(), &["--json", "pair"]).json(), serde_json::json!({"requests": []}));
+    let nobody = run(home.path(), &["pair", "--code", "314159"]);
+    assert_eq!(nobody.status, 1);
+    assert!(nobody.stderr.contains("No device asks to be paired.") && nobody.stderr.contains("[not_found]"), "{}", nobody.stderr);
+
+    let status = run(home.path(), &["--json", "status"]).json();
+    let (hub, port) = (status["id"].as_str().unwrap().to_owned(), status["carriers"][0]["port"].as_u64().unwrap());
+    let (mut tab5, _said) = asking_tab5(&home.path().join("tab5"), &hub, port, "314159");
+    // The request is Hub's a moment after the device has sent it.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let listed = loop {
+        let listed = run(home.path(), &["--json", "pair"]).json();
+        if listed["requests"].as_array().is_some_and(|requests| requests.len() == 1) {
+            break listed;
+        }
+        assert!(Instant::now() < deadline, "the request did not reach Hub");
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let request = &listed["requests"][0];
+    let id = request["device"].as_str().unwrap().to_owned();
+    assert_eq!((request["kind"].as_str(), request["name"].as_str(), request["model"].as_str(), request["address"].as_str()), (Some("tab5"), Some("Desk Tab5"), Some("M5Stack Tab5"), Some("127.0.0.1")));
+    let table = run(home.path(), &["pair"]);
+    assert!(table.stdout.contains(&id) && table.stdout.contains("Desk Tab5") && table.stdout.contains("pocket-hub pair --code <digits>"), "{}", table.stdout);
+
+    // What is no code, and a code that is not the device's.
+    let not_a_code = run(home.path(), &["pair", "--code", "31415"]);
+    assert_eq!(not_a_code.status, 1);
+    assert!(not_a_code.stderr.contains("[invalid]"), "{}", not_a_code.stderr);
+    assert_eq!(run(home.path(), &["pair", "--code", "314159", "--decline"]).status, 2, "one or the other");
+    let wrong = run(home.path(), &["pair", "--code", "271828"]);
+    assert_eq!(wrong.status, 1);
+    assert!(wrong.stderr.contains("The code is not the one the device shows.") && wrong.stderr.contains("[pairing, reason wrong_code]"), "{}", wrong.stderr);
+    assert_eq!(run(home.path(), &["--json", "devices"]).json(), serde_json::json!({"devices": []}), "a wrong code pairs nothing");
+
+    // The device asks again within a second; this time by its id.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while run(home.path(), &["--json", "pair"]).json()["requests"].as_array().is_none_or(|requests| requests.is_empty()) {
+        assert!(Instant::now() < deadline, "the device did not ask again");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let paired = run(home.path(), &["pair", "--code", "314159", "--device", &id]);
+    assert_eq!(paired.status, 0, "{}", paired.stderr);
+    assert_eq!(paired.stdout.trim(), format!("Paired Desk Tab5 ({id}). It connects by itself, now and whenever it is on."));
+    let devices = run(home.path(), &["--json", "devices"]).json();
+    assert_eq!((devices["devices"][0]["id"].as_str(), devices["devices"][0]["kind"].as_str()), (Some(id.as_str()), Some("tab5")));
+    assert_eq!(devices["devices"][0]["supports"], serde_json::json!([]));
+    // It links by itself; what its family does not take says so.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while run(home.path(), &["--json", "devices"]).json()["devices"][0]["link"].is_null() {
+        assert!(Instant::now() < deadline, "the paired device did not link");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let shot = run(home.path(), &["device", "shot"]);
+    assert_eq!(shot.status, 1);
+    assert!(shot.stderr.contains("This device takes no screenshot.") && shot.stderr.contains("[link, code unsupported]"), "{}", shot.stderr);
+
+    // A request that is dismissed: the device reads why.
+    let _ = tab5.kill();
+    let _ = tab5.wait();
+    let (mut other, said) = asking_tab5(&home.path().join("other"), &hub, port, "161803");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while run(home.path(), &["--json", "pair"]).json()["requests"].as_array().is_none_or(|requests| requests.is_empty()) {
+        assert!(Instant::now() < deadline, "the second device's request did not reach Hub");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let dismissed = run(home.path(), &["pair", "--decline"]);
+    assert_eq!((dismissed.status, dismissed.stdout.trim()), (0, "The request was dismissed; the device says so."));
+    assert_eq!(run(home.path(), &["--json", "pair"]).json(), serde_json::json!({"requests": []}));
+    {
+        use std::io::Write;
+        writeln!(other.stdin.as_mut().unwrap(), "{}", serde_json::json!({"cmd": "pair", "tag": "after"})).unwrap();
+    }
+    let state = said.iter().find(|line| line["ev"] == "pair" && line["tag"] == "after").expect("the device answers");
+    assert_eq!(state["pair"]["error"], "that computer dismissed the request");
+    let _ = other.kill();
+    let _ = other.wait();
+    shutdown(home.path());
 }
 
 #[test]
