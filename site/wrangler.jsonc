@@ -1,0 +1,13 @@
+{
+  // hub.pocket.nexus: the page that hands a visitor Pocket Hub. A Worker of
+  // static assets alone, with no script: what `bun run build` (vite.config.ts)
+  // writes into dist, with public/_headers on every answer. A path that is not
+  // a file is answered 404.
+  //
+  // The applet store (pocket-nexus/applets, store/wrangler.jsonc) is served the
+  // same way under applets.pocket.nexus, in the same Cloudflare account.
+  "name": "pocket-hub-site",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./dist" },
+  "routes": [{ "pattern": "hub.pocket.nexus", "custom_domain": true }]
+}

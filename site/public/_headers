@@ -1,0 +1,12 @@
+# What every answer of hub.pocket.nexus carries: the page loads its own
+# script, style, font and images and nothing else. style-src allows inline
+# style for what Vue sets on elements (:style), as the store's does. The
+# download is a link to GitHub, which a Content-Security-Policy does not govern.
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# What the build names by its content never changes under that name.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

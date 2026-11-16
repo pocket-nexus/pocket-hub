@@ -1,0 +1,82 @@
+# hub.pocket.nexus (site/), the page that hands a visitor Pocket Hub, goes out
+# when main changes it, and again when a release is published: the page links
+# the latest release's archive itself (site/src/release.ts), so a release is a
+# change of the page. A pull request that touches it gets the same checks and
+# no deploy.
+#
+# The deploy needs two repository secrets: CLOUDFLARE_API_TOKEN (Workers
+# Scripts and Workers Routes, edit) and CLOUDFLARE_ACCOUNT_ID, of the
+# Cloudflare account that holds pocket.nexus.
+name: site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - .github/workflows/site.yml
+  pull_request:
+    paths:
+      - "site/**"
+      - .github/workflows/site.yml
+  # a release was published, or a pre-release became one: what
+  # releases/latest answers changed
+  release:
+    types: [released]
+  # to deploy main again by hand
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WRANGLER_SEND_METRICS: "false"
+
+defaults:
+  run:
+    working-directory: site
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # a release event runs on its tag; what deploys is main (below)
+          ref: ${{ github.event_name == 'release' && github.event.repository.default_branch || '' }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      # the build reads the latest release: a release the page cannot offer fails here
+      - run: bun run build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  deploy:
+    if: github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
+    needs: check
+    runs-on: ubuntu-latest
+    # one deploy at a time, in the order they came
+    concurrency:
+      group: site-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # a release event runs on its tag; the page deployed is main's
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Deploy to hub.pocket.nexus
+        run: bunx wrangler deploy --message "main $(git rev-parse --short HEAD), ${{ github.event_name }}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

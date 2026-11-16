@@ -68,6 +68,7 @@ device is on.
 | `sdk/daemon` | The TypeScript SDK a daemon is written with; Hub ships it to every daemon |
 | `app` | The macOS app: `PocketHub.xcodeproj` (the app target, sources in `app/PocketHub`) and a Swift package with its libraries, a mock core and the tests |
 | `docs` | The contracts (the control API, the daemon protocol, the links that open the app), and real examples of every control API message |
+| `site` | [hub.pocket.nexus](https://hub.pocket.nexus), the page that hands a visitor the app: built against the latest release, served by Cloudflare |
 
 ## Contracts
 
@@ -124,6 +125,7 @@ cargo test --workspace && cargo clippy --workspace --all-targets
 (cd sdk/daemon && bun test)
 (cd app && export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer && swift test &&
   xcodebuild -quiet -scheme PocketHub -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath build build)
+(cd site && bun install && bun test && bun run typecheck)     # when site/ changed
 ```
 
 `cargo test` runs the vectors, the reference device under Bun and the real
@@ -206,3 +208,38 @@ line report the app's version.
 
 **The app is signed ad hoc**: there is no Developer ID yet, so it is not
 notarized.
+
+Publishing the release deploys [hub.pocket.nexus](https://hub.pocket.nexus)
+again (`.github/workflows/site.yml`): its Download button links the release's
+archive itself, so the page names the version, the size and the SHA-256 of the
+one it offers. The page's build takes the latest release that is not a
+pre-release, and refuses one whose tag is not `v<version>` or that lacks the
+archive of a platform `site/src/release.ts` lists (today macOS alone,
+`Pocket-Hub-<version>-arm64.zip`); the page that is live then stays as it was.
+
+## The download page
+
+`site/` is [hub.pocket.nexus](https://hub.pocket.nexus). Most visitors come
+from the applet store's website, whose Install button opens the app and does
+nothing on a computer without it, so the page is the download first, then the
+devices Hub connects to. It is a Vue app built with Vite, as the store's
+website is, in English and Simplified Chinese, with the store's look. Its build
+asks GitHub for the latest release first (`site/src/release.ts`) and writes the
+archive's own address into the page, so the button is the download and not a
+page to find it on; Cloudflare serves the built folder (`site/wrangler.jsonc`).
+
+A platform is added in `site/src/release.ts` (its archive's name) and in the
+page's words (its download); a device in `site/src/devices.ts`, with a drawing
+of it.
+
+```sh
+cd site
+bun install
+bun run dev              # the page with hot reload; GITHUB_TOKEN, when set, is sent to GitHub
+bun run build            # site/dist
+bunx wrangler dev        # serves site/dist with its headers on http://localhost:8787
+```
+
+A change to `site/` that reaches `main` is deployed by the same workflow. The
+deploy needs the repository secrets `CLOUDFLARE_API_TOKEN` (Workers Scripts
+and Workers Routes, edit) and `CLOUDFLARE_ACCOUNT_ID`.

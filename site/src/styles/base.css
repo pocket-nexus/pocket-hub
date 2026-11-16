@@ -1,0 +1,178 @@
+/* hub.pocket.nexus. The tokens are the applet store's (pocket-nexus/applets,
+   store/site/src/styles/base.css), since most visitors arrive from there and
+   the two sites are one family; a dark set sits beside the light. The hero is
+   dark in both: the night the applets' colours glow in. */
+:root {
+  color-scheme: light dark;
+  /* Inter for Latin text; it has no Chinese, which falls to the system's own */
+  --font: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --sunken: #f1f1f5;
+  --text: #15151a;
+  --text-2: #5a5a68;
+  --text-3: #737380;
+  --line: rgba(18, 18, 40, 0.1);
+  --line-soft: rgba(18, 18, 40, 0.06);
+  --fill: rgba(18, 18, 40, 0.055);
+  --fill-hover: rgba(18, 18, 40, 0.095);
+  --accent: #5046e5;
+  --accent-hover: #4338ca;
+  --accent-ink: #4a3fe0;
+  --accent-soft: rgba(80, 70, 229, 0.1);
+  --on-accent: #ffffff;
+  --header: rgba(251, 251, 253, 0.8);
+  --shadow-card: 0 0 0 1px var(--line-soft), 0 1px 2px rgba(18, 18, 40, 0.04), 0 8px 24px -12px rgba(18, 18, 40, 0.12);
+  --shadow-icon: drop-shadow(0 1px 1.5px rgba(18, 18, 40, 0.2)) drop-shadow(0 6px 14px rgba(18, 18, 40, 0.14));
+
+  /* the store's own colours: its mark's sky, the 3DS's top screen */
+  --sky-1: #7a4bd6;
+  --sky-2: #ff6f91;
+  --sky-3: #ffc46b;
+  --night: #0b0b12;
+
+  --page: 1100px;
+  --gutter: clamp(20px, 5vw, 40px);
+  --header-height: 60px;
+  --ease: cubic-bezier(0.22, 0.8, 0.26, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b0f;
+    --surface: #17171d;
+    --sunken: #121217;
+    --text: #f4f4f7;
+    --text-2: #a9a9b8;
+    --text-3: #8a8a9c;
+    --line: rgba(255, 255, 255, 0.12);
+    --line-soft: rgba(255, 255, 255, 0.07);
+    --fill: rgba(255, 255, 255, 0.08);
+    --fill-hover: rgba(255, 255, 255, 0.14);
+    --accent: #655bf5;
+    --accent-hover: #776efa;
+    --accent-ink: #a8a1ff;
+    --accent-soft: rgba(124, 115, 255, 0.18);
+    --header: rgba(11, 11, 15, 0.74);
+    --shadow-card: 0 0 0 1px var(--line-soft), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    --shadow-icon: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.5)) drop-shadow(0 6px 14px rgba(0, 0, 0, 0.4));
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  color: var(--text);
+  font: 400 16px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+p,
+ol,
+ul,
+figure {
+  margin: 0;
+}
+
+ol,
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+img,
+svg {
+  display: block;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+}
+
+/* The width every section keeps. */
+.page {
+  width: 100%;
+  max-width: calc(var(--page) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+/* A section's title. */
+.section-title {
+  font-size: clamp(24px, 3vw, 30px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+/* Chinese is not set tight like Latin display type: its titles keep their
+   letters' own spacing */
+:lang(zh) h1,
+:lang(zh) .section-title {
+  letter-spacing: 0.01em;
+}
+
+.link {
+  color: var(--accent-ink);
+}
+
+.link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

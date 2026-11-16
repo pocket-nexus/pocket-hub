@@ -1,0 +1,3 @@
+# what `bun run build` writes, and what wrangler keeps of a local preview
+/dist/
+/.wrangler/

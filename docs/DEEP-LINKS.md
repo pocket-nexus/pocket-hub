@@ -73,6 +73,13 @@ for it; a newer link replaces one that is still waiting.
 another shape, or an id outside §1's grammar: Hub comes to the front and
 says that it cannot open the link.
 
+**On a computer without Hub, a link opens nothing either**, and the browser
+tells the page nothing of it: no app claims the scheme. So the page that
+carries a link says, beside it, where Hub is to be had:
+`https://hub.pocket.nexus/`, the download page (`site/`, docs/CONTRIBUTING.md
+"The download page"). That page takes nothing from the page that sent the
+visitor: once Hub is installed, the same link opens it.
+
 ## 3. Where it is implemented
 
 | | |
@@ -82,6 +89,7 @@ says that it cannot open the link.
 | Receiving a link, and following it | `AppDelegate` and `AppState` in `app/PocketHub/AppState.swift` |
 | The sheet | `StoreAppDetails` in `app/PocketHub/StoreSection.swift` |
 | The website's side | `store/site/src/hub.ts` in [pocket-nexus/applets](https://github.com/pocket-nexus/applets) |
+| Where a computer without Hub gets it | `site/`, served at `https://hub.pocket.nexus/` |
 
 A change to §1 or §2 starts on this page, and reaches the website's side in
 the same change.
