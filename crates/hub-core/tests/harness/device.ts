@@ -1,8 +1,9 @@
 // The reference device of Pocket Link 2 (vendor/pocketjs/tools/pocket-link/v2/device.ts),
 // driven by Hub's integration tests: one JSON config as argv[2], commands as
 // JSON lines on stdin, events as JSON lines on stdout. Nothing here changes
-// the reference; it only answers the runtime operations with fixed data and
-// gives the applet channel a few handlers the tests call.
+// the reference; it only answers the runtime operations with fixed data,
+// gives the applet channel a few handlers the tests call, and opens a pairing
+// by a code as a launcher's page would.
 
 import { LinkDevice, type GuestChannel } from "../../../../vendor/pocketjs/tools/pocket-link/v2/device.ts";
 import { type Call, LinkError, type StreamReader } from "../../../../vendor/pocketjs/tools/pocket-link/v2/peer.ts";
@@ -424,6 +425,24 @@ const command = async (cmd: Json) => {
       );
       return;
     }
+    // Pairing by a code this device shows (§3.11), as the launcher's page
+    // drives the guest API: open a pairing, choose a Hub, leave.
+    case "pairOpen":
+      // A test names the code the device shows.
+      if (typeof cmd.code === "string") device.newCode = () => cmd.code as string;
+      out({ ev: "pair-open", ok: device.pairOpen(), code: device.pair.code });
+      return;
+    case "pairAsk":
+      // This harness receives no beacon: the Hub is listed as its beacon would list it.
+      device.hear(config.hub, String(cmd.name ?? "Hub"), config.address, config.port);
+      out({ ev: "pair-ask", ok: device.pairAsk(config.hub) });
+      return;
+    case "pairClose":
+      device.pairClose();
+      return;
+    case "pair":
+      out({ ev: "pair", tag, pair: device.pair });
+      return;
     case "quit":
       device.stop();
       setTimeout(() => process.exit(0), 50);

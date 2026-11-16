@@ -20,7 +20,9 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct DeviceRecord {
     pub id: String,
-    /// The device family the setup wrote this pairing for, such as `3ds`.
+    /// The device family: `3ds` for a pairing a setup wrote, the family of
+    /// the device's target for a pairing by a code (`tab5`), empty for a
+    /// family Hub does not know.
     #[serde(default)]
     pub kind: String,
     #[serde(default)]
