@@ -32,12 +32,31 @@ pub const LAST_SUFFIX: &str = ".last";
 pub const NEW_SUFFIX: &str = ".new";
 pub const LABEL_COMPANION: &str = "pocket-link/2/companion";
 pub const LABEL_CONSOLE: &str = "pocket-link/2/console";
+/// §3.11: keyed with the code's digits. Hub's proof, and the mask of the link key.
+pub const LABEL_PAIR_COMPANION: &str = "pocket-link/2/pair/companion";
+pub const LABEL_PAIR_KEY: &str = "pocket-link/2/pair/key";
+/// §3.11: keyed with the link key the device unmasked.
+pub const LABEL_PAIR_CONSOLE: &str = "pocket-link/2/pair/console";
 pub const NAME_BYTES: usize = 64;
 pub const MODEL_BYTES: usize = 32;
 pub const TARGET_BYTES: usize = 15;
 pub const MAX_FEATURES: usize = 16;
 pub const FEATURE_BYTES: usize = 24;
 pub const REFUSED_MESSAGE_BYTES: usize = 160;
+
+// §3.11 Pairing by a code the device shows
+/// The code is this many decimal digits.
+pub const PAIR_CODE_DIGITS: usize = 6;
+/// How long a device keeps one code, and Hub one request.
+pub const PAIR_WINDOW_MS: u64 = 300_000;
+/// Offers whose proof does not verify that a device takes before it drops its code.
+pub const PAIR_TRIES: u32 = 3;
+/// How long a Hub whose beacon arrived stays in a pairing device's list.
+pub const PAIR_SEEN_MS: u64 = 3000;
+/// Hubs a pairing device lists.
+pub const PAIR_MAX_SEEN: usize = 8;
+/// After `pair.accept` the device waits this long for `pair.done` before it links.
+pub const PAIR_DONE_MS: u64 = 2000;
 
 // §4 Framing
 pub const MAGIC: u32 = 0x4b4c_4b50;

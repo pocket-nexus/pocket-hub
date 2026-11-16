@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use pocket_link::frame::{self, Decoded, FrameDecoder, JsonFrame};
+use pocket_link::consts::*;
 use pocket_link::handshake::{self, Refusal};
+use pocket_link::pair;
 use pocket_link::pairing::{self, DirectoryEntry, ReadOutcome, SetupInput, StorageOp, Via};
 use pocket_link::preamble::{self, Preamble, Range};
 use pocket_link::{CloseCode, FrameType, LinkClose, beacon};
@@ -201,6 +203,7 @@ fn handshake_refusals() {
             "bad_proof" => Refusal::BadProof,
             "malformed" => Refusal::Malformed,
             "busy" => Refusal::Busy,
+            "declined" => Refusal::Declined,
             other => panic!("unknown refusal {other}"),
         };
         let refused = handshake::Refused::new(refusal, s(&case["json"]["message"]));
@@ -226,6 +229,124 @@ fn handshake_refusals() {
     let frames = decode_all(&bytes(&v["deviceCloseAuth"]["close"]), 16384, false).unwrap();
     let Decoded::Frame(close) = &frames[0] else { panic!("close skipped") };
     assert_eq!(frame::parse_close(&close.payload).0, CloseCode::Auth);
+}
+
+/// §3.11: a pairing by a code the device shows.
+#[test]
+fn pair_by_code() {
+    let v = vector("pair-by-code.json");
+    let (code, key) = (s(&v["code"]), s(&v["key"]));
+    // The HMAC key is the code's digits as ASCII bytes.
+    assert_eq!(code.as_bytes(), bytes(&v["codeKey"]));
+    let steps = list(&v["transcript"]);
+    let json_of = |what: &str| &steps.iter().find(|step| s(&step["what"]) == what).unwrap()["json"];
+    let hex_of = |what: &str, from: &str| bytes(&steps.iter().find(|step| s(&step["what"]) == what && s(&step["from"]) == from).unwrap()["hex"]);
+
+    // The device's pair, as Hub reads it off the wire.
+    let frames = decode_all(&hex_of("pair", "device"), 16384, false).unwrap();
+    let Decoded::Frame(pair_frame) = &frames[0] else { panic!("pair skipped") };
+    let asked = pair::parse_pair(frame::parse_json(pair_frame).object.as_ref()).unwrap();
+    assert_eq!((asked.device.as_str(), asked.model.as_str(), asked.target.as_str()), ("0123456789abcdef", "M5Stack Tab5", "tab5-home"));
+    assert_eq!(handshake::encode(&asked).unwrap().to_vec(), hex_of("pair", "device"), "pair encodes back");
+
+    // The three HMAC inputs, both proofs, the mask and the masked key.
+    let companion = s(&json_of("pair.offer")["companion"]);
+    let nonce_c = s(&json_of("pair.offer")["nonce"]);
+    let message = |label: &str| handshake::proof_message(label, &asked.nonce, nonce_c, &asked.device, companion);
+    assert_eq!(message(LABEL_PAIR_COMPANION), s(&v["companionMessage"]));
+    assert_eq!(message(LABEL_PAIR_KEY), s(&v["keyMessage"]));
+    assert_eq!(message(LABEL_PAIR_CONSOLE), s(&v["consoleMessage"]));
+    let masked = |code: &str, key: &str| pair::mask_key(code, key, &asked.nonce, nonce_c, &asked.device, companion).unwrap();
+    assert_eq!(pair::companion_proof(code, &asked.nonce, nonce_c, &asked.device, companion).unwrap(), s(&v["companionProof"]));
+    assert_eq!(masked(code, &"00".repeat(32)), s(&v["keyMask"]), "the mask of a key of zeros is the mask itself");
+    assert_eq!(masked(code, key), s(&v["maskedKey"]));
+    assert_eq!(masked(code, s(&v["maskedKey"])), key, "the device unmasks with the same call");
+    let console = pair::console_proof(key, &asked.nonce, nonce_c, &asked.device, companion).unwrap();
+    assert_eq!(console, s(&v["consoleProof"]));
+
+    // Hub's frames, byte for byte, and the device's reading of the offer.
+    let (answer, selected) = preamble::hub_answer(preamble::HUB_RANGE, preamble::decode(&hex_of("preamble", "device")).unwrap());
+    assert_eq!((answer.to_vec(), selected), (hex_of("preamble", "hub"), 2));
+    let hub_name = s(&json_of("pair.offer")["name"]);
+    let offer = pair::PairOffer::new(code, key, &asked, companion, hub_name, nonce_c).unwrap();
+    assert_eq!(handshake::encode(&offer).unwrap().to_vec(), hex_of("pair.offer", "hub"));
+    assert_eq!(pair::parse_pair_offer(json_of("pair.offer").as_object()), Some(offer.clone()));
+    assert_eq!(handshake::encode(&pair::PairDone::new()).unwrap().to_vec(), hex_of("pair.done", "hub"));
+
+    // The device's accept, as Hub reads it.
+    let frames = decode_all(&hex_of("pair.accept", "device"), 16384, false).unwrap();
+    let Decoded::Frame(accept_frame) = &frames[0] else { panic!("pair.accept skipped") };
+    let proof = pair::parse_pair_accept(frame::parse_json(accept_frame).object.as_ref()).unwrap();
+    assert!(handshake::proof_equals(&proof, &console));
+    assert_eq!(handshake::encode(&pair::PairAccept { t: "pair.accept", proof }).unwrap().to_vec(), hex_of("pair.accept", "device"));
+
+    // The key file the device writes, the `.last` file it deletes first, and Hub's record.
+    let file = &v["keyFile"];
+    let written = pairing::CompanionFile { key: key.to_owned(), name: offer.name.clone(), address: s(&file["address"]).to_owned(), port: file["port"].as_u64().unwrap() as u16 };
+    assert_eq!(pairing::format_companion_file(&written), s(&file["text"]));
+    assert_eq!(s(&file["path"]), format!("{COMPANIONS_DIR}/{companion}{KEY_SUFFIX}"));
+    assert_eq!(s(&file["deleted"]), format!("{COMPANIONS_DIR}/{companion}{LAST_SUFFIX}"));
+    let record = &v["record"];
+    assert_eq!((s(&record["id"]), s(&record["key"])), (asked.device.as_str(), key));
+    assert_eq!((s(&record["name"]), s(&record["model"]), s(&record["target"])), (asked.name.as_str(), asked.model.as_str(), asked.target.as_str()));
+
+    // An offer under another code: its proof is not the one the device
+    // expects, the device closes with `auth` and has 2 tries left.
+    // (The key that offer carries is one Hub minted for it; the vector does
+    // not name it, so the offer is read here and not built.)
+    let wrong = &v["wrongCode"];
+    let frames = decode_all(&bytes(&wrong["offer"]["hex"]), 16384, false).unwrap();
+    let Decoded::Frame(other_frame) = &frames[0] else { panic!("the offer under another code skipped") };
+    let other = pair::parse_pair_offer(frame::parse_json(other_frame).object.as_ref()).unwrap();
+    assert_eq!(pair::parse_pair_offer(wrong["offer"]["json"].as_object()), Some(other.clone()));
+    assert_eq!(handshake::encode(&other).unwrap().to_vec(), bytes(&wrong["offer"]["hex"]), "the offer encodes back");
+    assert_eq!(pair::companion_proof(s(&wrong["entered"]), &asked.nonce, nonce_c, &asked.device, companion).unwrap(), other.proof);
+    assert_eq!(pair::companion_proof(code, &asked.nonce, nonce_c, &asked.device, companion).unwrap(), s(&wrong["expectedProof"]));
+    assert!(!handshake::proof_equals(&other.proof, s(&wrong["expectedProof"])));
+    assert_eq!(frame::encode_close(CloseCode::Auth, "").to_vec(), bytes(&wrong["close"]));
+    assert_eq!(wrong["triesLeft"].as_u64().unwrap(), u64::from(PAIR_TRIES) - 1);
+    assert_eq!(wrong["stored"].as_bool(), Some(false));
+
+    // An offer that names another Hub than the one asked: the device closes with `auth`.
+    let elsewhere = &v["otherCompanion"];
+    let named = pair::parse_pair_offer(elsewhere["offer"]["json"].as_object()).unwrap();
+    assert_ne!(named.companion, s(&elsewhere["asked"]));
+    assert_eq!(frame::encode_close(CloseCode::Auth, "").to_vec(), bytes(&elsewhere["close"]));
+
+    // A `pair.accept` under another key: refused `bad_proof`, nothing stored.
+    let bad = &v["badAccept"];
+    let proof = pair::parse_pair_accept(bad["json"].as_object()).unwrap();
+    assert!(!handshake::proof_equals(&proof, &console));
+    assert_eq!(Refusal::BadProof.code(), s(&bad["refused"]));
+    assert_eq!(bad["stored"].as_bool(), Some(false));
+
+    // `refused` `declined`.
+    let declined = handshake::Refused::new(Refusal::Declined, s(&v["declined"]["json"]["message"]));
+    assert_eq!(handshake::encode(&declined).unwrap().to_vec(), bytes(&v["declined"]["hex"]));
+
+    for accepted in list(&v["codes"]["accepted"]) {
+        assert!(pair::is_code(s(accepted)), "{accepted}");
+    }
+    for refused in list(&v["codes"]["refused"]) {
+        assert!(!pair::is_code(s(refused)), "{refused}");
+        assert!(pair::companion_proof(s(refused), &asked.nonce, nonce_c, &asked.device, companion).is_none(), "{refused}");
+    }
+    for case in list(&v["malformedPair"]) {
+        assert!(pair::parse_pair(case["json"].as_object()).is_err(), "{}", s(&case["name"]));
+        assert_eq!(Refusal::Malformed.code(), s(&case["refused"]));
+    }
+    for case in list(&v["malformedOffer"]) {
+        assert!(pair::parse_pair_offer(case["json"].as_object()).is_none(), "{}", s(&case["name"]));
+    }
+
+    let limits = &v["limits"];
+    let limit = |name: &str| limits[name].as_u64().unwrap();
+    assert_eq!(limit("digits"), PAIR_CODE_DIGITS as u64);
+    assert_eq!(limit("windowMs"), PAIR_WINDOW_MS);
+    assert_eq!(limit("tries"), u64::from(PAIR_TRIES));
+    assert_eq!(limit("seenMs"), PAIR_SEEN_MS);
+    assert_eq!(limit("maxSeen"), PAIR_MAX_SEEN as u64);
+    assert_eq!(limit("doneMs"), PAIR_DONE_MS);
 }
 
 fn read_outcome(value: &Value) -> ReadOutcome {
