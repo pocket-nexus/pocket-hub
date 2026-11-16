@@ -356,7 +356,11 @@ async fn the_vertical_slice_through_the_binary() {
     // The applet exits: the channel closes, the daemon goes idle and stops.
     device.send(json!({"cmd": "exit"})).await;
     event(&client, |e| topic(e, "device.changed") && e["device"]["channels"].as_array().is_some_and(|c| c.is_empty())).await;
-    let closed = daemon_line(&client, "closed (").await;
+    // Polled on a client of its own: the line comes a moment after the
+    // close, so the number of polls differs between runs, and on the traced
+    // client each one would move the id of every later request in the
+    // examples file.
+    let closed = daemon_line(&common::client(&socket, "logs").await, "closed (").await;
     let note = format!("\"bytes\":{MIB},\"hash\":{}", fnv32(&pattern(MIB)));
     assert!(closed.contains(&note), "the daemon read the device's 1 MiB: {closed}");
     let stopped = event(&client, |e| topic(e, "daemon.changed") && e["daemon"]["state"] == "stopped").await;
