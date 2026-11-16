@@ -2,7 +2,7 @@
 
 Pocket Hub is the computer side of Pocket Link 2: a resident core
 (`pocket-hubd`), a command line and a macOS app that are its clients, and the
-daemons it runs for applets. `README.md` has the layout.
+daemons it runs for applets. `docs/CONTRIBUTING.md` has the layout.
 
 ## What decides a question
 
