@@ -42,6 +42,9 @@ pub mod methods {
     pub const SETUP_DISCOVER: &str = "setup.discover";
     pub const SETUP_INSTALL: &str = "setup.install";
     pub const SETUP_CARD: &str = "setup.card";
+    pub const PAIRING_LIST: &str = "pairing.list";
+    pub const PAIRING_ANSWER: &str = "pairing.answer";
+    pub const PAIRING_DECLINE: &str = "pairing.decline";
     pub const DAEMONS_LIST: &str = "daemons.list";
     pub const DAEMONS_INSTALL: &str = "daemons.install";
     pub const DAEMONS_REMOVE: &str = "daemons.remove";
@@ -66,10 +69,12 @@ pub mod topics {
     pub const DEVICE_UNLINKED: &str = "device.unlinked";
     pub const DEVICE_LOG: &str = "device.log";
     pub const DEVICE_SCREENSHOT: &str = "device.screenshot";
+    pub const PAIRING_CHANGED: &str = "pairing.changed";
     pub const DAEMON_CHANGED: &str = "daemon.changed";
     pub const DAEMON_REMOVED: &str = "daemon.removed";
     pub const DAEMON_LOG: &str = "daemon.log";
     pub const HUB_CHANGED: &str = "hub.changed";
     pub const STORE_CHANGED: &str = "store.changed";
-    pub const ALL: [&str; 10] = [DEVICE_CHANGED, DEVICE_REMOVED, DEVICE_UNLINKED, DEVICE_LOG, DEVICE_SCREENSHOT, DAEMON_CHANGED, DAEMON_REMOVED, DAEMON_LOG, HUB_CHANGED, STORE_CHANGED];
+    pub const ALL: [&str; 11] =
+        [DEVICE_CHANGED, DEVICE_REMOVED, DEVICE_UNLINKED, DEVICE_LOG, DEVICE_SCREENSHOT, PAIRING_CHANGED, DAEMON_CHANGED, DAEMON_REMOVED, DAEMON_LOG, HUB_CHANGED, STORE_CHANGED];
 }

@@ -153,7 +153,11 @@ pub struct ChannelRow {
 #[serde(rename_all = "camelCase")]
 pub struct Device {
     pub id: String,
+    /// The device family: `3ds`, `tab5`, or empty for one Hub does not know.
     pub kind: String,
+    /// What Hub can ask of a device of this family: `push`, `screenshot`,
+    /// `logs`, `program`. A client offers an operation only when it is here.
+    pub supports: Vec<String>,
     pub name: String,
     pub model: String,
     pub target: String,
@@ -400,6 +404,41 @@ pub struct InstallReport {
 }
 
 // ---------------------------------------------------------------------------
+// Pairing by a code the device shows
+// ---------------------------------------------------------------------------
+
+/// One device that asks to be paired and waits for the code it shows (§2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PairRequest {
+    /// The device id the request names. Nothing has proved it yet.
+    pub device: String,
+    /// The family of its target, as in a Device.
+    pub kind: String,
+    pub name: String,
+    pub model: String,
+    pub target: String,
+    /// Where the request came from.
+    pub address: String,
+    pub since: i64,
+    /// When Hub closes the request: the device keeps its code as long.
+    pub expires: i64,
+}
+
+/// The result of `pairing.list`, and the members of `pairing.changed`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PairRequests {
+    pub requests: Vec<PairRequest>,
+}
+
+/// `pairing.answer`: `device` is a request's device id, or `"*"` when exactly
+/// one request waits; `code` is the 6 digits the device shows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PairAnswerParams {
+    pub device: String,
+    pub code: String,
+}
+
+// ---------------------------------------------------------------------------
 // Daemons
 // ---------------------------------------------------------------------------
 
@@ -615,6 +654,9 @@ pub enum Event {
     },
     #[serde(rename = "device.screenshot")]
     DeviceScreenshot { id: String, path: String, width: u32, height: u32, frame: u64 },
+    /// The requests that wait for a code changed: the whole list.
+    #[serde(rename = "pairing.changed")]
+    PairingChanged { requests: Vec<PairRequest> },
     #[serde(rename = "daemon.changed")]
     DaemonChanged { daemon: Daemon },
     #[serde(rename = "daemon.removed")]
@@ -640,6 +682,7 @@ impl Event {
             Self::DeviceUnlinked { .. } => DEVICE_UNLINKED,
             Self::DeviceLog { .. } => DEVICE_LOG,
             Self::DeviceScreenshot { .. } => DEVICE_SCREENSHOT,
+            Self::PairingChanged { .. } => PAIRING_CHANGED,
             Self::DaemonChanged { .. } => DAEMON_CHANGED,
             Self::DaemonRemoved { .. } => DAEMON_REMOVED,
             Self::DaemonLog { .. } => DAEMON_LOG,

@@ -228,7 +228,16 @@ impl RefDevice {
     /// Runs the reference device on the pairing in `dir` (a card's
     /// `pocketjs/link`), connecting to the hub `hub` on `port`.
     pub async fn spawn(dir: &Path, hub: &str, port: u16) -> RefDevice {
-        let config = json!({"dir": dir, "hub": hub, "address": "127.0.0.1", "port": port});
+        RefDevice::spawn_with(dir, hub, port, json!({})).await
+    }
+
+    /// `spawn`, with members of the harness's config of the test's choosing:
+    /// the device's name, model, target and features, and `autoConnect`.
+    pub async fn spawn_with(dir: &Path, hub: &str, port: u16, extra: Value) -> RefDevice {
+        let mut config = json!({"dir": dir, "hub": hub, "address": "127.0.0.1", "port": port});
+        if let (Value::Object(config), Value::Object(extra)) = (&mut config, extra) {
+            config.extend(extra);
+        }
         let harness = concat!(env!("CARGO_MANIFEST_DIR"), "/../hub-core/tests/harness/device.ts");
         let mut child = Command::new(bun())
             .arg(harness)

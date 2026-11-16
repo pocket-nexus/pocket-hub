@@ -241,6 +241,17 @@ impl Core {
         self.endpoint.devices().iter().map(|snapshot| map::device(snapshot, self.latest_program(&snapshot.kind))).collect()
     }
 
+    /// The devices that ask to be paired and wait for their code (§3 Pairing).
+    pub fn pair_requests(&self) -> Vec<api::PairRequest> {
+        self.endpoint.pair_requests().iter().map(map::pair_request).collect()
+    }
+
+    /// `pairing.changed` with the requests as they are now.
+    fn publish_pair_requests(&self) {
+        let _guard = self.publication();
+        self.publish(&Event::PairingChanged { requests: self.pair_requests() });
+    }
+
     // --- the device's own program (§2 Device.program) -------------------------
 
     /// The newest release Hub knows of the program of devices of `kind`.
@@ -324,12 +335,14 @@ impl Core {
         }
     }
 
-    /// Every device and daemon again, after events were lost to a full queue.
+    /// Every device, the pairing requests and every daemon again, after
+    /// events were lost to a full queue.
     pub fn resync(&self) {
         let _guard = self.publication();
         for device in self.devices() {
             self.publish(&Event::DeviceChanged { device: Box::new(device) });
         }
+        self.publish(&Event::PairingChanged { requests: self.pair_requests() });
         for daemon in self.daemons() {
             self.publish(&Event::DaemonChanged { daemon });
         }
@@ -582,6 +595,11 @@ async fn on_hub_event(core: &Arc<Core>, event: HubEvent) {
             }
         }
         HubEvent::Forgotten { device } => core.publish(&Event::DeviceRemoved { id: device }),
+        HubEvent::PairRequests => core.publish_pair_requests(),
+        HubEvent::Paired { device } => {
+            tracing::info!(%device, "device paired by the code it shows");
+            core.publish_device(&device);
+        }
         HubEvent::Refused { device, peer, code, message } => {
             tracing::info!(device = device.as_deref().unwrap_or(""), %peer, %code, %message, "a device's handshake was refused");
         }

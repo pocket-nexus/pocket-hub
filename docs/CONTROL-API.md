@@ -85,8 +85,9 @@ on purpose (`--link-port`).
 - After `hub.subscribe`, Hub sends `{"jsonrpc":"2.0","method":"event","params":
   {"topic":<topic>, …}}` (§4). A later `hub.subscribe` replaces the topic list.
   **A client that reads too slowly loses no state**: when its event queue
-  overflows, Hub sends `device.changed`, `daemon.changed` and `store.changed`
-  for everything again; only `device.log` and `daemon.log` lines are lost.
+  overflows, Hub sends `device.changed`, `daemon.changed`, `pairing.changed`
+  and `store.changed` for everything again; only `device.log` and `daemon.log`
+  lines are lost.
 - A client that disconnects cancels its open calls and releases what it held.
 
 ### Errors
@@ -100,13 +101,14 @@ says which:
 | `not_found` | no such device, daemon, app or file | |
 | `not_linked` | the device is paired and not connected now | |
 | `busy` | the device is held by a state-changing operation | `holder` (below) |
-| `link` | the device answered with an error, or the link failed | `code` (the link's error code, or `closed`, `timeout`), `phase` and `reason` when the device gave them (`devices.remove`: `reason` is `running` or `home`) |
+| `link` | the device answered with an error, or the link failed | `code` (the link's error code, or `closed`, `timeout`; `unsupported` also for an operation the device's `supports` does not name, §2), `phase` and `reason` when the device gave them (`devices.remove`: `reason` is `running` or `home`) |
 | `cancelled` | the client cancelled the call | |
 | `setup` | a setup step failed | `step`: the `stage` it failed in (§3 Setup). `reason?`: `unreachable` (the console did not answer), `companions_full` (the device already holds 8 computers), `release_unavailable` (the program could not be fetched), `storage` (a read or a write on the device failed), `card` (the folder is not a card of that device). `detail?`: the failing step in the setup's own words, for a log. `device?` and `confirmed: false` when a key was stored for the device and its final readback did not return: that device is then listed with `setupUnconfirmed` |
 | `invalid` | an argument is unusable (not a `.pocket`, a bad name) | |
 | `daemon` | a daemon could not be installed, started or stopped | `id?` |
 | `release` | the release of a device's program could not be used | `reason`: `unreachable` (the release source did not answer, or not with a release), `not_found` (no such tag), `rejected` (the file fails its checksum or is not a program of that device) |
 | `store` | the applet store could not be used | `reason`: `unreachable` (no answer, or not the store's answer), `rejected` (a downloaded file does not match its hash, its publisher's signature does not verify, or the package is not what its catalog entry says) |
+| `pairing` | a pairing by a code did not complete (§3 Pairing) | `reason`: `wrong_code` (the device did not take the code: it is not the one it shows), `bad_proof` (the device did not prove that it holds the key Hub sent), `gone` (the device left, or its request ended, before it answered). Nothing was stored in any of them |
 | `internal` | anything else | |
 
 `error.message` is one sentence for the owner, **in English**; so are a
@@ -125,7 +127,8 @@ is the same object in a Device's `busy` and in the error `busy`.
 | Field | Type | Content |
 | --- | --- | --- |
 | `id` | string | the device id |
-| `kind` | string | the device family, `3ds` |
+| `kind` | string | the device family: `3ds` (a Nintendo 3DS) or `tab5` (an M5Stack Tab5); empty for a device of a family Hub does not know. A setup writes it (§3 Setup); a pairing by a code takes it from the device's target (§3 Pairing) |
+| `supports` | array | what Hub can ask of a device of this family, linked or not: `push` (`devices.push`, `store.install`), `screenshot` (`devices.screenshot`), `logs` (`devices.logs`), `program` (`devices.installProgram`). `3ds`: all four. `tab5`: none; its applets come from its own store page, which Hub serves, and its software is not installed by Hub. A family Hub does not know: all but `program`. **A client offers an operation only when this list names it**; a call of one it does not name is the error `link` with `code` `unsupported`, and nothing is sent to the device. A link's feature list cannot say this: one group covers several requests (link specification §6.1) |
 | `name`, `model`, `target` | string | from the last handshake; empty before the first |
 | `hostAbi` | integer | |
 | `lastAddress` | string or null | |
@@ -136,8 +139,20 @@ is the same object in a Device's `busy` and in the error `busy`.
 | `status` | object or null | the last `runtime.status` (link specification §6.2) |
 | `apps` | array or null | the installed applets as the device reports them: `{id, output, version, hash, home?}`. A row has no title; a client shows `output` until a catalog gives it one |
 | `busy` | object or null | `{holder, since, launching}` while a state-changing operation holds the device; `holder` as in §1. `launching` is true while the device restarts into a program it was told to start (up to 60 s, until it links again) |
-| `program` | object | the device's own program: `{version, latest, update}`. `version` is what the device reports for it (the `home` row of `apps`), null before the first report or when the device reports none. `latest` is the newest release Hub knows, null until Hub has looked: it looks when a device links, unless it began a look less than 6 hours before (a failed one included), and a device that stays linked is not looked at again until it links again; a failed look leaves the value as it was. `update` is true when `latest` orders above `version`. Pocket Shell's versions were dates up to `2026.11.12` and are SemVer after it, and **every dated version orders below every SemVer one**: a date (three dotted numbers whose first is a year, 2000 or more: `2026.11.11`) compares part by part as numbers, a SemVer version (`0.1.1`, `0.3.0-rc.1`) by SemVer precedence; a version in any other form is never older or newer |
+| `program` | object | the device's own program: `{version, latest, update}`. `version` is what the device reports for it (the `home` row of `apps`), null before the first report or when the device reports none. `latest` is the newest release Hub knows, null until Hub has looked and always null for a device whose `supports` lacks `program`: it looks when a device links, unless it began a look less than 6 hours before (a failed one included), and a device that stays linked is not looked at again until it links again; a failed look leaves the value as it was. `update` is true when `latest` orders above `version`. Pocket Shell's versions were dates up to `2026.11.12` and are SemVer after it, and **every dated version orders below every SemVer one**: a date (three dotted numbers whose first is a year, 2000 or more: `2026.11.11`) compares part by part as numbers, a SemVer version (`0.1.1`, `0.3.0-rc.1`) by SemVer precedence; a version in any other form is never older or newer |
 | `channels` | array | open applet channels: `{app, generation, since}` |
+
+**PairRequest** — one device that asks to be paired by the code it shows
+(§3 Pairing) and waits for that code:
+
+| Field | Type | Content |
+| --- | --- | --- |
+| `device` | string | the device id it names. **Nothing has proved it yet**: the id is the request's name, not an identity |
+| `kind` | string | the family of its target, as in a Device; empty for one Hub does not know |
+| `name`, `model`, `target` | string | as the device says them |
+| `address` | string | where the request came from: the device's IP address on a network carrier |
+| `since` | integer | when Hub read the request |
+| `expires` | integer | when Hub closes it: 5 minutes after `since`, the time the device keeps its code |
 
 **Daemon** — one installed daemon:
 
@@ -209,7 +224,10 @@ and sends its output name, or else sends `app` as an output name.
 
 ### Setup
 
-The first install on a device, outside the link (link specification §3.2).
+The first install on a device, outside the link (link specification §3.2),
+for a device whose storage Hub reaches. `kind` is `3ds`, the one family set up
+this way; a device that shows a code is paired on the link instead (Pairing,
+below).
 
 | Method | Params | Result |
 | --- | --- | --- |
@@ -240,6 +258,43 @@ came after Hub stored a key for the device (a write whose readback did not
 return), the error carries `device` and `confirmed: false`, and the device is
 listed with `setupUnconfirmed` until it links or a later setup settles it (link
 specification §3.2).
+
+### Pairing
+
+A device that has a screen and no storage Hub can write through is paired on
+the link, by a code it shows (link specification §3.11): **the device's owner
+opens a pairing on the device and chooses this computer there, and Hub holds
+the device's request until its owner enters the 6 digits the device shows.**
+An M5Stack Tab5 pairs this way. No setup comes before it and no software is
+installed: the pairing it leaves is the one a setup leaves, and the device
+links by itself from then on.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `pairing.list` | | `{requests: [PairRequest]}`: the requests that wait for a code, oldest first |
+| `pairing.answer` | `{device, code}` | `Device`: the device, now paired. `code` is the 6 digits the device shows, as ASCII digits. Hub mints a link key and sends it to the device under the code; the answer comes when the device has proved that it holds the key, and **the device's record is stored then and not before**. A `code` that is not 6 digits is `invalid`; no request of that device waiting for a code is `not_found`; anything else is the error `pairing` |
+| `pairing.decline` | `{device}` | `{}`. The device is told that this computer's owner dismissed the request (the link's refusal `declined`). No request of that device waiting for a code is `not_found` |
+
+`device` is the device id of a request, or `"*"` when exactly one request
+waits: with none `"*"` is `not_found`, with several it is `invalid`.
+
+- **Hub keeps one request for a device id**, a later one replacing the one
+  before, and closes a request 5 minutes after it came. A request leaves the
+  list when it is answered, declined, replaced or closed, and when the device
+  goes away; `pairing.changed` carries the list after each change.
+- **A wrong code stores nothing.** The error is `pairing` with `reason`
+  `wrong_code`, and a pairing Hub already held for that device id stays as it
+  was. The device takes 3 wrong codes before it drops its code; while it has
+  tries left it asks again within a second, which is a new request in the
+  list.
+- **While a code is on its way to the device the request is not in the
+  list**: a second `pairing.answer` for it is `not_found`.
+- After a pairing, `device.changed` carries the device (`kind` from its
+  target, `name` and `model` as its request said them), and again when it
+  links.
+- **Hub sets no device up this way and has no program to install on it**:
+  `setup.discover`, `setup.install` and `setup.card` take the kind `3ds`
+  alone.
 
 ### Daemons
 
@@ -284,6 +339,7 @@ of what `store.install` fetches until the store publishes daemons.
 | `device.unlinked` | `id`, `code`, `reason` | the link ended, with the link's close code |
 | `device.log` | `id`, `level`, `source`, `text`, `frame`, `dropped?` | a log line while logs are on |
 | `device.screenshot` | `id`, `path`, `width`, `height`, `frame` | the device sent a screenshot unasked |
+| `pairing.changed` | `requests: [PairRequest]` | the requests that wait for a code changed (§3 Pairing): the whole list, as `pairing.list` answers it |
 | `daemon.changed` | `daemon: Daemon` | a daemon was installed or changed state |
 | `daemon.removed` | `id` | |
 | `daemon.log` | `id`, `at`, `stream`, `text` | a line of a daemon's output |

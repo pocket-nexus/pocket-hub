@@ -27,6 +27,8 @@ pub enum ErrorKind {
     Store,
     /// The release of a device's program could not be used.
     Release,
+    /// A pairing by a code did not complete.
+    Pairing,
     Internal,
 }
 
@@ -43,6 +45,7 @@ impl ErrorKind {
             Self::Daemon => "daemon",
             Self::Store => "store",
             Self::Release => "release",
+            Self::Pairing => "pairing",
             Self::Internal => "internal",
         }
     }
@@ -57,7 +60,8 @@ pub struct ErrorData {
     /// `busy`: who holds the device.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub holder: Option<Holder>,
-    /// `link`: the link's error code, or `closed`, `timeout`.
+    /// `link`: the link's error code, or `closed`, `timeout`; `unsupported`
+    /// also for an operation the device's `supports` does not name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
     /// `link`: the phase the device gave.
@@ -69,6 +73,7 @@ pub struct ErrorData {
     /// `setup`: `unreachable`, `companions_full`, `release_unavailable`,
     /// `storage` or `card`. `store`: `unreachable` or `rejected`.
     /// `release`: `unreachable`, `not_found` or `rejected`.
+    /// `pairing`: `wrong_code`, `bad_proof` or `gone`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     /// `setup`: the failing step in the setup's own words, for a log.

@@ -9,7 +9,7 @@ use bytes::Bytes;
 use pocket_hub_api::types::*;
 use pocket_hub_api::{ErrorKind, RpcError, methods};
 use pocket_hub_applet_store::{StoreError, is_update};
-use pocket_hub_core::{DeviceHandle, LaunchTarget, OpError};
+use pocket_hub_core::{DeviceHandle, LaunchTarget, OpError, Operation, family};
 use pocket_hub_daemons::{InstallError, StartError};
 use pocket_hub_setup::{DeviceFamily, DiscoverOptions, FTPD_PORT, InstallOptions, InstallTarget, InstalledProgram, InstalledPrograms, ReleaseError, ReleaseFetcher, ShellSource};
 use serde::Serialize;
@@ -117,6 +117,20 @@ pub async fn dispatch(core: &Arc<Core>, client: &Client, id: &Value, method: &st
         methods::SETUP_INSTALL => setup_install(core, params(method, value)?, &progress).await,
         methods::SETUP_CARD => setup_card(core, params(method, value)?, &progress).await,
 
+        methods::PAIRING_LIST => {
+            let _guard = core.publication();
+            ok(PairRequests { requests: core.pair_requests() })
+        }
+        methods::PAIRING_ANSWER => pair_answer(core, params(method, value)?).await,
+        methods::PAIRING_DECLINE => {
+            let p: DeviceParams = params(method, value)?;
+            let id = pair_request(core, &p.device)?;
+            if !core.endpoint.decline_pair(&id) {
+                return Err(map::pair_error(pocket_hub_core::PairError::NoRequest));
+            }
+            ok(Empty {})
+        }
+
         methods::DAEMONS_LIST => {
             let _guard = core.publication();
             ok(DaemonList { daemons: core.daemons() })
@@ -209,6 +223,13 @@ fn device(core: &Core, selector: &str) -> Result<DeviceHandle, RpcError> {
     core.endpoint.device(selector).ok_or_else(|| RpcError::op(ErrorKind::NotFound, format!("No device {selector} is paired with this Hub.")))
 }
 
+/// Refuses an operation the device's family does not take (§2
+/// `Device.supports`), before anything is fetched or sent.
+fn require(handle: &DeviceHandle, operation: Operation) -> Result<(), RpcError> {
+    let kind = handle.snapshot().ok_or_else(|| map::op_error(OpError::Unknown))?.kind;
+    if family::supports(&kind, operation) { Ok(()) } else { Err(map::unsupported(operation)) }
+}
+
 fn holder(client: &Client, method: &str) -> String {
     map::holder_label(&Holder { kind: client.info.kind, name: client.info.name.clone(), method: method.to_owned() })
 }
@@ -267,6 +288,7 @@ where
 
 async fn push(core: &Core, client: &Client, method: &str, p: PathParams, progress: &Progress<'_>) -> Result<Value, RpcError> {
     let handle = device(core, &p.device)?;
+    require(&handle, Operation::Push)?;
     let path = absolute(&p.path)?;
     let bytes = read_file(&path).await?;
     let hash = pocket_hub_core::ops::package_hash(&bytes).map_err(|why| invalid(format!("{} is not a Pocket package: {why}.", path.display())))?;
@@ -306,6 +328,7 @@ async fn remove(core: &Core, client: &Client, method: &str, p: RemoveParams) -> 
 
 async fn screenshot(core: &Core, p: ScreenshotParams) -> Result<Value, RpcError> {
     let handle = device(core, &p.device)?;
+    require(&handle, Operation::Screenshot)?;
     let path = p.path.as_deref().map(absolute).transpose()?;
     let shot = handle.screenshot().await.map_err(map::op_error)?;
     let written = core.save_screenshot(handle.id(), shot.frame, shot.png, path).await.map_err(|error| internal(format!("The screenshot could not be written: {error}.")))?;
@@ -314,6 +337,7 @@ async fn screenshot(core: &Core, p: ScreenshotParams) -> Result<Value, RpcError>
 
 async fn logs(core: &Core, client: &Client, p: LogsParams) -> Result<Value, RpcError> {
     let handle = device(core, &p.device)?;
+    require(&handle, Operation::Logs)?;
     if p.on {
         // Remembered first: a device that is not linked gets them at its
         // link, as one that relinks does.
@@ -355,8 +379,9 @@ async fn logs(core: &Core, client: &Client, p: LogsParams) -> Result<Value, RpcE
 ///   setup's "already installed" rule stays true (`record_program`).
 async fn install_program(core: &Arc<Core>, client: &Client, method: &str, p: InstallProgramParams, progress: &Progress<'_>) -> Result<Value, RpcError> {
     let handle = device(core, &p.device)?;
+    require(&handle, Operation::Program)?;
     let snapshot = handle.snapshot().ok_or_else(|| map::op_error(OpError::Unknown))?;
-    let family = DeviceFamily::from_kind(&snapshot.kind).ok_or_else(|| invalid(format!("Hub has no program for a device of kind \"{}\".", snapshot.kind)))?;
+    let family = DeviceFamily::from_kind(&snapshot.kind).ok_or_else(|| internal(format!("Hub has no program for a device of kind \"{}\".", snapshot.kind)))?;
     let asks_latest = match &p.program {
         None => true,
         Some(ProgramChoice::Release { release }) => release == "latest",
@@ -519,6 +544,7 @@ async fn store_apps(core: &Arc<Core>, p: StoreAppsParams) -> Result<Value, RpcEr
 /// under the device mutex.
 async fn store_install(core: &Arc<Core>, client: &Client, method: &str, p: StoreInstallParams, progress: &Progress<'_>) -> Result<Value, RpcError> {
     let handle = device(core, &p.device)?;
+    require(&handle, Operation::Push)?;
     let snapshot = handle.snapshot().ok_or_else(|| map::op_error(OpError::Unknown))?;
     if !snapshot.linked {
         return Err(map::op_error(OpError::NotLinked));
@@ -561,11 +587,14 @@ async fn store_install(core: &Arc<Core>, client: &Client, method: &str, p: Store
 // Setup
 // ---------------------------------------------------------------------------
 
+/// A setup writes onto a device's storage (§3 Setup), which Hub reaches for
+/// a 3DS alone. A Tab5 is named apart: its owner is told the way it does pair.
 fn check_kind(kind: &str) -> Result<(), RpcError> {
-    if kind != "3ds" {
-        return Err(invalid(format!("Hub cannot set up a device of kind \"{kind}\"; the one kind is \"3ds\".")));
+    match kind {
+        family::KIND_3DS => Ok(()),
+        family::KIND_TAB5 => Err(invalid("An M5Stack Tab5 is not set up from the computer: it pairs by the code it shows (pairing.answer).")),
+        _ => Err(invalid(format!("Hub cannot set up a device of kind \"{kind}\"; the one kind it sets up is \"3ds\"."))),
     }
-    Ok(())
 }
 
 async fn discover(core: &Core, p: KindParams) -> Result<Value, RpcError> {
@@ -663,6 +692,35 @@ async fn run_setup(core: &Core, target: InstallTarget, source: ShellSource, prog
     }
     tracing::info!(device = report.device_id.as_deref().unwrap_or(""), ok = report.ok, via = report.via, detail = report.detail.as_deref().unwrap_or(""), "setup");
     ok(result?)
+}
+
+// ---------------------------------------------------------------------------
+// Pairing by a code the device shows
+// ---------------------------------------------------------------------------
+
+/// A request by its device id, or `"*"` for the only one that waits.
+fn pair_request(core: &Core, selector: &str) -> Result<String, RpcError> {
+    if selector != "*" {
+        return Ok(selector.to_owned());
+    }
+    let waiting = core.endpoint.pair_requests();
+    match waiting.as_slice() {
+        [] => Err(RpcError::op(ErrorKind::NotFound, "No device asks to be paired.")),
+        [only] => Ok(only.device.clone()),
+        _ => Err(invalid(format!("{} devices ask to be paired; name one by its id instead of \"*\".", waiting.len()))),
+    }
+}
+
+/// `pairing.answer`: Hub's owner entered the code the device shows (link
+/// specification §3.11). The endpoint mints the key, sends it under the
+/// code, and stores the record when the device's proof verifies; the answer
+/// is the Device that record makes. No key is in it, nor in the error of a
+/// pairing that did not complete.
+async fn pair_answer(core: &Arc<Core>, p: PairAnswerParams) -> Result<Value, RpcError> {
+    let id = pair_request(core, &p.device)?;
+    core.endpoint.pair(&id, &p.code).await.map_err(map::pair_error)?;
+    let _guard = core.publication();
+    ok(core.device(&id).ok_or_else(|| internal("The device was paired and its record is gone."))?)
 }
 
 // ---------------------------------------------------------------------------

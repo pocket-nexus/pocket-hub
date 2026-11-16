@@ -89,7 +89,7 @@
     "daemons.remove": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 45,
+        "id": 63,
         "method": "daemons.remove",
         "params": {
           "id": "dev.pocket-nexus.link-channel"
@@ -97,7 +97,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 45,
+        "id": 63,
         "result": {}
       }
     },
@@ -234,6 +234,12 @@
         "result": {
           "id": "0123456789abcdef",
           "kind": "3ds",
+          "supports": [
+            "push",
+            "screenshot",
+            "logs",
+            "program"
+          ],
           "name": "Test 3DS",
           "model": "New Nintendo 3DS XL",
           "target": "3ds-dev",
@@ -391,6 +397,12 @@
             {
               "id": "0123456789abcdef",
               "kind": "3ds",
+              "supports": [
+                "push",
+                "screenshot",
+                "logs",
+                "program"
+              ],
               "name": "Test 3DS",
               "model": "New Nintendo 3DS XL",
               "target": "3ds-dev",
@@ -662,13 +674,13 @@
     "hub.shutdown": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 50,
+        "id": 68,
         "method": "hub.shutdown",
         "params": {}
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 50,
+        "id": 68,
         "result": {}
       }
     },
@@ -712,6 +724,85 @@
         "jsonrpc": "2.0",
         "id": 3,
         "result": {}
+      }
+    },
+    "pairing.answer": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 51,
+        "method": "pairing.answer",
+        "params": {
+          "device": "*",
+          "code": "314159"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 51,
+        "result": {
+          "id": "00000000000000a5",
+          "kind": "tab5",
+          "supports": [],
+          "name": "Desk Tab5",
+          "model": "M5Stack Tab5",
+          "target": "tab5-home",
+          "hostAbi": 0,
+          "lastAddress": "127.0.0.1",
+          "lastSeen": null,
+          "setupUnconfirmed": false,
+          "duplicateId": false,
+          "link": null,
+          "status": null,
+          "apps": null,
+          "busy": null,
+          "program": {
+            "version": null,
+            "latest": null,
+            "update": false
+          },
+          "channels": []
+        }
+      }
+    },
+    "pairing.decline": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 49,
+        "method": "pairing.decline",
+        "params": {
+          "device": "00000000000000a5"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 49,
+        "result": {}
+      }
+    },
+    "pairing.list": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 45,
+        "method": "pairing.list",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 45,
+        "result": {
+          "requests": [
+            {
+              "device": "00000000000000a5",
+              "kind": "tab5",
+              "name": "Desk Tab5",
+              "model": "M5Stack Tab5",
+              "target": "tab5-home",
+              "address": "127.0.0.1",
+              "since": 1767225600000,
+              "expires": 1767225900000
+            }
+          ]
+        }
       }
     },
     "setup.card": {
@@ -1123,6 +1214,12 @@
         "device": {
           "id": "0123456789abcdef",
           "kind": "3ds",
+          "supports": [
+            "push",
+            "screenshot",
+            "logs",
+            "program"
+          ],
           "name": "Test 3DS",
           "model": "New Nintendo 3DS XL",
           "target": "3ds-dev",
@@ -1257,6 +1354,25 @@
         }
       }
     },
+    "pairing.changed": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "pairing.changed",
+        "requests": [
+          {
+            "device": "00000000000000a5",
+            "kind": "tab5",
+            "name": "Desk Tab5",
+            "model": "M5Stack Tab5",
+            "target": "tab5-home",
+            "address": "127.0.0.1",
+            "since": 1767225600000,
+            "expires": 1767225900000
+          }
+        ]
+      }
+    },
     "store.changed": {
       "jsonrpc": "2.0",
       "method": "event",
@@ -1367,7 +1483,7 @@
     "daemon": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 48,
+        "id": 66,
         "method": "daemons.start",
         "params": {
           "id": "dev.test.broken"
@@ -1375,7 +1491,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 48,
+        "id": 66,
         "error": {
           "code": 1,
           "message": "The daemon did not start: the process exited before its daemon.hello (exited with code 3).",
@@ -1470,6 +1586,29 @@
           "message": "The device is not connected to this Hub now.",
           "data": {
             "kind": "not_linked"
+          }
+        }
+      }
+    },
+    "pairing": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 47,
+        "method": "pairing.answer",
+        "params": {
+          "device": "*",
+          "code": "271828"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 47,
+        "error": {
+          "code": 1,
+          "message": "The code is not the one the device shows. Nothing was stored.",
+          "data": {
+            "kind": "pairing",
+            "reason": "wrong_code"
           }
         }
       }
