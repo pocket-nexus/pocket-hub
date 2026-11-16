@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" role="img" aria-labelledby="icon-title">
+  <title id="icon-title">Pocket Hub</title>
+
+  <!-- A menu bar template image (the image set says so): only its alpha is
+       used, the system picks the colour. This is the filled one of the pair,
+       for when a device is linked; MenuBarIcon is the outline.
+
+       One colour cannot tell the flap from the body, so a 1 pt gap does: the
+       flap and the body are separate shapes, and the same gap rings the
+       button. They are plain paths rather than a mask, which not every SVG
+       importer honours. -->
+  <g fill="#000">
+    <path d="M1.5 3.5A2 2 0 0 1 3.5 1.5H14.5A2 2 0 0 1 16.5 3.5V4.093L11.092 7.215A2.75 2.75 0 0 0 6.908 7.215L1.5 4.093Z"/>
+    <path d="M1.5 5.247L6.408 8.081A2.75 2.75 0 1 0 11.592 8.081L16.5 5.247V9.75A6.75 6.75 0 0 1 9.75 16.5H8.25A6.75 6.75 0 0 1 1.5 9.75Z"/>
+    <circle cx="9" cy="9" r="1.75"/>
+  </g>
+</svg>

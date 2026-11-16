@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="icon-title icon-desc">
+  <title id="icon-title">Pocket Hub</title>
+  <desc id="icon-desc">A pocket whose flap and centre fold meet at one button.</desc>
+
+  <!-- The icon as one picture, for a place that takes an SVG. The app is not
+       built from this file: its icon is PocketHub/AppIcon.icon, whose layer is
+       this pocket and whose fill is this plate. A change to one is a change
+       to the other.
+
+       Flat fills only, on a white plate: violet #6A45D9 for the pocket, pink
+       #FF5F9E for the flap and yellow #FFD23F for the button. The violet is
+       the hue of the ink #171226 (255 degrees) made light enough to be a
+       colour: beside the pink it is a neighbour, where the ink was a black.
+       The macOS icon grid: an 824 plate centred on a 1024 canvas, transparent
+       outside it. -->
+  <rect id="plate" x="100" y="100" width="824" height="824" rx="186" fill="#FFFFFF"/>
+
+  <!-- The pocket is three blocks. Each later block is drawn over the one
+       before it rather than beside it, so no seam of the plate shows where
+       two of them meet. The right half is the violet lifted one step, which
+       is what draws the fold. -->
+  <g id="pocket">
+    <path id="body-left" fill="#6A45D9" d="M318 256H706A56 56 0 0 1 762 312V543A225 225 0 0 1 537 768H487A225 225 0 0 1 262 543V312A56 56 0 0 1 318 256Z"/>
+    <path id="body-right" fill="#7F5BE6" d="M512 256H706A56 56 0 0 1 762 312V543A225 225 0 0 1 537 768H512Z"/>
+    <!-- The flap's edges leave the centre at 30 degrees, so with the fold
+         below them the three lines sit 120 degrees apart: a hub's spokes. -->
+    <path id="flap" fill="#FF5F9E" d="M318 256H706A56 56 0 0 1 762 312V367.66L512 512L262 367.66V312A56 56 0 0 1 318 256Z"/>
+  </g>
+
+  <!-- The button that holds the pocket shut is the hub, at the exact centre
+       of the canvas. -->
+  <circle id="core" cx="512" cy="512" r="52" fill="#FFD23F"/>
+</svg>
