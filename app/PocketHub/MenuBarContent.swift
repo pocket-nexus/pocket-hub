@@ -10,7 +10,7 @@ struct MenuBarLabel: View {
 
     var body: some View {
         let model = state.model
-        Image(systemName: symbol(model))
+        icon(model)
             .accessibilityLabel(Text("Pocket Hub"))
             .accessibilityValue(value(model))
             .onAppear {
@@ -21,9 +21,13 @@ struct MenuBarLabel: View {
             }
     }
 
-    private func symbol(_ model: HubModel) -> String {
-        guard model.isLive else { return "exclamationmark.triangle" }
-        return model.linkedDevices.isEmpty ? "gamecontroller" : "gamecontroller.fill"
+    /// The app icon's pocket, outlined with no device linked and filled with
+    /// one; a warning sign when the core does not answer. The two pockets are
+    /// template images (Assets.xcassets), so the menu bar colours them as it
+    /// does a system symbol.
+    private func icon(_ model: HubModel) -> Image {
+        guard model.isLive else { return Image(systemName: "exclamationmark.triangle") }
+        return Image(model.linkedDevices.isEmpty ? .menuBarIcon : .menuBarIconFill)
     }
 
     private func value(_ model: HubModel) -> Text {

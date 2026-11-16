@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- The one layer of the app icon: a pocket whose flap and centre fold meet
+       at one button. The plate behind it is the icon's fill (icon.json), and
+       the system cuts the icon's shape, so neither is drawn here.
+
+       The pocket was drawn on the older macOS grid, where the plate is 824 of
+       the 1024 canvas. Here the canvas is the plate, so the drawing is scaled
+       by 1024/824 about the centre and keeps its size against the plate. -->
+  <g transform="translate(512 512) scale(1.242718) translate(-512 -512)">
+    <!-- Three blocks. Each later block is drawn over the one before it rather
+         than beside it, so no seam shows where two of them meet. The right
+         half is the violet lifted one step, which is what draws the fold. -->
+    <path fill="#6A45D9" d="M318 256H706A56 56 0 0 1 762 312V543A225 225 0 0 1 537 768H487A225 225 0 0 1 262 543V312A56 56 0 0 1 318 256Z"/>
+    <path fill="#7F5BE6" d="M512 256H706A56 56 0 0 1 762 312V543A225 225 0 0 1 537 768H512Z"/>
+    <!-- The flap's edges leave the centre at 30 degrees, so with the fold
+         below them the three lines sit 120 degrees apart: a hub's spokes. -->
+    <path fill="#FF5F9E" d="M318 256H706A56 56 0 0 1 762 312V367.66L512 512L262 367.66V312A56 56 0 0 1 318 256Z"/>
+    <!-- The button that holds the pocket shut is the hub, at the exact centre
+         of the canvas. -->
+    <circle cx="512" cy="512" r="52" fill="#FFD23F"/>
+  </g>
+</svg>

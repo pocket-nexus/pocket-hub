@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  The app's Info.plist, whole. Xcode copies it into the bundle and replaces
-  each $(…) with the target's build setting of that name: the bundle id and
-  the version are build settings because Xcode signs and archives with them.
+  The app's Info.plist, whole but for the icon. Xcode copies it into the
+  bundle and replaces each $(…) with the target's build setting of that name:
+  the bundle id and the version are build settings because Xcode signs and
+  archives with them. The icon's two keys (CFBundleIconFile, CFBundleIconName)
+  are not here: Xcode adds them when it compiles the icon the target names
+  (ASSETCATALOG_COMPILER_APPICON_NAME, which is AppIcon.icon).
 
   Pocket Hub keeps running in the menu bar with its window closed, so macOS
   must not end it as an idle app with no windows (automatic termination) nor
