@@ -4,6 +4,8 @@
 //! - `beacon`: Hub's UDP beacons (§2.2).
 //! - `endpoint`: the accept loops, the handshake (§3, §4.1), one link per
 //!   device (§2.4), and the API: `Endpoint`, its snapshots and events.
+//! - `pairing`: a device's request to be paired by the code it shows (§3.11).
+//! - `family`: the device families Hub knows and what each takes.
 //! - `conn`: one link after `ready`: the write queue, requests, events,
 //!   streams and credit, keepalive and closing (§4 to §8).
 //! - `relay`: applet channels joined to daemons (§7, docs/DAEMON-PROTOCOL.md §5).
@@ -19,19 +21,22 @@ pub mod carrier;
 pub mod config;
 mod conn;
 pub mod endpoint;
+pub mod family;
 pub mod lock;
 pub mod ops;
+mod pairing;
 pub mod reading;
 mod relay;
 pub mod screenshot;
 
 pub use api::{
     BoxFuture, CALL_HELD_BYTES, CallBody, CallCancel, CallSink, CancelCause, ChannelHost, ChannelInfo, ChannelOffer, ChannelOpenError, ChannelStream, CloseInfo, DeviceCall, DeviceRequests,
-    DeviceSnapshot, ErrorReply, HubEvent, LaunchTarget, LinkInfo, OpError, SinkError,
+    DeviceSnapshot, ErrorReply, HubEvent, LaunchTarget, LinkInfo, OpError, PairError, PairRequest, SinkError,
 };
 pub use apps::InstalledApp;
 pub use carrier::{CarrierKind, CarrierListener, CarrierStream, TcpCarrier};
 pub use config::{EndpointConfig, Timing};
 pub use endpoint::{DeviceNotifier, Endpoint, EndpointBuilder};
+pub use family::Operation;
 pub use ops::DeviceHandle;
 pub use screenshot::Screenshot;

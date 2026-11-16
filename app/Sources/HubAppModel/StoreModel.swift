@@ -229,6 +229,7 @@ public final class StoreModel {
         guard installTasks[key] == nil else { return }
         installs[key] = Install(appId: app.id, deviceId: device, phase: nil, fraction: nil)
         let deviceName = model?.device(device)?.displayName
+        let deviceKind = model?.device(device)?.kind ?? DeviceKind(rawValue: "")
         let linkSince = model?.device(device)?.link?.since
         let title = app.title
         let progress: @Sendable (TransferProgress) -> Void = { [weak self] update in
@@ -252,7 +253,7 @@ public final class StoreModel {
                     return
                 }
                 self?.installFinished(key, outcome: cancelled ? "cancelled" : "failed: \(error)",
-                                      failure: UserFacingError(storeInstallError: error, appTitle: title, deviceName: deviceName))
+                                      failure: UserFacingError(storeInstallError: error, appTitle: title, deviceName: deviceName, kind: deviceKind))
             }
         }
     }
@@ -276,7 +277,8 @@ public final class StoreModel {
         if sameLink && !closed {
             installFinished(key, outcome: "failed: \(error)",
                             failure: UserFacingError(storeInstallError: error, appTitle: appTitle,
-                                                     deviceName: current?.displayName))
+                                                     deviceName: current?.displayName,
+                                                     kind: current?.kind ?? DeviceKind(rawValue: "")))
             return
         }
         if current?.link == nil || sameLink {

@@ -22,7 +22,13 @@ struct SetupFlowTests {
         #expect(h.model.devices.isEmpty)
         let flow = h.model.makeSetupFlow()
         flow.discoveryInterval = .milliseconds(50)
+        // The first page asks which kind of device; a 3DS is set up over its storage.
+        #expect(flow.step == .chooseDevice)
+        flow.choose(.nintendo3ds)
         #expect(flow.step == .instructions)
+        flow.chooseAgain()
+        #expect(flow.step == .chooseDevice)
+        flow.choose(.nintendo3ds)
 
         flow.startSearching()
         #expect(flow.step == .searching)

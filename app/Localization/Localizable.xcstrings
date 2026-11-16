@@ -1,6 +1,22 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ Is Paired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Is Paired"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已配对"
+          }
+        }
+      }
+    },
     "%@ can't delete applets from this Mac." : {
       "localizations" : {
         "en" : {
@@ -13,6 +29,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 无法从这台 Mac 删除小程序。"
+          }
+        }
+      }
+    },
+    "%@ can't do this." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ can't do this."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 无法执行此操作。"
           }
         }
       }
@@ -77,6 +109,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 更新后还没有重新连接。"
+          }
+        }
+      }
+    },
+    "%@ installs applets itself, from the store on the device. This Mac sends them while Pocket Hub is running." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ installs applets itself, from the store on the device. This Mac sends them while Pocket Hub is running."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 要在设备上自己安装小程序：请使用设备上的商店。Pocket Hub 运行时，这台 Mac 会把小程序发送给它。"
+          }
+        }
+      }
+    },
+    "%@ installs applets itself: open **Mac** on its home screen. This Mac sends them while Pocket Hub is running." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ installs applets itself: open **Mac** on its home screen. This Mac sends them while Pocket Hub is running."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 要在设备上自己安装小程序：请在它的主屏幕上打开 **Mac**。Pocket Hub 运行时，这台 Mac 会把小程序发送给它。"
           }
         }
       }
@@ -221,6 +285,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 未连接。请开机并打开 Pocket Shell 以安装小程序。"
+          }
+        }
+      }
+    },
+    "%@ isn't connected. Turn it on to install applets." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ isn't connected. Turn it on to install applets."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 未连接。请开机以安装小程序。"
           }
         }
       }
@@ -389,6 +469,22 @@
         }
       }
     },
+    "Add a Device" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add a Device"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加设备"
+          }
+        }
+      }
+    },
     "Add a Device…" : {
       "localizations" : {
         "en" : {
@@ -449,6 +545,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加一台设备，即可在上面安装小程序、截图等。"
+          }
+        }
+      }
+    },
+    "Add an M5Stack Tab5" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add an M5Stack Tab5"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加 M5Stack Tab5"
           }
         }
       }
@@ -837,6 +949,22 @@
         }
       }
     },
+    "Check the code on the device and try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check the code on the device and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请核对设备上的配对码，然后重试。"
+          }
+        }
+      }
+    },
     "Check the file or the value you chose, then try again." : {
       "localizations" : {
         "en" : {
@@ -885,6 +1013,22 @@
         }
       }
     },
+    "Choose **%@** in the list. The Tab5 then shows a code." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose **%@** in the list. The Tab5 then shows a code."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在列表中选择 **%@**。随后 Tab5 会显示一个配对码。"
+          }
+        }
+      }
+    },
     "Choose a device in the sidebar." : {
       "localizations" : {
         "en" : {
@@ -917,6 +1061,22 @@
         }
       }
     },
+    "Choose the kind of device to add." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose the kind of device to add."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要添加的设备类型。"
+          }
+        }
+      }
+    },
     "Choose the one to set up. The address is shown at the top of ftpd on each console." : {
       "localizations" : {
         "en" : {
@@ -929,6 +1089,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择要设置的那一台。每台主机的地址显示在 ftpd 的顶部。"
+          }
+        }
+      }
+    },
+    "Choose this Mac in the list. The Tab5 then shows a code." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose this Mac in the list. The Tab5 then shows a code."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在列表中选择这台 Mac。随后 Tab5 会显示一个配对码。"
+          }
+        }
+      }
+    },
+    "Choose this Mac on the device again, then enter the code it shows." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose this Mac on the device again, then enter the code it shows."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在设备上重新选择这台 Mac，然后输入它显示的配对码。"
           }
         }
       }
@@ -977,6 +1169,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭"
+          }
+        }
+      }
+    },
+    "Code" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对码"
           }
         }
       }
@@ -1221,18 +1429,18 @@
         }
       }
     },
-    "Delete it on the console instead: hold its icon on the home screen. A newer version of its software deletes applets from here." : {
+    "Delete it on the device instead: hold its icon on the home screen. A newer version of its software deletes applets from here." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete it on the console instead: hold its icon on the home screen. A newer version of its software deletes applets from here."
+            "value" : "Delete it on the device instead: hold its icon on the home screen. A newer version of its software deletes applets from here."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请改在主机上删除：在主屏幕上按住它的图标。它的软件更新到更新的版本后，就能从这里删除小程序。"
+            "value" : "请改在设备上删除：在主屏幕上按住它的图标。它的软件更新到更新的版本后，就能从这里删除小程序。"
           }
         }
       }
@@ -1445,6 +1653,22 @@
         }
       }
     },
+    "Enter the Code on %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the Code on %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入 %@ 上显示的配对码"
+          }
+        }
+      }
+    },
     "Everything the store offers for this device is on it." : {
       "localizations" : {
         "en" : {
@@ -1601,18 +1825,18 @@
         }
       }
     },
-    "Go back to the home screen on the console, then delete it again." : {
+    "Go back to the home screen on the device, then delete it again." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Go back to the home screen on the console, then delete it again."
+            "value" : "Go back to the home screen on the device, then delete it again."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请先在主机上回到主屏幕，然后再删除。"
+            "value" : "请先在设备上回到主屏幕，然后再删除。"
           }
         }
       }
@@ -1729,18 +1953,18 @@
         }
       }
     },
-    "Install a .pocket applet on this console" : {
+    "Install a .pocket applet on this device" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Install a .pocket applet on this console"
+            "value" : "Install a .pocket applet on this device"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在这台主机上安装 .pocket 小程序"
+            "value" : "在这台设备上安装 .pocket 小程序"
           }
         }
       }
@@ -1757,6 +1981,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从文件夹或 .tar.gz 文件安装守护进程"
+          }
+        }
+      }
+    },
+    "Install one from the store on the device itself." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install one from the store on the device itself."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在设备上的商店里安装。"
           }
         }
       }
@@ -1809,18 +2049,18 @@
         }
       }
     },
-    "Installing on the console…" : {
+    "Installing on the device…" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Installing on the console…"
+            "value" : "Installing on the device…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在主机上安装…"
+            "value" : "正在设备上安装…"
           }
         }
       }
@@ -1837,6 +2077,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在安装…"
+          }
+        }
+      }
+    },
+    "It asks to connect to this Mac. Type the 6-digit code it shows on its screen." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It asks to connect to this Mac. Type the 6-digit code it shows on its screen."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它请求连接这台 Mac。请输入它屏幕上显示的 6 位配对码。"
           }
         }
       }
@@ -1953,18 +2209,18 @@
         }
       }
     },
-    "Its applet keeps working on the console but can no longer reach this Mac. Remove keeps the daemon's own data for a later install." : {
+    "Its applet keeps working on the device but can no longer reach this Mac. Remove keeps the daemon's own data for a later install." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Its applet keeps working on the console but can no longer reach this Mac. Remove keeps the daemon's own data for a later install."
+            "value" : "Its applet keeps working on the device but can no longer reach this Mac. Remove keeps the daemon's own data for a later install."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "对应的小程序在主机上仍可使用，但无法再连接这台 Mac。“移除”会保留守护进程自己的数据，供以后再次安装。"
+            "value" : "对应的小程序在设备上仍可使用，但无法再连接这台 Mac。“移除”会保留守护进程自己的数据，供以后再次安装。"
           }
         }
       }
@@ -2237,6 +2493,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在寻找你的 3DS…"
+          }
+        }
+      }
+    },
+    "M5Stack Tab5" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "M5Stack Tab5"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "M5Stack Tab5"
           }
         }
       }
@@ -2625,18 +2897,18 @@
         }
       }
     },
-    "Not on this Mac yet. Installing from here downloads it first; until then the console's own store doesn't list it." : {
+    "Not on this Mac yet. Installing from here downloads it first; until then the device's own store doesn't list it." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Not on this Mac yet. Installing from here downloads it first; until then the console's own store doesn't list it."
+            "value" : "Not on this Mac yet. Installing from here downloads it first; until then the device's own store doesn't list it."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "尚未下载到这台 Mac。从这里安装会先下载它；在此之前，主机上的商店不会列出它。"
+            "value" : "尚未下载到这台 Mac。从这里安装会先下载它；在此之前，设备上的商店不会列出它。"
           }
         }
       }
@@ -2733,6 +3005,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "官方"
+          }
+        }
+      }
+    },
+    "On the Tab5, open **Settings**, then **Mac**, and choose **Pair a Computer…**" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On the Tab5, open **Settings**, then **Mac**, and choose **Pair a Computer…**"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Tab5 上打开 **Settings**，进入 **Mac**，然后选择 **Pair a Computer…**"
           }
         }
       }
@@ -2913,18 +3201,18 @@
         }
       }
     },
-    "Open Pocket Shell on the console to connect it." : {
+    "Open Pocket Shell on the device to connect it." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Open Pocket Shell on the console to connect it."
+            "value" : "Open Pocket Shell on the device to connect it."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在主机上打开 Pocket Shell 即可连接。"
+            "value" : "在设备上打开 Pocket Shell 即可连接。"
           }
         }
       }
@@ -2957,6 +3245,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "PID %@"
+          }
+        }
+      }
+    },
+    "Pair" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pair"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对"
+          }
+        }
+      }
+    },
+    "Pair %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pair %@…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对 %@…"
+          }
+        }
+      }
+    },
+    "Pair with a code it shows" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pair with a code it shows"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用它显示的配对码配对"
+          }
+        }
+      }
+    },
+    "Pairing…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pairing…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在配对…"
           }
         }
       }
@@ -3277,6 +3629,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pocket Hub 重新打开后显示新的语言。"
+          }
+        }
+      }
+    },
+    "Pocket Hub stopped responding during the pairing." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub stopped responding during the pairing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对过程中 Pocket Hub 停止了响应。"
           }
         }
       }
@@ -3825,6 +4193,22 @@
         }
       }
     },
+    "Set up over Wi-Fi, or with its SD card" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set up over Wi-Fi, or with its SD card"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 Wi-Fi 或它的 SD 卡设置"
+          }
+        }
+      }
+    },
     "Set up with the 3DS's SD card in this Mac's card reader" : {
       "localizations" : {
         "en" : {
@@ -4273,6 +4657,22 @@
         }
       }
     },
+    "That isn't the code on the device. Check it and type it again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That isn't the code on the device. Check it and type it again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这不是设备上显示的配对码。请核对后重新输入。"
+          }
+        }
+      }
+    },
     "That item is no longer there." : {
       "localizations" : {
         "en" : {
@@ -4317,6 +4717,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "3DS 的地址"
+          }
+        }
+      }
+    },
+    "The code on the device" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The code on the device"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备上的配对码"
           }
         }
       }
@@ -4385,150 +4801,6 @@
         }
       }
     },
-    "The console connected again." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The console connected again."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机已重新连接。"
-          }
-        }
-      }
-    },
-    "The console disconnects. To use it with this Mac again, you will need to set it up again." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The console disconnects. To use it with this Mac again, you will need to set it up again."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机将断开连接。若要再次在这台 Mac 上使用它，需要重新设置。"
-          }
-        }
-      }
-    },
-    "The console doesn't recognize this Mac anymore. Set it up again." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The console doesn't recognize this Mac anymore. Set it up again."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机已不再认识这台 Mac。请重新设置。"
-          }
-        }
-      }
-    },
-    "The console is receiving it…" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The console is receiving it…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机正在接收…"
-          }
-        }
-      }
-    },
-    "The console is restarting." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The console is restarting."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机正在重新启动。"
-          }
-        }
-      }
-    },
-    "The console opens its applets from it." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The console opens its applets from it."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机要通过它打开小程序。"
-          }
-        }
-      }
-    },
-    "The console stopped responding." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The console stopped responding."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机停止了响应。"
-          }
-        }
-      }
-    },
-    "The console was removed from Pocket Hub." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The console was removed from Pocket Hub."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机已从 Pocket Hub 中移除。"
-          }
-        }
-      }
-    },
-    "The console was turned off or went to sleep." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The console was turned off or went to sleep."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主机已关机或进入睡眠。"
-          }
-        }
-      }
-    },
     "The daemon couldn't be installed, started or stopped." : {
       "localizations" : {
         "en" : {
@@ -4561,6 +4833,54 @@
         }
       }
     },
+    "The device connected again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device connected again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备已重新连接。"
+          }
+        }
+      }
+    },
+    "The device disconnects. To use it with this Mac again, you will need to add it again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device disconnects. To use it with this Mac again, you will need to add it again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备将断开连接。若要再次在这台 Mac 上使用它，需要重新添加。"
+          }
+        }
+      }
+    },
+    "The device doesn't recognize this Mac anymore. Add it again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device doesn't recognize this Mac anymore. Add it again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备已不再认识这台 Mac。请重新添加。"
+          }
+        }
+      }
+    },
     "The device is no longer paired." : {
       "localizations" : {
         "en" : {
@@ -4573,6 +4893,134 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该设备已不再配对。"
+          }
+        }
+      }
+    },
+    "The device is receiving it…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device is receiving it…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备正在接收…"
+          }
+        }
+      }
+    },
+    "The device is restarting." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device is restarting."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备正在重新启动。"
+          }
+        }
+      }
+    },
+    "The device opens its applets from it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device opens its applets from it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备要通过它打开小程序。"
+          }
+        }
+      }
+    },
+    "The device stopped before the pairing finished." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device stopped before the pairing finished."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对完成前设备中止了操作。"
+          }
+        }
+      }
+    },
+    "The device stopped responding." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device stopped responding."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备停止了响应。"
+          }
+        }
+      }
+    },
+    "The device was removed from Pocket Hub." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device was removed from Pocket Hub."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备已从 Pocket Hub 中移除。"
+          }
+        }
+      }
+    },
+    "The device was turned off or went to sleep." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device was turned off or went to sleep."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备已关机或进入睡眠。"
+          }
+        }
+      }
+    },
+    "The device wasn't paired." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The device wasn't paired."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备没有配对成功。"
           }
         }
       }
@@ -4609,50 +5057,50 @@
         }
       }
     },
-    "The last setup may not have finished. If the console doesn't connect, set it up again." : {
+    "The last setup may not have finished. If the device doesn't connect, set it up again." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The last setup may not have finished. If the console doesn't connect, set it up again."
+            "value" : "The last setup may not have finished. If the device doesn't connect, set it up again."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "上次设置可能没有完成。如果主机无法连接，请重新设置。"
+            "value" : "上次设置可能没有完成。如果设备无法连接，请重新设置。"
           }
         }
       }
     },
-    "The lines start when the console connects." : {
+    "The lines start when the device connects." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The lines start when the console connects."
+            "value" : "The lines start when the device connects."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "主机连接后日志就会出现。"
+            "value" : "设备连接后日志就会出现。"
           }
         }
       }
     },
-    "The list appears when the console connects." : {
+    "The list appears when the device connects." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The list appears when the console connects."
+            "value" : "The list appears when the device connects."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "主机连接后会显示列表。"
+            "value" : "设备连接后会显示列表。"
           }
         }
       }
@@ -4669,6 +5117,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下次你从 Homebrew Launcher 打开 Pocket Shell 时，新版本就会启动。"
+          }
+        }
+      }
+    },
+    "The pairing didn't finish." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The pairing didn't finish."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对没有完成。"
           }
         }
       }
@@ -4865,6 +5329,22 @@
         }
       }
     },
+    "This kind of device, or the version of its software, doesn't support it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This kind of device, or the version of its software, doesn't support it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这类设备或它当前的软件版本不支持此操作。"
+          }
+        }
+      }
+    },
     "This update is no longer available." : {
       "localizations" : {
         "en" : {
@@ -5041,6 +5521,22 @@
         }
       }
     },
+    "Turn it on and make sure it is on the same Wi-Fi network as this Mac, then try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn it on and make sure it is on the same Wi-Fi network as this Mac, then try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请开机，并确认它和这台 Mac 连接的是同一个 Wi-Fi 网络，然后重试。"
+          }
+        }
+      }
+    },
     "Turn it on and open Pocket Shell, then try again." : {
       "localizations" : {
         "en" : {
@@ -5073,6 +5569,22 @@
         }
       }
     },
+    "Turn it on to connect it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn it on to connect it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开机即可连接。"
+          }
+        }
+      }
+    },
     "Turn on the 3DS and open **Pocket Shell** from the Homebrew Launcher." : {
       "localizations" : {
         "en" : {
@@ -5089,18 +5601,18 @@
         }
       }
     },
-    "Turn on the live log to see what the console and its applets write." : {
+    "Turn on the live log to see what the device and its applets write." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turn on the live log to see what the console and its applets write."
+            "value" : "Turn on the live log to see what the device and its applets write."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开实时日志，查看主机及其小程序输出的内容。"
+            "value" : "打开实时日志，查看设备及其小程序输出的内容。"
           }
         }
       }
@@ -5133,6 +5645,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请打开你的 3DS，等它显示为已连接后即可更新。"
+          }
+        }
+      }
+    },
+    "Turn on your Tab5 and make sure it is on the same Wi-Fi network as this Mac." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on your Tab5 and make sure it is on the same Wi-Fi network as this Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开你的 Tab5，并确认它和这台 Mac 连接的是同一个 Wi-Fi 网络。"
           }
         }
       }
@@ -5293,6 +5821,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "立即更新"
+          }
+        }
+      }
+    },
+    "Update on the device" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update on the device"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在设备上更新"
           }
         }
       }
@@ -5473,6 +6017,22 @@
         }
       }
     },
+    "Wait a moment for it to restart, then choose this Mac on the device again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wait a moment for it to restart, then choose this Mac on the device again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请稍等它重新启动，然后在设备上重新选择这台 Mac。"
+          }
+        }
+      }
+    },
     "Wait a moment for it to restart, then try again." : {
       "localizations" : {
         "en" : {
@@ -5489,6 +6049,22 @@
         }
       }
     },
+    "Waiting for the device to ask again… If it no longer shows a code, choose this Mac on it again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for the device to ask again… If it no longer shows a code, choose this Mac on it again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待设备再次请求… 如果它不再显示配对码，请在设备上重新选择这台 Mac。"
+          }
+        }
+      }
+    },
     "Waiting for your 3DS to connect…" : {
       "localizations" : {
         "en" : {
@@ -5501,6 +6077,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在等待你的 3DS 连接…"
+          }
+        }
+      }
+    },
+    "Waiting for your Tab5…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for your Tab5…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待你的 Tab5…"
           }
         }
       }
@@ -5581,6 +6173,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载的内容与发布的内容不一致，因此没有向你的 3DS 发送任何内容。请稍后再试。"
+          }
+        }
+      }
+    },
+    "Whenever it is on and this Mac is on, it connects by itself." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Whenever it is on and this Mac is on, it connects by itself."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只要它和这台 Mac 都开着，它就会自动连接。"
           }
         }
       }

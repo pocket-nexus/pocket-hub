@@ -1,6 +1,8 @@
 //! Pocket Hub's first install on a device: the program and the pairing
 //! written onto the device's storage, outside the link (docs/POCKET-LINK.md
-//! §1 "What does not run on the link", §3.2).
+//! §1 "What does not run on the link", §3.2). A device whose storage Hub
+//! does not reach is not set up here: it pairs on the link by the code it
+//! shows (§3.11, `pocket_hub_core`'s endpoint).
 //!
 //! For a 3DS the storage is its SD card, reached over ftpd
 //! (`ftp::FtpStorage`) or mounted in the computer's reader

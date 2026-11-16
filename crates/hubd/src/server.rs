@@ -249,11 +249,12 @@ fn queue_event(event: &Published, topics: &Topics, buffer: &mut Vec<u8>) {
     }
 }
 
-/// This client lost events to a full queue: every device and daemon again,
-/// as they are now, which leaves it holding the truth, and `store.changed`
-/// for the catalog held, since a lost one would leave it with an old offer.
+/// This client lost events to a full queue: every device, the pairing
+/// requests and every daemon again, as they are now, which leaves it holding
+/// the truth, and `store.changed` for the catalog held, since a lost one
+/// would leave it with an old offer.
 fn resync(core: &Core, topics: &Topics, buffer: &mut Vec<u8>) {
-    tracing::warn!("a client fell behind on events; it gets every device and daemon again");
+    tracing::warn!("a client fell behind on events; it gets every device, pairing request and daemon again");
     let _guard = core.publication();
     let mut add = |event: pocket_hub_api::Event| {
         if wanted(topics, event.topic()) {
@@ -264,6 +265,7 @@ fn resync(core: &Core, topics: &Topics, buffer: &mut Vec<u8>) {
     for device in core.devices() {
         add(pocket_hub_api::Event::DeviceChanged { device: Box::new(device) });
     }
+    add(pocket_hub_api::Event::PairingChanged { requests: core.pair_requests() });
     for daemon in core.daemons() {
         add(pocket_hub_api::Event::DaemonChanged { daemon });
     }

@@ -15,6 +15,8 @@ public struct HubOperationError: Error, Sendable, Equatable {
         /// The release of a device's program could not be used.
         case release
         case store
+        /// A pairing by a code did not complete.
+        case pairing
         case `internal`
         /// A kind this client does not know; treated like `internal`.
         case other(String)
@@ -31,6 +33,7 @@ public struct HubOperationError: Error, Sendable, Equatable {
             case "daemon": self = .daemon
             case "release": self = .release
             case "store": self = .store
+            case "pairing": self = .pairing
             case "internal": self = .internal
             default: self = .other(rawValue)
             }
@@ -48,6 +51,7 @@ public struct HubOperationError: Error, Sendable, Equatable {
             case .daemon: "daemon"
             case .release: "release"
             case .store: "store"
+            case .pairing: "pairing"
             case .internal: "internal"
             case .other(let raw): raw
             }
@@ -67,7 +71,8 @@ public struct HubOperationError: Error, Sendable, Equatable {
     public var step: String?
     /// `setup`: `unreachable`, `companions_full`, `release_unavailable`, `storage` or `card`;
     /// `release`: `unreachable`, `not_found` or `rejected`;
-    /// `store`: `unreachable` or `rejected`.
+    /// `store`: `unreachable` or `rejected`;
+    /// `pairing`: `wrong_code`, `bad_proof` or `gone`.
     public var reason: String?
     /// `setup`: the failing step in the setup's own words, for a log.
     public var detail: String?

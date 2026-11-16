@@ -14,6 +14,9 @@ use pocket_link::consts::*;
 pub struct Timing {
     /// §2.4, §3.3: Hub closes an unfinished handshake after this long.
     pub handshake: Duration,
+    /// §3.11: Hub closes a device's request to be paired this long after its
+    /// `pair`, in place of `handshake`: the time the device keeps its code.
+    pub pair_window: Duration,
     /// §4.6: `CLOSE silence` after this long without a frame of any type.
     pub silence: Duration,
     /// The silence limit in place of `silence` while a state-changing request
@@ -56,6 +59,7 @@ impl Default for Timing {
     fn default() -> Self {
         Self {
             handshake: Duration::from_millis(HANDSHAKE_TIMEOUT_MS),
+            pair_window: Duration::from_millis(PAIR_WINDOW_MS),
             silence: Duration::from_millis(SILENCE_MS),
             state_silence: Duration::from_millis(REQUEST_STALL_MS),
             state_ping: Duration::from_millis(PING_MS),

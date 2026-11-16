@@ -2,7 +2,8 @@
 //! folder that stands in for an SD card, the reference device linking with
 //! the pairing that setup wrote, the runtime operations, the device mutex
 //! across two clients, the link-channel example daemon installed through the
-//! API and serving the device's applet channel with the real SDK, and the
+//! API and serving the device's applet channel with the real SDK, a second
+//! device that pairs by the code it shows as an M5Stack Tab5 does, and the
 //! ordered shutdown.
 //!
 //! The run's lines are the examples of `docs/control-api-examples.json`:
@@ -355,7 +356,11 @@ async fn the_vertical_slice_through_the_binary() {
     // The applet exits: the channel closes, the daemon goes idle and stops.
     device.send(json!({"cmd": "exit"})).await;
     event(&client, |e| topic(e, "device.changed") && e["device"]["channels"].as_array().is_some_and(|c| c.is_empty())).await;
-    let closed = daemon_line(&client, "closed (").await;
+    // Polled on a client of its own: the line comes a moment after the
+    // close, so the number of polls differs between runs, and on the traced
+    // client each one would move the id of every later request in the
+    // examples file.
+    let closed = daemon_line(&common::client(&socket, "logs").await, "closed (").await;
     let note = format!("\"bytes\":{MIB},\"hash\":{}", fnv32(&pattern(MIB)));
     assert!(closed.contains(&note), "the daemon read the device's 1 MiB: {closed}");
     let stopped = event(&client, |e| topic(e, "daemon.changed") && e["daemon"]["state"] == "stopped").await;
@@ -372,6 +377,97 @@ async fn the_vertical_slice_through_the_binary() {
     let stopped: Daemon = client.call_as(methods::DAEMONS_STOP, &DaemonIdParams { id: APP.into() }).await.unwrap();
     assert_eq!(stopped.state, DaemonState::Stopped);
     assert!(gone(restarted.pid.unwrap()).await);
+
+    // --- a Tab5 pairs by the code it shows -------------------------------------
+    // A store no Hub has set up: the device holds no key file, Hub no record.
+    let tab5_dir = work.path().join("tab5-link");
+    std::fs::create_dir_all(&tab5_dir).unwrap();
+    let tab5_config = json!({"autoConnect": false, "name": "Desk Tab5", "model": "M5Stack Tab5", "target": "tab5-home", "features": ["apps", "runtime", "runtime.remove", "catalog", "install", "net.http"]});
+    let mut tab5 = RefDevice::spawn_with(&tab5_dir, &hello.hub.id, port, tab5_config).await;
+    let answer = |device: &str, code: &str| PairAnswerParams { device: device.to_owned(), code: code.to_owned() };
+    let waiting = |count: usize| move |e: &Value| topic(e, "pairing.changed") && e["requests"].as_array().is_some_and(|requests| requests.len() == count);
+    // No device asks yet. (The examples file's `pairing.list` is the one
+    // below, with a request in it.)
+    assert_eq!(kind_of(client.call(methods::PAIRING_ANSWER, &answer("*", "314159")).await.unwrap_err()), ErrorKind::NotFound);
+
+    // Its owner opens a pairing on it and chooses this Hub.
+    tab5.send(json!({"cmd": "pairOpen", "code": "314159"})).await;
+    tab5.send(json!({"cmd": "pairAsk"})).await;
+    let asked = event(&client, waiting(1)).await;
+    let listed: PairRequests = client.call_as(methods::PAIRING_LIST, &json!({})).await.unwrap();
+    assert_eq!(json!(listed.requests), asked["requests"]);
+    let request = &listed.requests[0];
+    assert_eq!((request.device.as_str(), request.kind.as_str(), request.name.as_str(), request.model.as_str(), request.target.as_str()), (tab5.id.as_str(), "tab5", "Desk Tab5", "M5Stack Tab5", "tab5-home"));
+    assert_eq!((request.address.as_str(), request.expires - request.since), ("127.0.0.1", 300_000));
+
+    // What is no code is refused before anything is sent. Another code than
+    // the device's: nothing is stored, and the device asks again.
+    assert_eq!(kind_of(client.call(methods::PAIRING_ANSWER, &answer("*", "31415")).await.unwrap_err()), ErrorKind::Invalid);
+    let wrong = rpc(client.call(methods::PAIRING_ANSWER, &answer("*", "271828")).await.unwrap_err()).data.unwrap();
+    assert_eq!((wrong.kind, wrong.reason.as_deref()), (ErrorKind::Pairing, Some("wrong_code")));
+    event(&client, waiting(1)).await;
+    assert_eq!(kind_of(client.call(methods::DEVICES_GET, &DeviceParams { device: tab5.id.clone() }).await.unwrap_err()), ErrorKind::NotFound);
+
+    // Dismissed: the device reads why, and its owner opens a pairing anew.
+    client.call(methods::PAIRING_DECLINE, &DeviceParams { device: tab5.id.clone() }).await.unwrap();
+    event(&client, waiting(0)).await;
+    assert_eq!(kind_of(client.call(methods::PAIRING_DECLINE, &DeviceParams { device: tab5.id.clone() }).await.unwrap_err()), ErrorKind::NotFound);
+    tab5.send(json!({"cmd": "pair", "tag": "declined"})).await;
+    let state = tab5.wait(|v| v["ev"] == "pair" && v["tag"] == "declined").await;
+    assert_eq!((state["pair"]["state"].as_str(), state["pair"]["error"].as_str()), (Some("failed"), Some("that computer dismissed the request")));
+    tab5.send(json!({"cmd": "pairOpen", "code": "314159"})).await;
+    tab5.send(json!({"cmd": "pairAsk"})).await;
+    event(&client, waiting(1)).await;
+
+    // The code: the answer is the device, of the family of its target, and
+    // it links by itself with the key file it wrote.
+    let paired: Device = client.call_as(methods::PAIRING_ANSWER, &answer("*", "314159")).await.unwrap();
+    assert_eq!((paired.id.as_str(), paired.kind.as_str(), paired.name.as_str(), paired.model.as_str(), paired.target.as_str()), (tab5.id.as_str(), "tab5", "Desk Tab5", "M5Stack Tab5", "tab5-home"));
+    assert!(paired.supports.is_empty(), "a Tab5 takes no push, screenshot, log or program from Hub");
+    let tab5_file = std::fs::read_to_string(tab5_dir.join(format!("companions/{}.txt", hello.hub.id))).unwrap();
+    assert!(tab5_file.contains(&format!("port={port}")));
+    let linked = device_where(&client, &tab5.id, |d| d.link.is_some() && d.status.is_some()).await;
+    assert_eq!(linked.link.unwrap().features, ["runtime", "runtime.remove", "apps", "net.http", "catalog", "install"]);
+    assert_eq!(tab5.expect("linked").await["hub"], hello.hub.id.as_str());
+
+    // What its family does not take is refused before anything is sent or fetched.
+    for (method, params) in [
+        (methods::DEVICES_PUSH, json!({"device": tab5.id, "path": pocket})),
+        (methods::DEVICES_SCREENSHOT, json!({"device": tab5.id})),
+        (methods::DEVICES_LOGS, json!({"device": tab5.id, "on": true})),
+        (methods::DEVICES_INSTALL_PROGRAM, json!({"device": tab5.id})),
+        (methods::STORE_INSTALL, json!({"device": tab5.id, "app": notes.id})),
+    ] {
+        let refused = rpc(client.call(method, &params).await.unwrap_err()).data.unwrap();
+        assert_eq!((refused.kind, refused.code.as_deref()), (ErrorKind::Link, Some("unsupported")), "{method}");
+    }
+
+    // Its applets come from its own store page, which Hub serves for its
+    // target (link specification §6.4): the offer, then a package.
+    let for_tab5: StoreApps = client.call_as(methods::STORE_APPS, &StoreAppsParams { device: Some(tab5.id.clone()), refresh: None }).await.unwrap();
+    assert_eq!(for_tab5.apps.iter().map(|app| app.id.as_str()).collect::<Vec<_>>(), [notes.id.as_str()]);
+    tab5.send(json!({"cmd": "catalog", "tag": "tab5"})).await;
+    let rows = tab5.wait(|v| v["ev"] == "catalog" && v["tag"] == "tab5").await;
+    assert_eq!((rows["ok"].as_bool(), rows["rows"][0]["id"].as_str()), (Some(true), Some(notes.id.as_str())));
+    tab5.send(json!({"cmd": "install", "app": notes.id, "tag": "tab5"})).await;
+    let installed = tab5.wait(|v| v["ev"] == "install" && v["tag"] == "tab5").await;
+    assert_eq!((installed["ok"].as_bool(), installed["bytes"].as_u64()), (Some(true), Some(notes.bytes)));
+    // Its own program is the launcher's row; Hub knows no release to compare it with.
+    tab5.send(json!({"cmd": "apps", "count": 1, "home": "0.3.0"})).await;
+    let reported = device_where(&client, &tab5.id, |d| d.apps.is_some()).await;
+    assert_eq!(reported.program, ProgramState { version: Some("0.3.0".into()), latest: None, update: false });
+    // An applet it holds opens and is deleted from the computer, as on a 3DS.
+    client.call(methods::DEVICES_LAUNCH, &LaunchParams { device: tab5.id.clone(), app: "dev.app.0".into() }).await.unwrap();
+    assert_eq!(tab5.expect("launch").await["app"], "app0");
+    client.call(methods::DEVICES_REMOVE, &RemoveParams { device: tab5.id.clone(), app: "dev.app.0".into() }).await.unwrap();
+    assert_eq!(tab5.expect("removed").await["id"], "dev.app.0");
+
+    // A setup is for a device whose storage Hub reaches.
+    assert_eq!(kind_of(client.call(methods::SETUP_DISCOVER, &KindParams { kind: "tab5".into() }).await.unwrap_err()), ErrorKind::Invalid);
+    client.call(methods::DEVICES_FORGET, &DeviceParams { device: tab5.id.clone() }).await.unwrap();
+    event(&client, |e| topic(e, "device.removed") && e["id"] == tab5.id.as_str()).await;
+    let tab5_id = tab5.id.clone();
+    tab5.kill().await;
 
     // --- forget, remove, shut down -------------------------------------------
     client.call(methods::DEVICES_FORGET, &DeviceParams { device: id.clone() }).await.unwrap();
@@ -401,6 +497,8 @@ async fn the_vertical_slice_through_the_binary() {
     let store: Value = serde_json::from_str(&std::fs::read_to_string(home.path().join("store/devices.json")).unwrap()).unwrap();
     let mut keys: Vec<String> = store["devices"].as_array().unwrap().iter().map(|d| d["key"].as_str().unwrap().to_owned()).collect();
     keys.push(companion.lines().find_map(|line| line.strip_prefix("key=")).expect("the pairing holds a key").to_owned());
+    // The key Hub sent the Tab5 under its code, as the device unmasked and wrote it.
+    keys.push(tab5_file.lines().find_map(|line| line.strip_prefix("key=")).expect("the Tab5's key file holds a key").to_owned());
 
     client.call(methods::SHUTDOWN, &json!({})).await.unwrap();
     let exit = tokio::time::timeout(Duration::from_secs(10), core.wait()).await.expect("the core exits").unwrap();
@@ -430,6 +528,7 @@ async fn the_vertical_slice_through_the_binary() {
             (hello.hub.id.clone(), "fedcba9876543210".into()),
             (id.clone(), "0123456789abcdef".into()),
             (over_ftp.device.clone(), "00000000000000f1".into()),
+            (tab5_id, "00000000000000a5".into()),
         ],
         bun_version,
     };
@@ -468,8 +567,9 @@ impl Machine {
 
     /// The value with `text` applied to every string, and the members whose
     /// numbers differ between runs fixed: times (`since`, `lastSeen`,
-    /// `startedAt`, `fetchedAt`, `at`), `pid`, and `port` (8628 for a
-    /// carrier, 5000, ftpd's, for a console).
+    /// `startedAt`, `fetchedAt`, `at`, and `expires`, a pairing request's 5
+    /// minutes after its `since`), `pid`, and `port` (8628 for a carrier,
+    /// 5000, ftpd's, for a console).
     fn value(&self, value: &mut Value) {
         match value {
             Value::String(text) => *text = self.text(text),
@@ -480,6 +580,7 @@ impl Machine {
                 for (key, member) in map.iter_mut() {
                     match (key.as_str(), member.is_number()) {
                         ("since" | "lastSeen" | "startedAt" | "fetchedAt" | "at", true) => *member = json!(FIXED_TIME),
+                        ("expires", true) => *member = json!(FIXED_TIME + 300_000),
                         ("pid", true) => *member = json!(4242),
                         ("port", true) => *member = json!(if carrier { 8628 } else { 5000 }),
                         _ => self.value(member),

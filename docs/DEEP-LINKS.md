@@ -52,7 +52,11 @@ running, and then (a window that is already open stays as it is):
    that fits the device: Install, Update when the device holds an older
    version, Open when it holds this one. With several devices that can run
    the applet, the sheet chooses between them. With no device paired, or
-   none that can run it, the sheet says so in place of the action.
+   none that can run it, the sheet says so in place of the action. **For a
+   device that takes no applet from the computer** (an M5Stack Tab5: its
+   `supports` has no `push`, `docs/CONTROL-API.md` §2) the sheet has no
+   Install and no Update, and says where that device installs the applet:
+   its own store page.
 
 **A link shows; it never installs.** Any page can carry a link, and a browser
 can be told to stop asking before it follows one, so what a link does by

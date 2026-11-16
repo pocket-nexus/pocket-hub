@@ -111,6 +111,13 @@ struct ExamplesTests {
             case "setup.card":
                 let report = try await replay.installFromCard(kind: p["kind"]?.stringValue ?? "3ds", path: path, program: program())
                 #expect(report.confirmed && report.pairing == "key")
+            case "pairing.list":
+                let requests = try await replay.pairRequests()
+                #expect(requests.first?.kind == .tab5 && requests.first?.expires ?? 0 > requests.first?.since ?? 0)
+            case "pairing.answer":
+                let paired = try await replay.answerPairing(device: device, code: p["code"]?.stringValue ?? "")
+                #expect(paired.kind == .tab5 && paired.supports.isEmpty, "a Tab5 takes none of the four operations")
+            case "pairing.decline": try await replay.declinePairing(device: device)
             case "daemons.list": _ = try await replay.daemons()
             case "daemons.install":
                 let stages = Locked<[String]>([])
@@ -146,7 +153,7 @@ struct ExamplesTests {
         let contract: Set<String> = ["hub.hello", "hub.status", "hub.setName", "hub.subscribe", "hub.shutdown",
             "devices.list", "devices.get", "devices.forget", "devices.status", "devices.push", "devices.launch",
             "devices.remove", "devices.screenshot", "devices.logs", "devices.installProgram", "setup.discover", "setup.install",
-            "setup.card", "daemons.list", "daemons.install", "daemons.remove", "daemons.start", "daemons.stop",
+            "setup.card", "pairing.list", "pairing.answer", "pairing.decline", "daemons.list", "daemons.install", "daemons.remove", "daemons.start", "daemons.stop",
             "daemons.restart", "daemons.logs", "daemons.runtime", "store.apps", "store.install"]
         #expect(covered == contract)
     }
@@ -179,6 +186,9 @@ struct ExamplesTests {
                 if name == "release", case .operation(let e) = error {
                     #expect(["unreachable", "not_found", "rejected"].contains(e.reason ?? ""))
                 }
+                if name == "pairing", case .operation(let e) = error {
+                    #expect(["wrong_code", "bad_proof", "gone"].contains(e.reason ?? ""))
+                }
                 if name == "link", case .operation(let e) = error {
                     // The example is devices.remove refused: the device's code and reason.
                     #expect(e.linkCode == "rejected" && ["running", "home"].contains(e.reason ?? ""))
@@ -191,7 +201,7 @@ struct ExamplesTests {
     /// newest; its absence is reported here rather than passing silently.
     @Test func everyErrorKindOfTheContractHasAnExample() throws {
         let kinds = Set(try Self.section("errors").keys)
-        for kind in ["not_found", "not_linked", "busy", "cancelled", "setup", "invalid", "daemon", "release", "store"] {
+        for kind in ["not_found", "not_linked", "busy", "cancelled", "setup", "invalid", "daemon", "release", "store", "pairing"] {
             #expect(kinds.contains(kind), "the examples hold no error \(kind)")
         }
     }
@@ -207,6 +217,20 @@ struct ExamplesTests {
             #expect(device.program.latest == raw["program"]?["latest"]?.stringValue)
             #expect(device.program.update == raw["program"]?["update"]?.boolValue)
         }
+    }
+
+    /// A Device says its family and what Hub can ask of it (§2 `supports`).
+    @Test func devicesSayWhatTheySupport() throws {
+        let list = try #require(try Self.section("methods")["devices.list"])
+        let devices: [Device] = try #require(list["response"]?["result"]?["devices"]).decode([Device].self)
+        let console = try #require(devices.first)
+        #expect(console.kind == .nintendo3ds && console.supports == DeviceOperation.all)
+        guard case .array(let rows)? = list["response"]?["result"]?["devices"] else { Issue.record("devices"); return }
+        #expect(rows.first?["supports"] == ["push", "screenshot", "logs", "program"], "the server sends supports")
+        // The pairing by a code's answer is a Tab5, which takes none of them.
+        let answer = try #require(try Self.section("methods")["pairing.answer"])
+        let tab5: Device = try #require(answer["response"]?["result"]).decode(Device.self)
+        #expect(tab5.kind == .tab5 && DeviceOperation.all.allSatisfy { !tab5.supports($0) })
     }
 
     @Test func theCancelNotificationIsWhatTheClientSends() throws {

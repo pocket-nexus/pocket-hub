@@ -5,7 +5,7 @@
 
 use pocket_hub_api::types as api;
 use pocket_hub_api::{ErrorKind, RpcError};
-use pocket_hub_core::{DeviceSnapshot, OpError};
+use pocket_hub_core::{DeviceSnapshot, OpError, Operation, PairError, family};
 use pocket_hub_daemons::{DaemonState, DaemonStatus, InstalledDaemon, LogLine, LogStream};
 use pocket_hub_setup::{InstallReport, InstallTarget, PairingOutcome, ProgramAction, Progress, Stage};
 
@@ -45,6 +45,7 @@ pub fn holder_of(label: &str) -> api::Holder {
 /// | `busy` | `mutex_holder` (a holder label) and `mutex_since`; `launching` while the label carries the launch hold's mark |
 /// | `channels` | `link.channels`, `[]` when not linked |
 /// | `program` | `program(snapshot, latest)` |
+/// | `supports` | `family::supported(kind)`: the family's operations, by name |
 ///
 /// `linked`, `latest_screenshot` and `last_close` have no place in the
 /// contract (the screenshot and the close are events).
@@ -53,6 +54,7 @@ pub fn device(snapshot: &DeviceSnapshot, latest: Option<String>) -> api::Device 
     api::Device {
         id: snapshot.id.clone(),
         kind: snapshot.kind.clone(),
+        supports: family::supported(&snapshot.kind).into_iter().map(|operation| operation.name().to_owned()).collect(),
         name: snapshot.name.clone(),
         model: snapshot.model.clone(),
         target: snapshot.target.clone(),
@@ -87,10 +89,13 @@ pub fn device(snapshot: &DeviceSnapshot, latest: Option<String>) -> api::Device 
 /// `Device.program`: `version` is the `version` of the row the device
 /// marks `home` in its last apps report (its own program, §6.2), null
 /// before a report, without such a row, or when the row's version is empty;
-/// `latest` is the newest release Hub knows; `update` is true when `latest`
-/// orders above `version` (`pocket_hub_setup::version_order`: dated
-/// versions below SemVer ones; any other form is never an update).
+/// `latest` is the newest release Hub knows, and none for a family whose
+/// program Hub does not install (`supports` without `program`); `update` is
+/// true when `latest` orders above `version`
+/// (`pocket_hub_setup::version_order`: dated versions below SemVer ones; any
+/// other form is never an update).
 pub fn program(snapshot: &DeviceSnapshot, latest: Option<String>) -> api::ProgramState {
+    let latest = latest.filter(|_| family::supports(&snapshot.kind, Operation::Program));
     let version = snapshot.apps.iter().flatten().find(|app| app.home == Some(true)).map(|app| app.version.clone()).filter(|version| !version.is_empty());
     let update = matches!((&latest, &version), (Some(latest), Some(version)) if pocket_hub_setup::is_newer(latest, version));
     api::ProgramState { version, latest, update }
@@ -171,6 +176,62 @@ pub fn op_error(error: OpError) -> RpcError {
                 })
             }
         },
+    }
+}
+
+/// An operation the device's family does not take (§2 `Device.supports`):
+/// `link` with `code` `unsupported`, the error a device gives for a request
+/// it does not serve, and nothing is sent. The sentence says what the owner
+/// does instead where there is such a thing.
+pub fn unsupported(operation: Operation) -> RpcError {
+    let message = match operation {
+        Operation::Push => "This device takes no applet sent from the computer: install it from the store page on the device itself.",
+        Operation::Screenshot => "This device takes no screenshot.",
+        Operation::Logs => "This device sends no log.",
+        Operation::Program => "Hub does not install this device's software.",
+    };
+    RpcError::op(ErrorKind::Link, message).with(|data| data.code = Some("unsupported".into()))
+}
+
+// ---------------------------------------------------------------------------
+// Pairing by a code
+// ---------------------------------------------------------------------------
+
+/// hub-core's request → the contract's (§2 PairRequest): `kind` is the
+/// family of the target, and `address` the device's address; the carrier's
+/// own name of the peer (`ip:port`) has no place in the contract.
+pub fn pair_request(request: &pocket_hub_core::PairRequest) -> api::PairRequest {
+    api::PairRequest {
+        device: request.device.clone(),
+        kind: family::kind_of_target(&request.target).to_owned(),
+        name: request.name.clone(),
+        model: request.model.clone(),
+        target: request.target.clone(),
+        address: request.address.clone(),
+        since: request.since,
+        expires: request.expires,
+    }
+}
+
+/// `PairError` → the error of §1.
+///
+/// | hub-core | contract |
+/// | --- | --- |
+/// | `NotACode` | `invalid` |
+/// | `NoRequest` | `not_found` |
+/// | `WrongCode` | `pairing`, `reason: wrong_code` |
+/// | `BadProof` | `pairing`, `reason: bad_proof` |
+/// | `Gone` | `pairing`, `reason: gone` |
+/// | `Store` | `internal` |
+pub fn pair_error(error: PairError) -> RpcError {
+    let pairing = |reason: &str, message: &str| RpcError::op(ErrorKind::Pairing, message).with(|data| data.reason = Some(reason.to_owned()));
+    match error {
+        PairError::NotACode => RpcError::op(ErrorKind::Invalid, "A pairing code is the 6 digits the device shows."),
+        PairError::NoRequest => RpcError::op(ErrorKind::NotFound, "No device with this id asks to be paired."),
+        PairError::WrongCode => pairing("wrong_code", "The code is not the one the device shows. Nothing was stored."),
+        PairError::BadProof => pairing("bad_proof", "The device did not prove that it holds the key. Nothing was stored."),
+        PairError::Gone => pairing("gone", "The device left before the pairing finished. Nothing was stored."),
+        PairError::Store(why) => RpcError::op(ErrorKind::Internal, sentence(&format!("the device took the pairing and Hub could not store its record: {why}"))),
     }
 }
 

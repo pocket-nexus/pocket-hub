@@ -37,11 +37,11 @@ struct DeviceLogView: View {
                     Label("No Log Lines", systemImage: "text.alignleft")
                 } description: {
                     if isOn && !device.isLinked {
-                        Text("The lines start when the console connects.")
+                        Text("The lines start when the device connects.")
                     } else if isOn {
                         Text("Lines appear here while the applet writes them.")
                     } else {
-                        Text("Turn on the live log to see what the console and its applets write.")
+                        Text("Turn on the live log to see what the device and its applets write.")
                     }
                 }
                 // The empty state takes the room below the header, so the
@@ -72,7 +72,7 @@ struct DeviceLogView: View {
     private func setLogs(_ on: Bool) {
         Task {
             do { try await state.model.setLogs(on, for: device.id) } catch {
-                state.presentedError = UserFacingError(error, deviceName: device.displayName)
+                state.presentedError = UserFacingError(error, deviceName: device.displayName, kind: device.kind)
             }
         }
     }

@@ -96,7 +96,7 @@ struct DaemonsView: View {
                 if let id = confirmingRemove?.id { remove(id, purge: true) }
             }
         } message: {
-            Text("Its applet keeps working on the console but can no longer reach this Mac. Remove keeps the daemon's own data for a later install.")
+            Text("Its applet keeps working on the device but can no longer reach this Mac. Remove keeps the daemon's own data for a later install.")
         }
     }
 

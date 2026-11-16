@@ -84,6 +84,8 @@ pub enum Refusal {
     BadProof,
     Malformed,
     Busy,
+    /// Hub's owner dismissed the device's request to be paired (§3.11).
+    Declined,
 }
 
 impl Refusal {
@@ -93,6 +95,7 @@ impl Refusal {
             Self::BadProof => "bad_proof",
             Self::Malformed => "malformed",
             Self::Busy => "busy",
+            Self::Declined => "declined",
         }
     }
 }
@@ -182,7 +185,7 @@ fn integer(value: Option<&Value>, max: u64) -> Option<u64> {
     (n <= max).then_some(n)
 }
 
-fn string(value: Option<&Value>, max: usize) -> Option<&str> {
+pub(crate) fn string(value: Option<&Value>, max: usize) -> Option<&str> {
     let text = value?.as_str()?;
     (encoded_bytes(text) <= max).then_some(text)
 }

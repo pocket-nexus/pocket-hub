@@ -1,6 +1,7 @@
 //! The endpoint: carriers' accept loops, the handshake (§3.3 to §3.8, §4.1),
-//! one link per device with the replacement rule of §2.4, and the API the
-//! rest of Hub uses.
+//! one link per device with the replacement rule of §2.4, a device's request
+//! to be paired by its code (§3.11, `pairing`), and the API the rest of Hub
+//! uses.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -10,6 +11,7 @@ use pocket_hub_store::Store;
 use pocket_link::consts::*;
 use pocket_link::frame::{self, Decoded, FrameDecoder, FrameType};
 use pocket_link::handshake::{self, Challenge, Clock, Hello, Ready, Refusal, Refused};
+use pocket_link::pair::{self, Pair};
 use pocket_link::preamble::{self, HUB_RANGE};
 use pocket_link::text::new_nonce;
 use pocket_link::CloseCode;
@@ -18,7 +20,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-use crate::api::{ChannelHost, CloseInfo, DeviceRequests, DeviceSnapshot, HubEvent, LinkInfo};
+use crate::api::{ChannelHost, CloseInfo, DeviceRequests, DeviceSnapshot, HubEvent, LinkInfo, PairError, PairRequest};
 use crate::apps::InstalledApp;
 use crate::carrier::{CarrierKind, CarrierListener, CarrierStream};
 use crate::config::EndpointConfig;
@@ -60,6 +62,8 @@ pub(crate) struct Shared {
     pub requests: Vec<Arc<dyn DeviceRequests>>,
     host: RwLock<Option<Arc<dyn ChannelHost>>>,
     pub registry: Mutex<Registry>,
+    /// The requests to be paired by a code (§3.11), by device id.
+    pub pairing: Mutex<HashMap<String, crate::pairing::Slot>>,
     events: broadcast::Sender<HubEvent>,
     connections: AtomicUsize,
     next_conn: AtomicU64,
@@ -91,6 +95,11 @@ impl Shared {
 
     pub fn publish(&self, event: HubEvent) {
         let _ = self.events.send(event);
+    }
+
+    /// An id for one connection, unique for the endpoint's life.
+    pub fn next_conn_id(&self) -> u64 {
+        self.next_conn.fetch_add(1, Ordering::SeqCst)
     }
 
     pub fn unlinked(&self, device: &str, conn: u64, info: CloseInfo) {
@@ -181,7 +190,7 @@ impl Shared {
 }
 
 /// Runs a store call off the async threads: every write fsyncs.
-async fn store_call<T: Send + 'static>(store: &Arc<Store>, call: impl FnOnce(&Store) -> T + Send + 'static) -> Option<T> {
+pub(crate) async fn store_call<T: Send + 'static>(store: &Arc<Store>, call: impl FnOnce(&Store) -> T + Send + 'static) -> Option<T> {
     let store = store.clone();
     tokio::task::spawn_blocking(move || call(&store)).await.ok()
 }
@@ -265,6 +274,7 @@ impl EndpointBuilder {
             requests: self.requests,
             host: RwLock::new(self.host),
             registry: Mutex::new(Registry::default()),
+            pairing: Mutex::new(HashMap::new()),
             events,
             connections: AtomicUsize::new(0),
             next_conn: AtomicU64::new(1),
@@ -357,6 +367,29 @@ impl Endpoint {
         DeviceNotifier { shared: self.shared.clone() }
     }
 
+    // --- pairing by a code the device shows (§3.11) ---------------------------
+
+    /// The devices that ask to be paired and wait for their code, oldest
+    /// first. `HubEvent::PairRequests` says when this changed.
+    pub fn pair_requests(&self) -> Vec<PairRequest> {
+        crate::pairing::requests(&self.shared)
+    }
+
+    /// Hub's owner entered `code`, the 6 digits `device` shows: Hub mints a
+    /// link key and sends it under the code. Returns once the device proved
+    /// that it holds the key and its record is stored (`HubEvent::Paired`);
+    /// the device then links by the handshake of §3.3. **A wrong code stores
+    /// nothing**, and a key Hub held for that device id stays as it was.
+    pub async fn pair(&self, device: &str, code: &str) -> Result<(), PairError> {
+        crate::pairing::offer(&self.shared, device, code).await
+    }
+
+    /// Hub's owner dismissed the request of `device`: it reads `refused`
+    /// `declined`. False when no request of that id waits for a code.
+    pub fn decline_pair(&self, device: &str) -> bool {
+        crate::pairing::decline(&self.shared, device)
+    }
+
     /// §3.7 Forgetting on Hub: the record goes, and the link closes with
     /// `forgotten`; the device's next connection gets `unknown_device`.
     pub async fn forget(&self, id: &str) -> std::io::Result<bool> {
@@ -379,13 +412,14 @@ impl Endpoint {
         Ok(removed)
     }
 
-    /// Hub quits: every link closes with `going_away`, and the listeners and
-    /// the beacon stop. Returns when the links have closed or the close drain
-    /// has passed.
+    /// Hub quits: every link closes with `going_away`, and so does every
+    /// request to be paired; the listeners and the beacon stop. Returns when
+    /// the links have closed or the close drain has passed.
     pub async fn shutdown(&self) {
         for task in self.tasks.lock().unwrap().drain(..) {
             task.abort();
         }
+        crate::pairing::close_all(&self.shared);
         let links: Vec<_> = self.shared.registry.lock().unwrap().devices.values().filter_map(|s| s.link.as_ref().map(|l| l.tx.clone())).collect();
         for tx in &links {
             let _ = tx.send(Input::Msg(ConnMsg::Close(CloseCode::GoingAway, "Hub quits".into())));
@@ -416,7 +450,7 @@ impl Drop for Counted {
     }
 }
 
-async fn write(writer: &mut (dyn AsyncWrite + Send + Unpin), bytes: &[u8]) -> std::io::Result<()> {
+pub(crate) async fn write(writer: &mut (dyn AsyncWrite + Send + Unpin), bytes: &[u8]) -> std::io::Result<()> {
     writer.write_all(bytes).await?;
     writer.flush().await
 }
@@ -438,7 +472,17 @@ async fn connection(shared: Arc<Shared>, stream: CarrierStream) {
             return;
         }
     };
-    let (hello, mut decoder) = admitted;
+    let (hello, mut decoder) = match admitted {
+        Admitted::Link(hello, decoder) => (hello, decoder),
+        Admitted::Pair(asked, decoder) => {
+            // §3.11: the request waits for Hub's owner, outside the 6 s of a
+            // handshake, and this connection never becomes a link: the device
+            // connects again with `hello` once it holds the key.
+            crate::pairing::serve(shared.clone(), asked, decoder, &mut *reader, &mut *writer, &peer, peer_ip).await;
+            let _ = writer.shutdown().await;
+            return;
+        }
+    };
 
     // On `ready`: the record takes what the device said and where it is.
     let now_ms = chrono::Utc::now().timestamp_millis();
@@ -479,7 +523,7 @@ async fn connection(shared: Arc<Shared>, stream: CarrierStream) {
     }
     decoder.ready(limit);
 
-    let conn_id = shared.next_conn.fetch_add(1, Ordering::SeqCst);
+    let conn_id = shared.next_conn_id();
     let (tx, rx) = mpsc::unbounded_channel();
     let in_use: Vec<String> = features.iter().filter(|f| hello.features.contains(f) && crate::conn::group_fits(f, limit)).cloned().collect();
     let info = LinkInfo {
@@ -507,9 +551,19 @@ async fn connection(shared: Arc<Shared>, stream: CarrierStream) {
     Conn::new(shared.clone(), &hello, conn_id, limit, features, decoder, tx, rx).run(reader, writer).await;
 }
 
-/// The preamble exchange and the handshake up to a verified `auth`. Returns
-/// the `hello` and the decoder, which may hold bytes that followed `auth`.
-async fn admit(shared: &Arc<Shared>, reader: &mut (dyn AsyncRead + Send + Unpin), writer: &mut (dyn AsyncWrite + Send + Unpin), peer: &str) -> Option<(Hello, FrameDecoder)> {
+/// What a connection's first `HANDSHAKE` made of it.
+enum Admitted {
+    /// A paired device, its `auth` verified: the `hello` and the decoder,
+    /// which may hold bytes that followed `auth`.
+    Link(Hello, FrameDecoder),
+    /// A device that asks to be paired by the code it shows (§3.11): its
+    /// `pair`, and the decoder with what followed it.
+    Pair(Pair, FrameDecoder),
+}
+
+/// The preamble exchange, then the handshake up to a verified `auth`, or a
+/// `pair` in place of the `hello`.
+async fn admit(shared: &Arc<Shared>, reader: &mut (dyn AsyncRead + Send + Unpin), writer: &mut (dyn AsyncWrite + Send + Unpin), peer: &str) -> Option<Admitted> {
     // §4.1: Hub reads nothing after the device's preamble until it has sent its own.
     let mut theirs = [0u8; PREAMBLE_BYTES];
     reader.read_exact(&mut theirs).await.ok()?;
@@ -526,6 +580,22 @@ async fn admit(shared: &Arc<Shared>, reader: &mut (dyn AsyncRead + Send + Unpin)
     };
 
     let object = next_handshake(&mut decoder, reader, writer, shared, peer).await?;
+    // §3.11: a connection whose first `HANDSHAKE` is `pair` is a request to
+    // be paired. It counts among the connections of §2.4.
+    if object.as_ref().and_then(|object| object.get("t")).and_then(|t| t.as_str()) == Some("pair") {
+        let asked = match pair::parse_pair(object.as_ref()) {
+            Ok(asked) => asked,
+            Err(field) => {
+                let _ = write(writer, &refuse(Refusal::Malformed, &format!("pair: {field}"), None)).await;
+                return None;
+            }
+        };
+        if shared.connections.load(Ordering::SeqCst) > shared.config.max_connections {
+            let _ = write(writer, &refuse(Refusal::Busy, "Hub is at its connection limit", Some(&asked.device))).await;
+            return None;
+        }
+        return Some(Admitted::Pair(asked, decoder));
+    }
     let hello = match handshake::parse_hello(object.as_ref()) {
         Ok(hello) => hello,
         Err(field) => {
@@ -570,7 +640,7 @@ async fn admit(shared: &Arc<Shared>, reader: &mut (dyn AsyncRead + Send + Unpin)
     let object = next_handshake(&mut decoder, reader, writer, shared, peer).await?;
     let expected = handshake::console_proof(&key, &hello.nonce, &nonce, &hello.device, &hub_id)?;
     match handshake::parse_auth(object.as_ref()) {
-        Some(proof) if handshake::proof_equals(&proof, &expected) => Some((hello, decoder)),
+        Some(proof) if handshake::proof_equals(&proof, &expected) => Some(Admitted::Link(hello, decoder)),
         _ => {
             let _ = write(writer, &refuse(Refusal::BadProof, "the proof did not verify", Some(&hello.device))).await;
             None

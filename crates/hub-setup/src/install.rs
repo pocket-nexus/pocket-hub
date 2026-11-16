@@ -42,9 +42,11 @@ use crate::program::{Decision, InstalledProgram, InstalledPrograms, PROGRAM_PATH
 use crate::release::{ReleaseFetcher, ShellRelease, ShellSource};
 use crate::storage::{AnyStorage, FileStat, SetupStorage};
 
-/// A device family: what the setup writes and how. Only the 3DS exists; a
-/// family that installs differently (a Tab5) adds a variant and its own
-/// install function behind `install`.
+/// A device family Hub sets up and whose program it installs: what the
+/// setup writes and how. The 3DS is the one such family. An M5Stack Tab5 is
+/// not one: it pairs on the link by the code it shows (§3.11) and Hub
+/// installs no program on it, so it has no variant here; what Hub knows of
+/// every family is `pocket_hub_core::family`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum DeviceFamily {
     #[serde(rename = "3ds")]

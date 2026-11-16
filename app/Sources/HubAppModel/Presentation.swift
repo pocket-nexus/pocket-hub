@@ -4,15 +4,52 @@ import HubClient
 // Localized words for the values of the contract. Kept beside the model,
 // not in views, so every surface built on this layer says the same thing.
 
-extension Device {
-    /// The name the device gave at its last handshake, or a family name before its first.
+extension DeviceKind {
+    /// The family's name, for a device that has not named itself.
     public var displayName: String {
-        if !name.isEmpty { return name }
-        switch kind {
-        case "3ds": return String(localized: "Nintendo 3DS")
-        default: return String(localized: "New device")
+        switch self {
+        case .nintendo3ds: String(localized: "Nintendo 3DS")
+        case .tab5: String(localized: "M5Stack Tab5")
+        default: String(localized: "New device")
         }
     }
+
+    /// The family's symbol: a game console, a screen in its bezel. `filled`
+    /// is the variant a connected device and a pane's icon take.
+    public func symbolName(filled: Bool) -> String {
+        switch self {
+        case .tab5: filled ? "rectangle.inset.filled" : "rectangle"
+        default: filled ? "gamecontroller.fill" : "gamecontroller"
+        }
+    }
+
+    /// What brings a device of this family onto the link, for one that has
+    /// never been seen. A 3DS runs its software from the Homebrew Launcher,
+    /// so "Pocket Shell" is the thing to open on it; a Tab5 starts into it.
+    public var howToConnect: String {
+        switch self {
+        case .nintendo3ds: String(localized: "Open Pocket Shell on the device to connect it.")
+        default: String(localized: "Turn it on to connect it.")
+        }
+    }
+
+    /// The same, as the advice of a call that found the device away.
+    public var tryAgainWhenConnected: String {
+        switch self {
+        case .nintendo3ds: String(localized: "Turn it on and open Pocket Shell, then try again.")
+        default: String(localized: "Turn it on and make sure it is on the same Wi-Fi network as this Mac, then try again.")
+        }
+    }
+}
+
+extension PairRequest {
+    /// The name the device gave in its request, or its family's.
+    public var displayName: String { name.isEmpty ? kind.displayName : name }
+}
+
+extension Device {
+    /// The name the device gave at its last handshake, or a family name before its first.
+    public var displayName: String { name.isEmpty ? kind.displayName : name }
 
     /// The applet running now, from the last `runtime.status`.
     public var runningApp: RunningApp? { link == nil ? nil : status?.app }
@@ -85,13 +122,13 @@ extension DeviceUnlinked {
     /// Why the link ended, in the owner's words (link specification §4.8).
     public var explanation: String {
         switch code {
-        case "going_away": String(localized: "The console was turned off or went to sleep.")
+        case "going_away": String(localized: "The device was turned off or went to sleep.")
         case "lost": String(localized: "The connection was lost.")
-        case "silence", "handshake_timeout": String(localized: "The console stopped responding.")
-        case "replaced": String(localized: "The console connected again.")
-        case "forgotten": String(localized: "The console was removed from Pocket Hub.")
-        case "restart": String(localized: "The console is restarting.")
-        case "auth": String(localized: "The console doesn't recognize this Mac anymore. Set it up again.")
+        case "silence", "handshake_timeout": String(localized: "The device stopped responding.")
+        case "replaced": String(localized: "The device connected again.")
+        case "forgotten": String(localized: "The device was removed from Pocket Hub.")
+        case "restart": String(localized: "The device is restarting.")
+        case "auth": String(localized: "The device doesn't recognize this Mac anymore. Add it again.")
         default: String(localized: "The connection was lost.")
         }
     }
@@ -148,7 +185,7 @@ extension MutexHolder {
 }
 
 extension DeviceBusy {
-    /// "Pocket Hub is installing an applet", or that the console is restarting.
+    /// "Pocket Hub is installing an applet", or that the device is restarting.
     public var displayText: String {
         if launching { return String(localized: "Restarting with updated software…") }
         return String(localized: "\(holder.displayName) is \(holder.activity)")
@@ -160,8 +197,8 @@ public func transferPhaseText(_ phase: String?) -> String {
     switch phase {
     case "downloading": String(localized: "Downloading…")
     case "sending": String(localized: "Sending…")
-    case "receiving", "received": String(localized: "The console is receiving it…")
-    case "staged": String(localized: "Installing on the console…")
+    case "receiving", "received": String(localized: "The device is receiving it…")
+    case "staged": String(localized: "Installing on the device…")
     default: String(localized: "Preparing…")
     }
 }

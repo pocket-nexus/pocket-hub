@@ -418,6 +418,56 @@ pub enum LaunchTarget {
 }
 
 // ---------------------------------------------------------------------------
+// Pairing by a code the device shows (§3.11)
+// ---------------------------------------------------------------------------
+
+/// A device that sent `pair` and waits for Hub's owner to enter its code.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairRequest {
+    /// The device id of its `pair`. Nothing has proved it yet.
+    pub device: String,
+    pub name: String,
+    pub model: String,
+    pub target: String,
+    /// The connection's other end, as the carrier names it (`ip:port` on TCP).
+    pub peer: String,
+    /// Where the device is, for the owner: its IP address on an IP carrier,
+    /// else `peer`.
+    pub address: String,
+    /// Epoch milliseconds of Hub's reading of the `pair`.
+    pub since: i64,
+    /// Epoch milliseconds at which Hub closes the request: the device keeps
+    /// its code as long.
+    pub expires: i64,
+}
+
+/// Why `Endpoint::pair` did not leave a pairing.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum PairError {
+    /// A code is 6 decimal digits.
+    #[error("a pairing code is 6 decimal digits")]
+    NotACode,
+    /// No device with this id waits for a code: it never asked, it left, its
+    /// request ran out, or an offer to it is out.
+    #[error("no device with this id asks to be paired")]
+    NoRequest,
+    /// The device closed on the offer's proof (`CLOSE` `auth`): the code is
+    /// not the one it shows. It asks again while it has tries left.
+    #[error("the code is not the one the device shows")]
+    WrongCode,
+    /// The device's proof of the key did not verify; nothing was stored.
+    #[error("the device's proof of the key did not verify")]
+    BadProof,
+    /// The connection ended before the device answered the offer.
+    #[error("the device left before it answered")]
+    Gone,
+    /// The device proved the key and Hub could not store its record.
+    #[error("the device's record could not be stored: {0}")]
+    Store(String),
+}
+
+// ---------------------------------------------------------------------------
 // Snapshots and events
 // ---------------------------------------------------------------------------
 
@@ -543,4 +593,11 @@ pub enum HubEvent {
     Busy { device: String, holder: Option<String>, since: Option<i64> },
     #[serde(rename_all = "camelCase")]
     Forgotten { device: String },
+    /// The requests to be paired that wait for a code changed (§3.11): a
+    /// device asked, or a request was answered, dismissed, replaced or ended.
+    /// `Endpoint::pair_requests` has them.
+    PairRequests,
+    /// A pairing by a code stored this device's record.
+    #[serde(rename_all = "camelCase")]
+    Paired { device: String },
 }

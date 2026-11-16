@@ -25,6 +25,9 @@ public final class HubModel {
     public private(set) var status: HubStatus?
     /// Paired devices, linked first, then by name.
     public private(set) var devices: [Device] = []
+    /// The devices that ask to be paired by the code they show and wait for
+    /// it, oldest first (CONTROL-API.md §3 Pairing).
+    public private(set) var pairRequests: [PairRequest] = []
     /// nil while unknown (not connected, or `daemons.list` failed).
     public private(set) var daemons: [Daemon]?
     public private(set) var bun: BunRuntime?
@@ -166,6 +169,7 @@ public final class HubModel {
             hub = snapshot.hello.hub
             status = snapshot.status
             devices = Self.sorted(snapshot.devices)
+            pairRequests = snapshot.pairRequests
             daemons = snapshot.daemons.map(Self.sorted)
             bun = snapshot.bun
             let known = Set(snapshot.devices.map(\.id))
@@ -176,6 +180,7 @@ public final class HubModel {
             logsOn.formIntersection(known)
             for id in logsOn { resendLogs(id) }
             for device in snapshot.devices { activeSetup?.deviceDidChange(device) }
+            activeSetup?.pairRequestsDidChange(pairRequests)
             store.didSync()
         case .event(let event):
             apply(event)
@@ -222,6 +227,9 @@ public final class HubModel {
             deviceLogs[line.id, default: LogBuffer()].append(line)
         case .deviceScreenshot(let shot):
             screenshots[shot.id] = shot.result
+        case .pairingChanged(let requests):
+            pairRequests = requests
+            activeSetup?.pairRequestsDidChange(requests)
         case .daemonChanged(let daemon):
             var list = daemons ?? []
             if let index = list.firstIndex(where: { $0.id == daemon.id }) {
@@ -250,6 +258,7 @@ public final class HubModel {
     private func dropLiveState() {
         store.dropLiveState()
         devices = []
+        pairRequests = []
         daemons = nil
         bun = nil
         pushes = [:]
@@ -393,10 +402,14 @@ public final class HubModel {
 
     // MARK: - Setup
 
-    /// A new setup flow, wired to this model's device updates.
-    public func makeSetupFlow() -> SetupFlowModel {
+    /// A new setup flow, wired to this model's device and pairing updates.
+    /// With `answering`, it starts at the code of that device's request, for
+    /// a device that asked while no flow was open; else at the choice of the
+    /// kind of device to add.
+    public func makeSetupFlow(answering request: PairRequest? = nil) -> SetupFlowModel {
         let flow = SetupFlowModel(client: client, model: self)
         activeSetup = flow
+        if let request { flow.answer(request) }
         return flow
     }
 }

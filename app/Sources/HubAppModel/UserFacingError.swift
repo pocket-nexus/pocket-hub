@@ -23,7 +23,9 @@ public struct UserFacingError: Error, Identifiable, Sendable, Equatable {
     }
 
     /// nil for a cancellation, which the owner asked for and needs no message.
-    public init?(_ error: any Error, deviceName: String? = nil) {
+    /// `kind` is the family of the device the call was for, which decides how
+    /// "bring it back" is said (DeviceKind.tryAgainWhenConnected).
+    public init?(_ error: any Error, deviceName: String? = nil, kind: DeviceKind = DeviceKind(rawValue: "")) {
         let name = deviceName ?? String(localized: "The device")
         guard let hubError = error as? HubError else {
             self.init(title: String(localized: "Something went wrong."),
@@ -43,7 +45,7 @@ public struct UserFacingError: Error, Identifiable, Sendable, Equatable {
                           detail: detail)
             case .notLinked:
                 self.init(title: String(localized: "\(name) isn't connected right now."),
-                          advice: String(localized: "Turn it on and open Pocket Shell, then try again."),
+                          advice: kind.tryAgainWhenConnected,
                           detail: nil)
             case .busy:
                 let holder = operation.holder.map(\.displayName) ?? String(localized: "another app")
@@ -51,6 +53,13 @@ public struct UserFacingError: Error, Identifiable, Sendable, Equatable {
                 self.init(title: String(localized: "\(name) is busy."),
                           advice: String(localized: "\(holder) is \(activity) right now. Try again when it has finished."),
                           detail: nil)
+            case .link where operation.linkCode == "unsupported":
+                // Its family does not take the operation (`supports`), or its
+                // software predates it. The UI offers neither; Hub's sentence
+                // says which it was.
+                self.init(title: String(localized: "\(name) can't do this."),
+                          advice: String(localized: "This kind of device, or the version of its software, doesn't support it."),
+                          detail: detail)
             case .link:
                 self.init(title: String(localized: "\(name) didn't respond."),
                           advice: String(localized: "Make sure it is on and nearby, then try again."),
@@ -78,6 +87,12 @@ public struct UserFacingError: Error, Identifiable, Sendable, Equatable {
             case .setup:
                 self.init(title: String(localized: "The setup didn't finish."),
                           advice: String(localized: "Try the setup again."),
+                          detail: detail)
+            case .pairing:
+                // The pairing sheet words these itself (SetupFlowModel); this
+                // is for a pairing answered from anywhere else.
+                self.init(title: String(localized: "The device wasn't paired."),
+                          advice: String(localized: "Check the code on the device and try again."),
                           detail: detail)
             case .internal, .other:
                 self.init(title: String(localized: "Something went wrong in Pocket Hub."),
@@ -109,7 +124,7 @@ extension UserFacingError {
 
     /// A failure of `devices.remove`, worded for the applet and the device.
     /// nil for a cancellation.
-    public init?(deleteError error: any Error, appTitle: String, deviceName: String?) {
+    public init?(deleteError error: any Error, appTitle: String, deviceName: String?, kind: DeviceKind = DeviceKind(rawValue: "")) {
         let name = deviceName ?? String(localized: "This device")
         if let hubError = error as? HubError, case .operation(let operation) = hubError, operation.kind == .link {
             let detail = operation.message.isEmpty ? nil : operation.message
@@ -117,12 +132,12 @@ extension UserFacingError {
             switch (operation.linkCode, operation.reason) {
             case ("rejected", "running"):
                 self.init(title: String(localized: "\(appTitle) is open on \(name)."),
-                          advice: String(localized: "Go back to the home screen on the console, then delete it again."),
+                          advice: String(localized: "Go back to the home screen on the device, then delete it again."),
                           detail: detail)
                 return
             case ("rejected", "home"):
                 self.init(title: String(localized: "The home screen can't be deleted."),
-                          advice: String(localized: "The console opens its applets from it."),
+                          advice: String(localized: "The device opens its applets from it."),
                           detail: detail)
                 return
             case ("unsupported", _):
@@ -132,19 +147,19 @@ extension UserFacingError {
                 break
             }
         }
-        self.init(error, deviceName: deviceName)
+        self.init(error, deviceName: deviceName, kind: kind)
     }
 
     /// What deleting says for a device whose software predates deleting from
-    /// Hub (its link does not use `runtime.remove`): the console's own way.
+    /// Hub (its link does not use `runtime.remove`): the device's own way.
     public static func deletingNeedsNewerSoftware(deviceName: String) -> UserFacingError {
         UserFacingError(title: String(localized: "\(deviceName) can't delete applets from this Mac."),
-                        advice: String(localized: "Delete it on the console instead: hold its icon on the home screen. A newer version of its software deletes applets from here."))
+                        advice: String(localized: "Delete it on the device instead: hold its icon on the home screen. A newer version of its software deletes applets from here."))
     }
 
     /// A failure of `store.install`, worded for the applet and the device.
     /// nil for a cancellation the owner asked for.
-    public init?(storeInstallError error: any Error, appTitle: String, deviceName: String?) {
+    public init?(storeInstallError error: any Error, appTitle: String, deviceName: String?, kind: DeviceKind = DeviceKind(rawValue: "")) {
         if let hubError = error as? HubError, case .operation(let operation) = hubError, operation.kind == .notFound {
             let name = deviceName ?? String(localized: "This device")
             self.init(title: String(localized: "\(appTitle) isn't available for \(name)."),
@@ -152,7 +167,7 @@ extension UserFacingError {
                       detail: operation.message.isEmpty ? nil : operation.message)
             return
         }
-        self.init(error, deviceName: deviceName)
+        self.init(error, deviceName: deviceName, kind: kind)
     }
 }
 
@@ -182,7 +197,8 @@ extension UserFacingError {
     public init?(programUpdateError error: any Error, deviceName: String?) {
         let name = deviceName ?? String(localized: "Your 3DS")
         guard let hubError = error as? HubError, case .operation(let operation) = hubError else {
-            self.init(error, deviceName: deviceName)
+            // Hub installs the software of a 3DS alone (`supports`).
+            self.init(error, deviceName: deviceName, kind: .nintendo3ds)
             return
         }
         let detail = operation.message.isEmpty ? nil : operation.message
@@ -210,7 +226,7 @@ extension UserFacingError {
                           detail: detail)
             }
         default:
-            self.init(error, deviceName: deviceName)
+            self.init(error, deviceName: deviceName, kind: .nintendo3ds)
         }
     }
 

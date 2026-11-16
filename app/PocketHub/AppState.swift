@@ -29,6 +29,14 @@ final class AppState {
     /// keyboard commands can choose it, whichever page is open.
     var deviceTab: DeviceTab = .applets
     var showingSetup = false
+    /// The request the Add a Device sheet opens on, when a device that asks
+    /// to be paired opened it; nil when the owner did.
+    var setupRequest: PairRequest?
+    /// The flow of the sheet that is open, for the debug commands.
+    weak var setupFlow: SetupFlowModel?
+    /// The requests a sheet was already opened for (device id and time), so
+    /// one the owner closed the sheet on does not open it again.
+    private var presentedRequests: Set<String> = []
     /// The device page's file picker for a .pocket applet, and its question
     /// before removing the device: here so the Device menu can open them as
     /// the toolbar does (HIG, Toolbars › macOS: every toolbar item is also a
@@ -57,6 +65,7 @@ final class AppState {
         let launch = ProcessInfo.processInfo.environment["POCKET_HUB_NO_LAUNCH"] != "1"
         model = HubModel(clientName: "Pocket Hub", version: version, launchCore: launch)
         model.start()
+        Task { await self.watchPairRequests() }
         #if DEBUG
         DebugSnapshots.startIfRequested()
         DebugCommands.startIfRequested(self)
@@ -89,6 +98,46 @@ final class AppState {
     func startSetup() {
         showingSetup = true
         showWindow()
+    }
+
+    // MARK: - A device asks to be paired (CONTROL-API.md §3 Pairing)
+
+    /// Opens the Add a Device sheet on a device's request as soon as one
+    /// waits and no sheet is in the way: its owner is at the device, which
+    /// shows a code for 5 minutes, and has just chosen this Mac there. The
+    /// window comes to the front for it, as the system's own pairing requests
+    /// do. Runs for the app's life; each pass waits for the next change of
+    /// what it read.
+    private func watchPairRequests() async {
+        while true {
+            presentPairRequestIfNeeded()
+            await withCheckedContinuation { continuation in
+                withObservationTracking {
+                    _ = model.pairRequests
+                    _ = showingSetup
+                    _ = storeDetails
+                } onChange: { continuation.resume() }
+            }
+        }
+    }
+
+    private func presentPairRequestIfNeeded() {
+        func key(_ request: PairRequest) -> String { "\(request.device) \(request.since)" }
+        let waiting = model.pairRequests
+        presentedRequests.formIntersection(waiting.map(key))
+        // A sheet that is open handles requests itself (SetupFlowModel), and
+        // an applet's sheet is not covered by another.
+        guard !showingSetup, storeDetails == nil, let request = waiting.first(where: { !presentedRequests.contains(key($0)) }) else { return }
+        presentedRequests.insert(key(request))
+        startPairing(request)
+    }
+
+    /// Opens the sheet on `request`'s code: from the watch above, or from the
+    /// menu bar's item for a request whose sheet the owner closed.
+    func startPairing(_ request: PairRequest) {
+        guard !showingSetup else { return }
+        setupRequest = request
+        startSetup()
     }
 
     // MARK: - Links (docs/DEEP-LINKS.md §2)
@@ -165,7 +214,8 @@ final class AppState {
                     show(device: deviceId)
                 }
             } catch {
-                presentedError = UserFacingError(error, deviceName: model.device(deviceId)?.displayName)
+                let device = model.device(deviceId)
+                presentedError = UserFacingError(error, deviceName: device?.displayName, kind: device?.kind ?? DeviceKind(rawValue: ""))
                 if presentedError != nil { showWindow() }
             }
         }

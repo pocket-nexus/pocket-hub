@@ -61,7 +61,7 @@ private struct SetupSheet: View {
     var body: some View {
         Group {
             if let flow {
-                SetupFlowView(flow: flow) { deviceId in
+                SetupFlowView(flow: flow, macName: state.model.hub?.name ?? "") { deviceId in
                     state.showingSetup = false
                     if let deviceId { state.selection = .device(deviceId) }
                 }
@@ -69,7 +69,14 @@ private struct SetupSheet: View {
                 ProgressView().frame(width: 520, height: 440)
             }
         }
-        .onAppear { if flow == nil { flow = state.model.makeSetupFlow() } }
+        .onAppear {
+            guard flow == nil else { return }
+            // A device that asked opens the sheet on its code (AppState.startPairing).
+            let made = state.model.makeSetupFlow(answering: state.setupRequest)
+            state.setupRequest = nil
+            state.setupFlow = made
+            flow = made
+        }
     }
 }
 
@@ -87,7 +94,7 @@ struct Sidebar: View {
                             .tag(SidebarItem.device(device.id))
                     }
                     Button {
-                        state.showingSetup = true
+                        state.startSetup()
                     } label: {
                         Label("Add a Device…", systemImage: "plus.circle")
                     }
@@ -137,11 +144,12 @@ struct DeviceRow: View {
                 .foregroundStyle(.secondary)
             }
         } icon: {
-            // The controller glyph is wider than the sidebar's icon column;
-            // at full scale it runs into the name. A connected device keeps the
-            // sidebar's tint (the owner's accent colour, as every sidebar icon
-            // does; HIG, Sidebars); one that is away is dimmed.
-            Image(systemName: device.isLinked ? "gamecontroller.fill" : "gamecontroller")
+            // The family's glyph (a controller, a touch screen) is wider than
+            // the sidebar's icon column; at full scale it runs into the name.
+            // A connected device keeps the sidebar's tint (the owner's accent
+            // colour, as every sidebar icon does; HIG, Sidebars); one that is
+            // away is dimmed.
+            Image(systemName: device.kind.symbolName(filled: device.isLinked))
                 .imageScale(.small)
                 .foregroundStyle(device.isLinked ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
         }
@@ -177,7 +185,7 @@ struct Detail: View {
                     } description: {
                         Text("Add a device to install applets on it, take screenshots and more.")
                     } actions: {
-                        Button("Add a Device…") { state.showingSetup = true }
+                        Button("Add a Device…") { state.startSetup() }
                             .controlSize(.large)
                             .buttonStyle(.borderedProminent)
                     }

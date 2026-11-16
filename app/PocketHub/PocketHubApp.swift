@@ -69,13 +69,13 @@ struct HubCommands: Commands {
                 }
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
-            .disabled(!selectedDeviceIsLinked)
+            .disabled(!selectedDeviceIsLinked || !selectedDeviceSupports(.screenshot))
             Button("Install Applet…") { state.importingApplet = true }
             .keyboardShortcut("i", modifiers: [.command, .shift])
-            .disabled(!selectedDeviceIsLinked || state.selectedDeviceID.flatMap { state.model.pushes[$0] } != nil)
+            .disabled(!selectedDeviceIsLinked || !selectedDeviceSupports(.push) || state.selectedDeviceID.flatMap { state.model.pushes[$0] } != nil)
             Button("Show Log") { state.deviceTab = .log }
             .keyboardShortcut("l")
-            .disabled(state.selectedDeviceID == nil)
+            .disabled(!selectedDeviceSupports(.logs))
             Divider()
             Button("Remove from Pocket Hub…") { state.confirmingRemoveDevice = true }
             .disabled(state.selectedDeviceID == nil)
@@ -93,5 +93,12 @@ struct HubCommands: Commands {
     private var selectedDeviceIsLinked: Bool {
         guard let id = state.selectedDeviceID else { return false }
         return state.model.device(id)?.isLinked == true
+    }
+
+    /// A menu command is off for a device that does not take it (`supports`),
+    /// as the toolbar has no button for it.
+    private func selectedDeviceSupports(_ operation: DeviceOperation) -> Bool {
+        guard let id = state.selectedDeviceID else { return false }
+        return state.model.device(id)?.supports(operation) == true
     }
 }

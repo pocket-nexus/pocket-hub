@@ -211,10 +211,25 @@ pub fn device_state(device: &Device) -> String {
 
 pub fn devices(devices: &[Device]) -> String {
     if devices.is_empty() {
-        return "No device is paired. Set one up with: pocket-hub setup 3ds".into();
+        return "No device is paired. Set a 3DS up with: pocket-hub setup 3ds\nA device that shows a code (an M5Stack Tab5) is paired with: pocket-hub pair".into();
     }
     let rows = devices.iter().map(|d| vec![d.id.clone(), d.name.clone(), d.model.clone(), program(&d.program), device_state(d)]).collect();
     table(&["ID", "NAME", "MODEL", "PROGRAM", "STATE"], rows)
+}
+
+/// `pair`: the devices that ask to be paired, and how to answer one.
+pub fn pair_requests(requests: &[PairRequest]) -> String {
+    if requests.is_empty() {
+        return "No device asks to be paired. On the device, open its pairing page and choose this computer; then run this again.".into();
+    }
+    let rows = requests.iter().map(|r| vec![r.device.clone(), r.name.clone(), r.model.clone(), r.address.clone(), local_time(r.expires)]).collect();
+    format!("{}\nEnter the code a device shows with: pocket-hub pair --code <digits>", table(&["ID", "NAME", "MODEL", "ADDRESS", "ASKS UNTIL"], rows))
+}
+
+/// What `pair --code` did.
+pub fn paired(device: &Device) -> String {
+    let name = if device.name.is_empty() { &device.id } else { &device.name };
+    format!("Paired {name} ({}). It connects by itself, now and whenever it is on.", device.id)
 }
 
 /// The device's own program: its version (`-` before it reported one) and
@@ -354,6 +369,11 @@ pub fn event_line(event: &Value) -> String {
         "device.unlinked" => format!("device {} unlinked: {} {}", text("id"), text("code"), text("reason")),
         "device.log" => format!("[{}] {} {}: {}", event["frame"], text("level"), text("source"), text("text")),
         "device.screenshot" => format!("device {} screenshot {} ({}x{})", text("id"), text("path"), event["width"], event["height"]),
+        "pairing.changed" => match serde_json::from_value::<Vec<PairRequest>>(event["requests"].clone()) {
+            Ok(requests) if requests.is_empty() => "pairing: no device asks to be paired".to_owned(),
+            Ok(requests) => format!("pairing: {} ask(s) to be paired", requests.iter().map(|r| format!("{} {} ({})", r.device, r.name, r.address)).collect::<Vec<_>>().join(", ")),
+            Err(_) => format!("pairing.changed {}", event["requests"]),
+        },
         "daemon.changed" => match serde_json::from_value::<Daemon>(event["daemon"].clone()) {
             Ok(daemon) => {
                 let pid = daemon.pid.map(|pid| format!(" pid {pid}")).unwrap_or_default();
