@@ -174,6 +174,7 @@ pub async fn dispatch(core: &Arc<Core>, client: &Client, id: &Value, method: &st
         methods::DAEMONS_RUNTIME => runtime(core, params(method, value)?, &progress).await,
 
         methods::STORE_APPS => store_apps(core, params(method, value)?).await,
+        methods::STORE_DETAILS => store_details(core, params(method, value)?).await,
         methods::STORE_INSTALL => store_install(core, client, method, params(method, value)?, &progress).await,
         other => Err(RpcError::method_not_found(other)),
     }
@@ -537,6 +538,26 @@ async fn store_apps(core: &Arc<Core>, p: StoreAppsParams) -> Result<Value, RpcEr
         })
         .collect();
     ok(StoreApps { apps, fetched_at: catalog.fetched_at })
+}
+
+/// `store.details`: the store's details of the package the catalog Hub holds
+/// names for the applet (fetched again past 10 minutes, as for `store.apps`),
+/// which the store client keeps while it holds that catalog. Hub reads no
+/// manifest of its own: the store is the one place that does.
+async fn store_details(core: &Arc<Core>, p: StoreDetailsParams) -> Result<Value, RpcError> {
+    let catalog = core.applets.apps(false).await.map_err(store_error)?;
+    let entry = catalog.app(&p.app).ok_or_else(|| RpcError::op(ErrorKind::NotFound, format!("The applet store lists no {}.", p.app)))?;
+    let details = core.applets.details(entry).await.map_err(store_error)?;
+    ok(StoreDetails {
+        id: entry.id.clone(),
+        version: entry.version.clone(),
+        devices: details.devices.iter().map(|device| BuiltFor { target: device.target.clone(), name: device.name.clone(), host_abi: device.build.as_ref().map(|build| build.host_abi) }).collect(),
+        needs: details.needs.clone(),
+        uses: details.uses.clone(),
+        surface: details.surface.as_ref().map(|surface| AppSurface { touch: surface.touch, size: surface.size.as_ref().map(|size| SurfaceSize { min: size.min, max: size.max }) }),
+        framework: details.framework.clone(),
+        api: details.api,
+    })
 }
 
 /// `store.install`: the applet's package from the cache, or downloaded and

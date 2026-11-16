@@ -261,3 +261,56 @@ extension StoreApp {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }
+
+/// What a capability an applet declares lets it do (PocketJS
+/// `contracts/spec/applet.ts`), in the owner's words, for the ids of
+/// `StoreDetails.needs` and `uses`. nil for an id this app has no words for:
+/// a UI shows the id itself. The ids come out of a publisher's package, so
+/// the list is the app's, not the package's.
+public func capabilityText(_ id: String) -> String? {
+    switch id {
+    case "text.glyphs.baked": String(localized: "Text drawn with its own built-in characters")
+    case "text.glyphs.runtime": String(localized: "Characters it doesn't include, from the device's fonts")
+    case "input.buttons": String(localized: "The device's buttons")
+    case "input.analog.left": String(localized: "The left stick")
+    case "input.text": String(localized: "Typing on a keyboard")
+    case "display.auxiliary": String(localized: "A touch screen of its own")
+    case "input.touch.auxiliary": String(localized: "Touch on that screen")
+    case "net.http": String(localized: "Internet requests, made by the device for it")
+    case "ui.physics": String(localized: "2D physics")
+    case "audio.pcm": String(localized: "Sound it makes itself")
+    case "media.playback": String(localized: "Audio and video streams")
+    case "data.fs": String(localized: "Files of its own")
+    case "system.agent": String(localized: "The device's coding agent can operate it")
+    default: id.hasPrefix("camera.") ? String(localized: "The camera") : nil
+    }
+}
+
+extension StoreDetails {
+    /// The names of the devices it was built for, in the store's order, each
+    /// once: "Omarchy Pocket, M5Stack Tab5, Nintendo 3DS". A device's name is
+    /// the store's and the same in every language.
+    public var deviceNames: [String] {
+        devices.map(\.name).reduce(into: []) { names, name in
+            if !names.contains(name) { names.append(name) }
+        }
+    }
+
+    /// The surface it lays itself out for, in a line: "Touch, 320 × 240 to
+    /// 640 × 720". nil when the package names none, or names the device's
+    /// own screen with no sizes, which says nothing.
+    public var screenText: String? {
+        guard let surface else { return nil }
+        let size = surface.size.flatMap { size -> String? in
+            guard size.min.count == 2, size.max.count == 2 else { return nil }
+            let (least, most) = ("\(size.min[0]) × \(size.min[1])", "\(size.max[0]) × \(size.max[1])")
+            return String(localized: "\(least) to \(most)")
+        }
+        switch (surface.touch, size) {
+        case (true, let size?): return String(localized: "Touch, \(size)")
+        case (true, nil): return String(localized: "Touch")
+        case (false, let size?): return size
+        case (false, nil): return nil
+        }
+    }
+}

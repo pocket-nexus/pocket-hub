@@ -22,6 +22,12 @@
 //!   whole package. Hub downloads the packages of the targets of its paired
 //!   devices after each catalog fetch (`prefetch`), one at a time, and a
 //!   row is offered once its package is verified in the cache.
+//! - **An app's details** are `GET /v1/details/<sha256>` of the package the
+//!   held catalog names: the store reads them out of the package, and Hub
+//!   reads no manifest of its own. They are asked for when a caller wants
+//!   them and kept in memory while the catalog they were asked under is
+//!   held: the store's reading of a package grows (a new device gets its
+//!   name), so they are not kept for good as a package is.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -33,6 +39,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::{broadcast, watch};
 
+use crate::details::{self, DETAILS_MAX_BYTES, Details};
 use crate::entry::{Entry, OFFICIAL_KEY};
 use crate::package::{self, PackageFacts};
 use crate::pager::Row;
@@ -58,7 +65,7 @@ pub struct StoreConfig {
     pub max_age: Duration,
     /// A download that receives nothing for this long fails (`Unreachable`).
     pub stall: Duration,
-    /// The longest wait for the catalog or an icon, and for a package's answer head.
+    /// The longest wait for the catalog, an icon or an app's details, and for a package's answer head.
     pub request_timeout: Duration,
     /// Epoch milliseconds now: the catalog's age is measured with it.
     pub now: Arc<dyn Fn() -> i64 + Send + Sync>,
@@ -151,6 +158,9 @@ struct State {
     /// not download them again; an install does.
     rejected: HashMap<String, String>,
     inflight: HashMap<String, watch::Receiver<Fetch>>,
+    /// Apps' details by their package's SHA-256, asked for under the held
+    /// catalog; another catalog drops them.
+    details: HashMap<String, Arc<Details>>,
     prefetching: bool,
     prefetch_again: bool,
     fetching_icons: bool,
@@ -365,6 +375,7 @@ impl AppletStore {
             let mut state = self.state.lock().unwrap();
             let changed = state.catalog.as_ref().is_none_or(|held| held.apps != catalog.apps);
             state.catalog = Some(catalog.clone());
+            state.details.clear();
             changed
         };
         if changed {
@@ -604,6 +615,44 @@ impl AppletStore {
                 targets = (this.config.wanted_targets)();
             }
         });
+    }
+
+    // --- details ---------------------------------------------------------------
+
+    /// The details of the entry's package (`/v1/details/<sha256>`): the ones
+    /// kept since the held catalog was fetched, else asked for now. A store
+    /// that does not answer them, or not with a package's details, is
+    /// `Unreachable`; nothing older stands in for them.
+    pub async fn details(&self, entry: &Entry) -> Result<Arc<Details>, StoreError> {
+        if let Some(kept) = self.state.lock().unwrap().details.get(&entry.package) {
+            return Ok(kept.clone());
+        }
+        let asked_under = self.held();
+        let url = format!("{}/v1/details/{}", self.config.base_url, entry.package);
+        let unreachable = |why: String| StoreError::Unreachable(format!("The details of {} could not be read from the applet store at {}: {why}.", entry.id, self.config.base_url));
+        let work = async {
+            let mut response = self.http.get(&url).send().await.map_err(|error| unreachable(error_text(&error)))?;
+            if response.status() != reqwest::StatusCode::OK {
+                return Err(unreachable(format!("it answered {}", response.status())));
+            }
+            let mut body = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(|error| unreachable(error_text(&error)))? {
+                body.extend_from_slice(&chunk);
+                if body.len() > DETAILS_MAX_BYTES {
+                    return Err(unreachable("its answer is longer than 1 MiB, which is not the store's".into()));
+                }
+            }
+            Ok(body)
+        };
+        let body = tokio::time::timeout(self.config.request_timeout, work).await.map_err(|_| unreachable(format!("no answer within {} s", self.config.request_timeout.as_secs())))??;
+        let details = Arc::new(details::parse(&body).map_err(unreachable)?);
+        // Kept only under the catalog they were asked under: one fetched
+        // meanwhile has dropped the others, and these may be older than it.
+        let mut state = self.state.lock().unwrap();
+        if state.catalog.as_ref().map(Arc::as_ptr) == asked_under.as_ref().map(Arc::as_ptr) {
+            state.details.insert(entry.package.clone(), details.clone());
+        }
+        Ok(details)
     }
 
     // --- icons -----------------------------------------------------------------

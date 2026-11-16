@@ -1,6 +1,7 @@
 //! The store client against the fake store: the catalog's fetch, cache and
 //! refresh rules; packages verified by SHA-256 and signature (accepted and
-//! rejected), kept once and never downloaded again; icons; the link's offer.
+//! rejected), kept once and never downloaded again; icons; an app's details,
+//! kept while the catalog is; the link's offer.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -114,6 +115,54 @@ async fn the_catalog_is_fetched_cached_and_refreshed() {
     config.cache = tempfile::tempdir().unwrap().keep();
     let nowhere = AppletStore::open(config).unwrap();
     assert!(matches!(nowhere.apps(false).await, Err(StoreError::Unreachable(_))));
+}
+
+#[tokio::test]
+async fn details_are_the_stores_kept_while_the_catalog_is() {
+    let setup = Setup::new().await;
+    let key = test_key(KEY);
+    let hn = setup.fake.publish(&key, fixture("hn.pocket"), fixture("hn.png"), "pocket-nexus", "Hacker News.");
+    setup.fake.set_details(&hn.package, Some(fixture_details("hn")));
+    let built = setup.fake.publish(&key, build_package("io.example.plain", "1.0.0", "Plain", &[("3ds-dev", "plain"), ("x-unknown", "plain")], 100), icon(3), "someone", "Plain.");
+    let store = setup.open(&[]);
+    store.apps(false).await.unwrap();
+    let path = format!("/v1/details/{}", hn.package);
+
+    // Asked by the hash of the package the catalog names; the store's answer
+    // as it reads the package.
+    let details = store.details(&hn).await.unwrap();
+    assert_eq!(details.devices.iter().map(|device| device.name.as_str()).collect::<Vec<_>>(), ["Omarchy Pocket", "M5Stack Tab5", "Nintendo 3DS"]);
+    assert_eq!(details.needs.len(), 5);
+    assert_eq!(details.surface.as_ref().and_then(|surface| surface.size.as_ref()).map(|size| (size.min, size.max)), Some(([320, 240], [640, 720])));
+    assert_eq!(setup.fake.hits(&path), 1);
+    // Kept while the catalog is held.
+    assert_eq!(store.details(&hn).await.unwrap(), details);
+    assert_eq!(setup.fake.hits(&path), 1);
+    // A device the store has no name for keeps its target, last.
+    let plain = store.details(&built).await.unwrap();
+    assert_eq!(plain.devices.iter().map(|device| (device.target.as_str(), device.name.as_str())).collect::<Vec<_>>(), [("3ds-dev", "Nintendo 3DS"), ("x-unknown", "x-unknown")]);
+    assert_eq!((plain.needs.len(), plain.surface.clone(), plain.api), (0, None, Some(1)));
+
+    // Another catalog drops them: the store's reading of a package grows.
+    let mut grown = fixture_details("hn");
+    grown["devices"][0]["name"] = serde_json::json!("Omarchy Pocket 2");
+    setup.fake.set_details(&hn.package, Some(grown));
+    assert_eq!(store.details(&hn).await.unwrap().devices[0].name, "Omarchy Pocket");
+    store.apps(true).await.unwrap();
+    assert_eq!(store.details(&hn).await.unwrap().devices[0].name, "Omarchy Pocket 2");
+    assert_eq!(setup.fake.hits(&path), 2);
+
+    // Not answered, or not with details: unreachable, nothing older in their place.
+    store.apps(true).await.unwrap();
+    setup.fake.set_details(&hn.package, None);
+    let missing = store.details(&hn).await.unwrap_err();
+    assert_eq!(missing.reason(), "unreachable");
+    assert!(missing.to_string().contains("404"), "{missing}");
+    setup.fake.set_details(&hn.package, Some(serde_json::json!({"error": "not details"})));
+    assert!(matches!(store.details(&hn).await, Err(StoreError::Unreachable(_))));
+    // A failed answer is not kept: the next ask tries again.
+    setup.fake.set_details(&hn.package, Some(fixture_details("hn")));
+    assert_eq!(store.details(&hn).await.unwrap().devices.len(), 3);
 }
 
 #[tokio::test]

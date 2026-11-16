@@ -303,6 +303,21 @@ public final class StoreModel {
         try await model.launch(appId: app.id, on: device)
     }
 
+    // MARK: - An applet's details
+
+    /// What the package of the applet's newest listed version says about it,
+    /// as the store reads it out (CONTROL-API.md §3 `store.details`), or why
+    /// it could not be had, in the owner's words. Hub keeps the details while
+    /// it holds its catalog, so asking again is answered at once.
+    public func details(of app: StoreApp) async -> Result<StoreDetails, UserFacingError> {
+        do {
+            return .success(try await client.storeDetails(app: app.id))
+        } catch {
+            Self.log.notice("details of \(app.id, privacy: .public): \(error, privacy: .public)")
+            return .failure(UserFacingError(storeError: error))
+        }
+    }
+
     // MARK: - Opened from a link (docs/DEEP-LINKS.md §2)
 
     /// The store's entry for an applet id, out of the whole catalog; nil when

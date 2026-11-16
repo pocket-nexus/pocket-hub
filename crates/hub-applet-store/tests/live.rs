@@ -1,6 +1,7 @@
 //! Against the live store (applets.pocket.nexus): the catalog, every entry's
-//! signature with the official key Hub pins, one package downloaded and
-//! verified, and one icon. Ignored by default: it needs the network.
+//! signature with the official key Hub pins, every app's details, one package
+//! downloaded and verified, and one icon. Ignored by default: it needs the
+//! network.
 //!
 //! `cargo test -p pocket-hub-applet-store --test live -- --ignored --nocapture`
 
@@ -55,4 +56,15 @@ async fn the_live_store() {
     }
     let icon = store.icon_path(entry).expect("the icon arrives");
     println!("icon: {} bytes", std::fs::metadata(icon).unwrap().len());
+
+    // Every app's details read, and name the devices its entry lists.
+    for entry in &catalog.apps {
+        let details = store.details(entry).await.unwrap_or_else(|error| panic!("{error}"));
+        let mut targets: Vec<&str> = details.devices.iter().map(|device| device.target.as_str()).collect();
+        let mut listed: Vec<&str> = entry.targets.iter().map(String::as_str).collect();
+        targets.sort();
+        listed.sort();
+        assert_eq!(targets, listed, "{}", entry.id);
+        println!("details: {} needs {:?}, uses {:?}", entry.id, details.needs, details.uses);
+    }
 }

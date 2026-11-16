@@ -149,6 +149,11 @@ struct StoreArgs {
 
 #[derive(Subcommand, Debug)]
 enum StoreCommand {
+    /// What an applet's package says about it, as the store reads it: the devices it was built for, the capabilities it needs and uses, its surface.
+    Details {
+        /// The applet's id (dev.pocket-nexus.hn).
+        app: String,
+    },
     /// Install an applet from the store on a device, downloading it first when Hub has not.
     Install {
         /// The applet's id (dev.pocket-nexus.hn).
@@ -452,6 +457,10 @@ async fn store(client: &Client, out: &Out, args: StoreArgs) -> Outcome {
             let for_device = args.device.is_some();
             let value = client.call(methods::STORE_APPS, &StoreAppsParams { device: args.device, refresh: args.refresh.then_some(true) }).await?;
             out.result(&value, || Ok(output::store(&decode(&value)?, for_device)))
+        }
+        Some(StoreCommand::Details { app }) => {
+            let value = client.call(methods::STORE_DETAILS, &StoreDetailsParams { app }).await?;
+            out.result(&value, || Ok(output::store_details(&decode(&value)?)))
         }
         Some(StoreCommand::Install { app }) => {
             let device = args.device.unwrap_or_else(|| "*".into());

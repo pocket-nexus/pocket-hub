@@ -182,6 +182,21 @@ is the same object in a Device's `busy` and in the error `busy`.
 | `installed` | object or null | only in an answer for a device (absent without `device`): `{version, hash}` of the copy that device holds, null when it holds none |
 | `update` | boolean | only in an answer for a device: the store's version orders above the version the device holds (`major.minor.patch`). An equal version is no update whatever its hash |
 
+**StoreDetails** — what an applet's package says about the applet, as the
+store reads it out of the package's manifest and directory (the store's
+`GET /v1/details/<sha256>`). No client reads a manifest of its own. The
+publisher's signature does not cover them: they are the store's reading.
+
+| Field | Type | Content |
+| --- | --- | --- |
+| `id`, `version` | string | the applet, and the version these are of: the newest listed, the one `store.apps` gives |
+| `devices` | array | the devices the package was built for, in the store's order: `{target, name, hostAbi}`. `name` is the store's name for the device (`Nintendo 3DS`, `Omarchy Pocket`), the same in every language; the target itself for a device the store has no name for. `hostAbi`: an integer, or null when the store names no build |
+| `needs` | array | the capabilities it needs of a device, by id (PocketJS `contracts/spec/applet.ts`): `input.buttons`, `net.http`, … |
+| `uses` | array | the capabilities it uses where a device has them |
+| `surface` | object or null | the surface it lays itself out for, null when the package names none: `{touch, size}`. `touch` true: a touch surface of its own, not the device's screen. `size`: `{min: [width, height], max: [width, height]}` in points, or null |
+| `framework` | string or null | what its interface is written with (`solid`) |
+| `api` | integer or null | the version of the applet API it is written for |
+
 ## 3. Methods
 
 Methods that change a device's state take the device mutex (link specification
@@ -319,6 +334,7 @@ one offer on the computer and on the device.
 | Method | Params | Result | Mutex |
 | --- | --- | --- | --- |
 | `store.apps` | `{device?, refresh?}` | `{apps: [StoreApp], fetchedAt}`. With `device`: the applets that have a variant for that device's target, each with `installed` and `update`; a device that has never linked has no known target and is offered none. Hub answers from the catalog it holds and fetches it again when it is older than 10 minutes or `refresh` is true. **When that fetch fails the answer is the error `store`, not the older catalog** | |
+| `store.details` | `{app}` | `StoreDetails` of the applet's newest listed version. Hub asks the store for the details of the package its catalog names (fetched again past 10 minutes, as for `store.apps`) and keeps them while it holds that catalog. An applet the catalog does not list is `not_found`; a store that does not answer them is the error `store` | |
 | `store.install` | `{device, app}` | as `devices.push`. Hub downloads the applet's package when its cache lacks it, checks it, and installs it on the device; an applet with no variant for the device's target is `not_found`. Progress: `{phase, done, total}`, `phase` being `downloading` (once, with `done` equal to `total`, when the package was cached) and then those of `devices.push`. The device is held from the start, the download included, with the method `store.install` | yes |
 
 **Hub fetches the packages of its paired devices' targets ahead of need**, one

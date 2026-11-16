@@ -616,6 +616,58 @@ pub struct StoreApps {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreDetailsParams {
+    /// The applet's id.
+    pub app: String,
+}
+
+/// What an applet's package says about it, as the store reads it out (§2
+/// StoreDetails): of the newest listed version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreDetails {
+    pub id: String,
+    pub version: String,
+    /// The devices the package was built for, in the store's order.
+    pub devices: Vec<BuiltFor>,
+    /// The capabilities it needs of a device, by id.
+    pub needs: Vec<String>,
+    /// The ones it uses where a device has them.
+    pub uses: Vec<String>,
+    /// Null when the package names no surface.
+    pub surface: Option<AppSurface>,
+    pub framework: Option<String>,
+    /// The applet API's version.
+    pub api: Option<u32>,
+}
+
+/// A device a package was built for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuiltFor {
+    pub target: String,
+    /// The store's name for the device, the target for one it has no name for.
+    pub name: String,
+    /// Null when the store names no build.
+    pub host_abi: Option<u32>,
+}
+
+/// The surface an applet lays itself out for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppSurface {
+    /// A touch surface of its own, not the device's screen.
+    pub touch: bool,
+    /// The sizes it is laid out for, in points; null when it names none.
+    pub size: Option<SurfaceSize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceSize {
+    /// `[width, height]`.
+    pub min: [u32; 2],
+    pub max: [u32; 2],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoreInstallParams {
     pub device: String,
     /// The applet's id.

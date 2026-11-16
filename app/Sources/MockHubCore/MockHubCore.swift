@@ -603,6 +603,13 @@ public actor MockHubCore {
             }
             return ["apps": .array(offered.map { $0.json(icon: storeIconPath($0.id), device: device) }),
                     "fetchedAt": .number(Double(storeFetchedAt))]
+        case "store.details":
+            guard scenario.storeReachable else { throw storeUnreachable() }
+            guard let appId = params["app"]?.stringValue else { throw MockError.invalidParams("app") }
+            guard let app = scenario.store.first(where: { $0.id == appId }) else {
+                throw MockError.operation("not_found", "The applet store lists no \(appId).", [:])
+            }
+            return app.detailsJSON
         case "store.install":
             try supporting("push", params)
             let device = try linked(params)

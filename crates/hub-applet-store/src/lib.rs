@@ -6,6 +6,7 @@
 //!
 //! - `entry`: one app of the store's catalog, its publisher's signature and
 //!   the store's version order.
+//! - `details`: a package's details as the store reads them out of it.
 //! - `package`: what Hub reads out of a `.pocket` (variants, identity,
 //!   footer hash) through the `pocket-package` crate.
 //! - `client`: `AppletStore`, the catalog with its disk cache, verified
@@ -17,6 +18,7 @@
 //!   fault injection, a package builder and test keys.
 
 pub mod client;
+pub mod details;
 pub mod entry;
 pub mod link;
 pub mod package;
@@ -25,6 +27,7 @@ pub mod pager;
 pub mod test_support;
 
 pub use client::{AppletStore, Catalog, DEFAULT_URL, StoreConfig, StoreError, StoreEvent};
+pub use details::Details;
 pub use entry::{Entry, OFFICIAL_KEY, is_update, version_order};
 pub use link::{LinkCatalog, LinkConfig};
 pub use package::{PackageFacts, VariantFacts};
