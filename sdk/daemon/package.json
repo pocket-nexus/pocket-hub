@@ -2,6 +2,7 @@
   "name": "@pocket-hub/daemon",
   "version": "0.1.0",
   "description": "The daemon side of Pocket Hub's local daemon protocol (docs/DAEMON-PROTOCOL.md): an applet's computer side, running on Bun.",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "private": true,
   "exports": {

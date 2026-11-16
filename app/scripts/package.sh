@@ -3,8 +3,8 @@
 #
 #   app/dist/Pocket-Hub-<version>-arm64.zip     the app, as `ditto` packs one
 #
-# and prints the archive's SHA-256. README.md "Releasing" has the steps around
-# it (the tag, the release).
+# and prints the archive's SHA-256. docs/CONTRIBUTING.md "Releasing" has the
+# steps around it (the tag, the release).
 #
 # A release is a commit: the build refuses a working tree with changes, and
 # says which commit it built. The version is the app's (MARKETING_VERSION),
@@ -33,7 +33,7 @@ xcodebuild -quiet -project PocketHub.xcodeproj -scheme PocketHub -configuration 
 # This copy is built to be packed, not opened here. Like every build of the app
 # it claims pocket-hub: links, and Xcode registers what it builds with Launch
 # Services, which may then open a link in it (scripts/check-strings.sh has the
-# same step, and AGENTS.md what happened without it).
+# same step, and docs/CONTRIBUTING.md "Trying a link" why).
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
     -u "$app"
 
