@@ -1,8 +1,8 @@
 # Working on Pocket Hub
 
 This page is for changing Pocket Hub itself. Using it is in the
-[README](../README.md); writing an applet's daemon is in
-[`sdk/daemon`](../sdk/daemon/README.md).
+[README](../README.md); writing an applet's service is in
+[`sdk/service`](../sdk/service/README.md).
 
 ## How it is built
 
@@ -11,7 +11,7 @@ Pocket Hub stands between physical devices, the
 tools that make applets. A device only has to reach Hub: Hub puts the runtime
 on a new device (a 3DS) or pairs one that carries its own (a Tab5), keeps the
 link to it, carries applets to it, performs the network requests the device
-cannot make itself, and runs the computer side of an applet (its daemon)
+cannot make itself, and runs the computer side of an applet (its service)
 beside it.
 
 Hub and devices speak **Pocket Link 2**. The specification is PocketJS's
@@ -28,13 +28,13 @@ silicon; the core is portable Rust.
                          v                     v
                   +---------------------------------+
                   |           pocket-hubd           |   the resident core:
-                  |  devices · store · daemons      |   one per home folder
+                  |  devices · store · services     |   one per home folder
                   +---------------------------------+
                      |                          |
-     Pocket Link 2   |                          |  local daemon protocol
-     (TCP 8628,      |                          |  docs/DAEMON-PROTOCOL.md
+     Pocket Link 2   |                          |  local service protocol
+     (TCP 8628,      |                          |  docs/SERVICE-PROTOCOL.md
       UDP beacons)   v                          v
-                  devices                 one Bun process per applet's daemon
+                  devices                 one Bun process per applet's service
 ```
 
 **`pocket-hubd` owns every device connection.** The app and the command line
@@ -68,9 +68,9 @@ view and answers every request from the version's sample data
 player lands in pocket-nexus/applets first and this repository moves its
 pin.
 
-**A daemon is the computer side of one applet**: a Bun process Hub starts when
+**A service is the computer side of one applet**: a Bun process Hub starts when
 a device opens that applet's channel and stops when it is idle. Applet and
-daemon exchange requests, events and credited byte streams whose content is
+service exchange requests, events and credited byte streams whose content is
 theirs; Hub relays them and reads none of it. Neither learns which carrier the
 device is on.
 
@@ -78,17 +78,17 @@ device is on.
 | --- | --- |
 | `crates/pocket-link` | The Pocket Link 2 wire: beacon, preamble, frames and their streaming decoder, handshake proofs, pairing files and the setup as a plan of storage operations, the messages and HMACs of a pairing by a code. No I/O |
 | `crates/hub-store` | Hub's own files: its identity, one record per paired device, the channel generation |
-| `crates/hub-core` | The link endpoint: carriers, beacons, the handshake, a device's request to be paired by the code it shows, requests, streams and credit, runtime operations, the device mutex, applet channels relayed to daemons; the device families and what each takes (`family.rs`) |
+| `crates/hub-core` | The link endpoint: carriers, beacons, the handshake, a device's request to be paired by the code it shows, requests, streams and credit, runtime operations, the device mutex, applet channels relayed to services; the device families and what each takes (`family.rs`) |
 | `crates/hub-setup` | The first install of a 3DS: finding a console's ftpd, its software and the pairing written onto its storage, software releases |
-| `crates/hub-daemons` | The Bun runtime (downloaded on demand), daemon packages, their processes and the daemon socket |
+| `crates/hub-services` | The Bun runtime (downloaded on demand), service packages, their processes and the service socket |
 | `crates/hub-net` | `net.http`: a device's HTTP requests performed by Hub, with the destination policy |
 | `crates/hub-applet-store` | The applet store's client (the catalog, verified packages, icons, and an app's details as the store reads them out of its package), and the link's `catalog` and `install` served from it |
 | `crates/hub-api` | The control API's types and client, shared by the two binaries |
 | `crates/hubd` | `pocket-hubd`, the resident core and the control API's server |
 | `crates/hub-cli` | `pocket-hub`, the command line |
-| `sdk/daemon` | The TypeScript SDK a daemon is written with; Hub ships it to every daemon |
+| `sdk/service` | The TypeScript SDK a service is written with; Hub ships it to every service |
 | `app` | The macOS app: `PocketHub.xcodeproj` (the app target, sources in `app/PocketHub`) and a Swift package with its libraries, a mock core and the tests |
-| `docs` | The contracts (the control API, the daemon protocol, the links that open the app), and real examples of every control API message |
+| `docs` | The contracts (the control API, the service protocol, the links that open the app), and real examples of every control API message |
 | `site` | [hub.pocket.nexus](https://hub.pocket.nexus), the page that hands a visitor the app: built against the latest release, served by Cloudflare |
 
 ## Contracts
@@ -102,7 +102,7 @@ device is on.
   server, the command line and the app implement that page; a change starts
   there, and `docs/control-api-examples.json` is regenerated from the
   end-to-end test.
-- **Between the core and daemons**: [`DAEMON-PROTOCOL.md`](DAEMON-PROTOCOL.md).
+- **Between the core and services**: [`SERVICE-PROTOCOL.md`](SERVICE-PROTOCOL.md).
 - **Between a web page and the app**: [`DEEP-LINKS.md`](DEEP-LINKS.md), the
   `pocket-hub:` links the applet store's website opens Hub with. The website's
   side is in [pocket-nexus/applets](https://github.com/pocket-nexus/applets)
@@ -143,7 +143,7 @@ Run all of it before a pull request:
 
 ```sh
 cargo test --workspace && cargo clippy --workspace --all-targets
-(cd sdk/daemon && bun test)
+(cd sdk/service && bun test)
 (cd app && export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer && swift test &&
   xcodebuild -quiet -scheme PocketHub -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath build build)
 (cd site && bun install && bun test && bun run typecheck)     # when site/ changed
@@ -184,7 +184,7 @@ Services.
   name of the thing to open on the console. Everything about installing,
   updating or troubleshooting says "the 3DS's software".
 - **No link key in a log line, an error, a status answer or the control API.**
-- **A daemon gets no device operation**, and a process Hub starts inherits none
+- **A service gets no device operation**, and a process Hub starts inherits none
   of Hub's descriptors.
 - Owner-facing sentences from the core are English; the app localizes from
   `kind`, `step` and `reason`.
@@ -231,7 +231,7 @@ gh release create v<version> --verify-tag --title "Pocket Hub v<version>" \
 ```
 
 The version is one number in three places, changed together: `version` of
-`[workspace.package]` in `Cargo.toml`, `version` in `sdk/daemon/package.json`
+`[workspace.package]` in `Cargo.toml`, `version` in `sdk/service/package.json`
 and `MARKETING_VERSION` in the Xcode project. A tag that is not `v` and that
 version stops the workflow. `package.sh` refuses a working tree with changes,
 builds the Release configuration from nothing, and checks that every

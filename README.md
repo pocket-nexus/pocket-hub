@@ -10,7 +10,7 @@ opens and deletes its applets.
 
 While a device is connected, Pocket Hub also does what the device cannot do by
 itself: it makes the network requests its applets ask for, and runs the part of
-an applet that lives on the Mac (its *daemon*).
+an applet that lives on the Mac (its *service*).
 
 The supported devices are the **Nintendo 3DS** and the **M5Stack Tab5**, over
 Wi-Fi.
@@ -121,9 +121,9 @@ only shows the applet; installing is always your click in Pocket Hub.
   A Tab5's page has Applets and Details alone: it takes no screenshot, sends
   no log, and its software is updated by flashing it over USB, not by Pocket
   Hub.
-- **Advanced › Daemons**: the parts of applets that run on this Mac. A daemon
+- **Advanced › Services**: the parts of applets that run on this Mac. A service
   starts when its applet needs it and stops when it is idle. Pocket Hub
-  downloads the runtime daemons need ([Bun](https://bun.sh)) the first time.
+  downloads the runtime services need ([Bun](https://bun.sh)) the first time.
 - **Settings**: this Mac's name as your devices show it, the app's language
   (English or Simplified Chinese), and opening at login.
 
@@ -169,7 +169,7 @@ that the device does not take them.
 Pocket Hub has run on a New Nintendo 3DS XL over Wi-Fi: setup over ftpd,
 connecting and reconnecting, installing and deleting applets (from the Mac and
 from the console's own store page), screenshots, the log, applets' network
-requests and daemons, and updating the 3DS's software. An Old 3DS and other
+requests and services, and updating the 3DS's software. An Old 3DS and other
 connections have not been tried yet.
 
 **Pocket Hub has not run with an M5Stack Tab5 itself yet.** Its pairing by a
@@ -182,7 +182,7 @@ and installed applets with the link's reference Hub
 
 Pocket Hub is a Rust core with a SwiftUI app.
 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) has how to build, test and change
-it, and [sdk/daemon](sdk/daemon/README.md) is the SDK an applet's daemon is
+it, and [sdk/service](sdk/service/README.md) is the SDK an applet's service is
 written with.
 
 ## License

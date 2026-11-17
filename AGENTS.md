@@ -2,7 +2,7 @@
 
 Pocket Hub is the computer side of Pocket Link 2: a resident core
 (`pocket-hubd`), a command line and a macOS app that are its clients, and the
-daemons it runs for applets. `docs/CONTRIBUTING.md` has the layout.
+services it runs for applets. `docs/CONTRIBUTING.md` has the layout.
 
 ## What decides a question
 
@@ -14,7 +14,7 @@ daemons it runs for applets. `docs/CONTRIBUTING.md` has the layout.
 - **Between the core and its clients**: `docs/CONTROL-API.md`. The server, the
   command line and the app implement that page; a change starts there, and
   `docs/control-api-examples.json` is regenerated from the end-to-end test.
-- **Between the core and daemons**: `docs/DAEMON-PROTOCOL.md`.
+- **Between the core and services**: `docs/SERVICE-PROTOCOL.md`.
 - **Between a web page and the app**: `docs/DEEP-LINKS.md`, the `pocket-hub:`
   links the applet store's website opens Hub with. The website's side is in
   [pocket-nexus/applets](https://github.com/pocket-nexus/applets)
@@ -38,7 +38,7 @@ touch its folders on a machine (`~/Library/Application Support/Pocket Hub`,
   name of the thing to open on the console. Everything about installing,
   updating or troubleshooting says "the 3DS's software".
 - **No link key in a log line, an error, a status answer or the control API.**
-- **A daemon gets no device operation**, and a process Hub starts inherits none
+- **A service gets no device operation**, and a process Hub starts inherits none
   of Hub's descriptors.
 - Owner-facing sentences from the core are English; the app localizes from
   `kind`, `step` and `reason` (English and Simplified Chinese are both filled
@@ -50,7 +50,7 @@ touch its folders on a machine (`~/Library/Application Support/Pocket Hub`,
 
 ```sh
 cargo test --workspace && cargo clippy --workspace --all-targets
-(cd sdk/daemon && bun test)
+(cd sdk/service && bun test)
 (cd app && export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer && swift test &&
   xcodebuild -quiet -scheme PocketHub -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath build build)
 ```
