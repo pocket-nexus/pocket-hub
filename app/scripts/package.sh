@@ -1,10 +1,14 @@
 #!/bin/sh
-# Builds the app for a release and packs it:
+# Builds the app for a release and packs it twice:
 #
+#   app/dist/Pocket-Hub-<version>-arm64.dmg     a disk image: the app beside a
+#                                               link to /Applications, the way
+#                                               a Mac app is handed to people
 #   app/dist/Pocket-Hub-<version>-arm64.zip     the app, as `ditto` packs one
 #
-# and prints the archive's SHA-256. docs/CONTRIBUTING.md "Releasing" has the
-# steps around it (the tag, the release).
+# and prints their SHA-256. Both are made with what macOS has (`hdiutil`,
+# `ditto`). docs/CONTRIBUTING.md "Releasing" has the steps around it (the tag,
+# the release).
 #
 # A release is a commit: the build refuses a working tree with changes, and
 # says which commit it built. The version is the app's (MARKETING_VERSION),
@@ -58,5 +62,26 @@ mkdir -p "$here/dist"
 archive="$here/dist/Pocket-Hub-$version-arm64.zip"
 rm -f "$archive"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+
+# The disk image: the app and a link to /Applications in a volume named after
+# it, compressed with lzfse. The image is mounted once, out of Finder's sight,
+# and the app in it checked as the one above was.
+image="$here/dist/Pocket-Hub-$version-arm64.dmg"
+staging="$(mktemp -d)"
+mounted="$(mktemp -d)"
+trap 'hdiutil detach -quiet "$mounted" 2>/dev/null || true; rm -rf "$staging" "$mounted"' EXIT
+ditto "$app" "$staging/Pocket Hub.app"
+ln -s /Applications "$staging/Applications"
+rm -f "$image"
+hdiutil create -quiet -volname "Pocket Hub" -srcfolder "$staging" -fs HFS+ -format ULFO "$image"
+hdiutil verify -quiet "$image"
+hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mounted" "$image"
+codesign --verify --deep --strict "$mounted/Pocket Hub.app"
+if [ "$("$mounted/Pocket Hub.app/Contents/Helpers/pocket-hubd" --version)" != "pocket-hubd $version" ]; then
+    echo "error: the disk image does not hold the app just built" >&2
+    exit 1
+fi
+hdiutil detach -quiet "$mounted"
+
 echo "Pocket Hub $version, built from $commit"
-shasum -a 256 "$archive"
+shasum -a 256 "$image" "$archive"

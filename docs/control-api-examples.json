@@ -649,7 +649,7 @@
           "hub": {
             "id": "fedcba9876543210",
             "name": "Studio Mac",
-            "version": "0.1.0"
+            "version": "0.2.0"
           }
         }
       }
@@ -697,7 +697,7 @@
         "result": {
           "id": "fedcba9876543210",
           "name": "Studio Mac",
-          "version": "0.1.0",
+          "version": "0.2.0",
           "home": "/tmp/hub-home",
           "startedAt": 1767225600000,
           "carriers": [
@@ -1452,7 +1452,7 @@
         "hub": {
           "id": "fedcba9876543210",
           "name": "Studio Test",
-          "version": "0.1.0"
+          "version": "0.2.0"
         }
       }
     },
