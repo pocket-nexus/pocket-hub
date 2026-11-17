@@ -309,6 +309,40 @@ pub fn store(apps: &StoreApps, for_device: bool) -> String {
     format!("{}{note}\nCatalog of {when}.", table(&header, rows))
 }
 
+/// `store details`: one line per member, ids as the store gives them; a
+/// member the package names nothing for is left out.
+pub fn store_details(details: &StoreDetails) -> String {
+    let devices: Vec<String> = details
+        .devices
+        .iter()
+        .map(|device| match device.host_abi {
+            Some(abi) => format!("{} ({}, host ABI {abi})", device.name, device.target),
+            None => format!("{} ({})", device.name, device.target),
+        })
+        .collect();
+    let ids = |list: &[String]| if list.is_empty() { "nothing".to_owned() } else { list.join(", ") };
+    let mut lines = vec![
+        format!("{} {}", details.id, details.version),
+        format!("Built for:   {}", devices.join(", ")),
+        format!("Needs:       {}", ids(&details.needs)),
+        format!("Uses:        {}", ids(&details.uses)),
+    ];
+    if let Some(surface) = &details.surface {
+        let what = if surface.touch { "a touch surface of its own" } else { "the device's screen" };
+        lines.push(match &surface.size {
+            Some(size) => format!("Surface:     {what}, {} × {} to {} × {} points", size.min[0], size.min[1], size.max[0], size.max[1]),
+            None => format!("Surface:     {what}"),
+        });
+    }
+    if let Some(framework) = &details.framework {
+        lines.push(format!("Framework:   {framework}"));
+    }
+    if let Some(api) = details.api {
+        lines.push(format!("Applet API:  {api}"));
+    }
+    lines.join("\n")
+}
+
 pub fn daemons(daemons: &[Daemon]) -> String {
     if daemons.is_empty() {
         return "No daemon is installed.".into();

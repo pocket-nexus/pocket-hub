@@ -231,6 +231,24 @@ struct DecodingTests {
         #expect(try error(#"{"code":1,"message":"No answer.","data":{"kind":"store","reason":"unreachable"}}"#).kind == .store)
     }
 
+    @Test func storeDetails() throws {
+        let details = try decode(StoreDetails.self, """
+        {"id":"dev.pocket-nexus.hn","version":"0.3.0",
+         "devices":[{"target":"rg-ds-plus","name":"Omarchy Pocket","hostAbi":12},{"target":"x-new","name":"x-new","hostAbi":null}],
+         "needs":["input.buttons","net.http"],"uses":["system.agent"],
+         "surface":{"touch":true,"size":{"min":[320,240],"max":[640,720]}},"framework":"solid","api":1}
+        """)
+        #expect(details.devices == [.init(target: "rg-ds-plus", name: "Omarchy Pocket", hostAbi: 12), .init(target: "x-new", name: "x-new")])
+        #expect(details.needs == ["input.buttons", "net.http"] && details.uses == ["system.agent"])
+        #expect(details.surface == .init(touch: true, size: .init(min: [320, 240], max: [640, 720])))
+        #expect(details.framework == "solid" && details.api == 1)
+        // A package that names no surface, framework or API: null members.
+        let plain = try decode(StoreDetails.self, """
+        {"id":"a","version":"1.0.0","devices":[],"needs":[],"uses":[],"surface":null,"framework":null,"api":null}
+        """)
+        #expect(plain.surface == nil && plain.framework == nil && plain.api == nil)
+    }
+
     @Test func programSourceEncoding() throws {
         #expect(try JSONValue(encoding: ProgramSource.latestRelease) == ["release": "latest"])
         #expect(try JSONValue(encoding: ProgramSource.file(path: "/tmp/p.3dsx")) == ["path": "/tmp/p.3dsx"])

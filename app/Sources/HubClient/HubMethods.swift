@@ -150,6 +150,13 @@ extension HubCalling {
         return try await call("store.apps", params: .object(params)).decoded()
     }
 
+    /// What the package of an applet's newest listed version says about it,
+    /// as the store reads it out. An applet the store does not list is
+    /// `not_found`; a store that does not answer, the error `store`.
+    public func storeDetails(app: String) async throws -> StoreDetails {
+        try await call("store.details", params: ["app": .string(app)]).decoded()
+    }
+
     /// Downloads (when Hub's cache lacks it), checks and installs an applet on
     /// a device. Progress: `downloading`, then the phases of `devices.push`.
     public func storeInstall(device: String, app: String,

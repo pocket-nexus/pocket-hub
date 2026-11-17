@@ -1,8 +1,9 @@
-//! `store.apps` and `store.install` through the real `pocket-hubd` binary,
-//! against the fake applet store, onto the reference device under Bun:
-//! progress and cancel, `installed` and `update` from the device's apps
-//! report, the error kinds, the device mutex, and the link's own catalog of
-//! the same offer.
+//! `store.apps`, `store.details` and `store.install` through the real
+//! `pocket-hubd` binary, against the fake applet store, onto the reference
+//! device under Bun: progress and cancel, `installed` and `update` from the
+//! device's apps report, an applet's details as the store reads them, the
+//! error kinds, the device mutex, and the link's own catalog of the same
+//! offer.
 
 mod common;
 
@@ -111,6 +112,28 @@ async fn the_store_through_the_binary() {
     assert!(all.apps.iter().all(|app| !app.cached), "{raw}");
     assert_eq!(raw["apps"][0]["cached"], false);
     assert_eq!(app(&all, &tool.id).services, ["store"]);
+
+    // --- store.details: the store's reading of the package the catalog names,
+    // with no download of the package itself.
+    store.set_details(&hn.package, Some(fixture_details("hn")));
+    let raw = client.call(methods::STORE_DETAILS, &StoreDetailsParams { app: hn.id.clone() }).await.unwrap();
+    let details: StoreDetails = serde_json::from_value(raw.clone()).unwrap();
+    assert_eq!((details.id.as_str(), details.version.as_str()), ("dev.pocket-nexus.hn", "0.3.0"));
+    assert_eq!(details.devices.iter().map(|device| (device.target.as_str(), device.name.as_str(), device.host_abi)).collect::<Vec<_>>(), [("rg-ds-plus", "Omarchy Pocket", Some(12)), ("tab5-home", "M5Stack Tab5", Some(12)), ("3ds-dev", "Nintendo 3DS", Some(12))]);
+    assert_eq!((details.needs.len(), details.uses.as_slice(), details.framework.as_deref(), details.api), (5, ["input.analog.left".to_owned(), "system.agent".to_owned()].as_slice(), Some("solid"), Some(1)));
+    assert!(raw["devices"][0].get("build").is_none(), "a build's directory is not passed on: {raw}");
+    assert_eq!(store.hits(&format!("/v1/packages/{}", hn.package)), 0);
+    // A package that names no surface: null members, present.
+    let plain = client.call(methods::STORE_DETAILS, &StoreDetailsParams { app: tool.id.clone() }).await.unwrap();
+    assert_eq!((plain["surface"].clone(), plain["framework"].clone(), plain["needs"].clone()), (Value::Null, Value::Null, json!([])), "{plain}");
+    // An applet the store does not list; a store that does not answer.
+    let unlisted = rpc(client.call(methods::STORE_DETAILS, &StoreDetailsParams { app: "io.example.none".into() }).await.unwrap_err());
+    assert_eq!(unlisted.data.unwrap().kind, ErrorKind::NotFound);
+    store.set_details(&rg.package, None);
+    let unanswered = rpc(client.call(methods::STORE_DETAILS, &StoreDetailsParams { app: rg.id.clone() }).await.unwrap_err());
+    let data = unanswered.data.unwrap();
+    assert_eq!((data.kind, data.reason.as_deref()), (ErrorKind::Store, Some("unreachable")));
+    assert!(unanswered.message.contains("io.example.rg") && unanswered.message.contains("404"), "{}", unanswered.message);
     let changed = event(&client, |e| topic(e, "store.changed")).await;
     assert_eq!(changed["fetchedAt"], all.fetched_at);
     // The icons arrive in Hub's cache, then `store.changed` again.

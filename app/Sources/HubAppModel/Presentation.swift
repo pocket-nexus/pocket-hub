@@ -261,3 +261,34 @@ extension StoreApp {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }
+
+extension StoreDetails {
+    /// The names of the devices it was built for, in the store's order, each
+    /// once: "Omarchy Pocket, M5Stack Tab5, Nintendo 3DS". A device's name is
+    /// the store's and the same in every language.
+    public var deviceNames: [String] {
+        devices.map(\.name).reduce(into: []) { names, name in
+            if !names.contains(name) { names.append(name) }
+        }
+    }
+
+    /// The surface it lays itself out for, in a line: "Touch, 320 × 240 to
+    /// 640 × 720". An applet's compatibility is shown as the package states
+    /// it, in English in every language, as the owner chose; so this is a
+    /// plain string, not a key of the String Catalog. nil when the package
+    /// names none, or names the device's own screen with no sizes, which
+    /// says nothing.
+    public var screenText: String? {
+        guard let surface else { return nil }
+        let size = surface.size.flatMap { size -> String? in
+            guard size.min.count == 2, size.max.count == 2 else { return nil }
+            return "\(size.min[0]) × \(size.min[1]) to \(size.max[0]) × \(size.max[1])"
+        }
+        switch (surface.touch, size) {
+        case (true, let size?): return "Touch, \(size)"
+        case (true, nil): return "Touch"
+        case (false, let size?): return size
+        case (false, nil): return nil
+        }
+    }
+}

@@ -279,6 +279,26 @@ async fn the_vertical_slice_through_the_binary() {
     assert_eq!((held.installed.as_ref().unwrap().as_ref().unwrap().hash.as_str(), held.update, held.cached), (from_store.hash.as_str(), Some(false), true));
     let offer: StoreApps = client.call_as(methods::STORE_APPS, &StoreAppsParams::default()).await.unwrap();
     assert_eq!(offer.apps.len(), 2);
+    // Its details, as the store reads them out of the package: here every
+    // member the store may answer, as for a real applet.
+    applets.set_details(
+        &notes.package,
+        Some(json!({
+            "devices": [
+                {"target": "tab5-home", "name": "M5Stack Tab5", "build": {"target": "tab5-home", "hostAbi": 12, "profile": "0".repeat(64), "hash": "0".repeat(16), "sections": []}},
+                {"target": "3ds-dev", "name": "Nintendo 3DS", "build": {"target": "3ds-dev", "hostAbi": 12, "profile": "0".repeat(64), "hash": "0".repeat(16), "sections": []}},
+            ],
+            "needs": ["text.glyphs.baked", "input.buttons", "display.auxiliary", "input.touch.auxiliary"],
+            "uses": ["system.agent"],
+            "surface": {"touch": true, "size": {"min": [320, 240], "max": [640, 720]}},
+            "framework": "solid",
+            "api": 1,
+        })),
+    );
+    let details: StoreDetails = client.call_as(methods::STORE_DETAILS, &StoreDetailsParams { app: notes.id.clone() }).await.unwrap();
+    assert_eq!((details.id.as_str(), details.version.as_str()), ("dev.pocket-nexus.notes", "1.0.0"));
+    assert_eq!(details.devices.iter().map(|device| (device.name.as_str(), device.host_abi)).collect::<Vec<_>>(), [("M5Stack Tab5", Some(12)), ("Nintendo 3DS", Some(12))]);
+    assert_eq!(details.surface.and_then(|surface| surface.size).map(|size| size.max), Some([640, 720]));
     let refused = rpc(client.call(methods::STORE_INSTALL, &StoreInstallParams { device: id.clone(), app: forged.id.clone() }).await.unwrap_err());
     assert_eq!(refused.data.unwrap().reason.as_deref(), Some("rejected"));
 

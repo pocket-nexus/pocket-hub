@@ -481,11 +481,15 @@ struct AppletRow: View {
     }
 
     /// The device refuses to delete the applet it runs, and the home screen
-    /// has no row actions (link specification §6.2 `runtime.remove`).
+    /// has no row actions (link specification §6.2 `runtime.remove`). An
+    /// applet the store lists has its sheet, as the store's rows do.
     @ViewBuilder
     private var actions: some View {
         Button("Open", action: open)
             .disabled(!device.isLinked || device.busy != nil || isRunning)
+        if let listed {
+            Button("Details") { state.storeDetails = listed }
+        }
         Divider()
         Button("Delete…", role: .destructive) {
             if device.deletesApplets {

@@ -213,4 +213,42 @@ struct StoreModelTests {
         #expect(store.apps.isEmpty)
         #expect(await !h.core.received.contains { $0.method == "store.apps" && $0.params["device"] == "fffffffffffffff0" })
     }
+
+    @Test func anAppletsDetailsAreTheStoresReadingOfItsPackage() async throws {
+        let h = try await Harness(Self.scenario())
+        defer { Task { await h.tearDown() } }
+        let store = h.model.store
+        await eventually("loaded") { loaded(store) }
+        let hn = try #require(app(store, "nexus.pocket.hackernews"))
+
+        let details = try await store.details(of: hn).get()
+        let request = try #require(await h.core.received.last { $0.method == "store.details" })
+        #expect(request.params == ["app": "nexus.pocket.hackernews"])
+        #expect(details.version == hn.version)
+        // The store's names, in its order, each device once (the mock's `3ds`
+        // and `3ds-dev` are both a 3DS).
+        #expect(details.deviceNames == ["Omarchy Pocket", "M5Stack Tab5", "Nintendo 3DS"])
+        #expect(details.needs == ["text.glyphs.baked", "input.buttons", "display.auxiliary", "input.touch.auxiliary", "net.http"])
+        #expect(details.screenText == "Touch, 320 × 240 to 640 × 720", "English in every language")
+
+        // A store that does not answer: the store's failure, in plain words.
+        await h.core.setStoreReachable(false)
+        guard case .failure(let failure) = await store.details(of: hn) else {
+            Issue.record("details from a store that does not answer")
+            return
+        }
+        #expect(failure.title == String(localized: "Pocket Hub can't reach the applet store."))
+    }
+
+    @Test func aSurfaceIsSaidOnlyWhenItSaysSomething() {
+        let screen = { (surface: StoreDetails.Surface?) in
+            StoreDetails(id: "a", version: "1.0.0", devices: [], surface: surface).screenText
+        }
+        let sized = StoreDetails.Surface.Size(min: [320, 240], max: [640, 720])
+        #expect(screen(nil) == nil)
+        #expect(screen(.init(touch: false)) == nil, "the device's own screen, no sizes")
+        #expect(screen(.init(touch: true)) == "Touch")
+        #expect(screen(.init(touch: false, size: sized)) == "320 × 240 to 640 × 720")
+        #expect(screen(.init(touch: true, size: .init(min: [320], max: [640, 720]))) == "Touch", "a size that is not [w, h]")
+    }
 }

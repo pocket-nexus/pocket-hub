@@ -226,20 +226,39 @@ struct AuthorLabel: View {
     }
 }
 
-/// One applet of the store: what the store declares about it, and the one
-/// action that fits the device. A row's Details opens it, and so does a link
-/// from the store's website (docs/DEEP-LINKS.md §2), which is why the action
-/// is here: the link shows this sheet and the owner installs from it.
+/// One applet of the store: what the store declares about it, what its
+/// package says about it, and the one action that fits the device. A row's
+/// Details opens it, and so does a link from the store's website
+/// (docs/DEEP-LINKS.md §2), which is why the action is here: the link shows
+/// this sheet and the owner installs from it.
 ///
 /// The sheet acts on the device whose page the window shows, and the store's
 /// list for that device says what it holds (`installed`, `update`). Nothing
-/// here is invented: every line is a field of the store's entry.
+/// here is invented: every line is a field of the store's entry, or of the
+/// details the store reads out of the package (`store.details`), asked for
+/// when the sheet opens. Until they are here, the devices it runs on are the
+/// entry's targets.
 struct StoreAppDetails: View {
     let app: StoreApp
     let close: () -> Void
     @Environment(AppState.self) private var state
     /// A failure of Open, shown over this sheet like one of an install.
     @State private var failure: UserFacingError?
+    /// The details of the version shown, once asked for.
+    @State private var details: DetailsLoad = .loading
+    /// Counts Try Again, so the details are asked for again.
+    @State private var attempt = 0
+
+    private enum DetailsLoad: Equatable {
+        case loading
+        case loaded(StoreDetails)
+        case failed(UserFacingError)
+    }
+
+    private var loaded: StoreDetails? {
+        if case .loaded(let details) = details { return details }
+        return nil
+    }
 
     private var store: StoreModel { state.model.store }
     /// The paired devices that can run the applet.
@@ -285,9 +304,11 @@ struct StoreAppDetails: View {
                 }
                 LabeledContent("Version") { Text(verbatim: app.version) }
                 LabeledContent("Size") { Text(verbatim: app.sizeText) }
-                LabeledContent("Runs on") {
-                    Text(verbatim: Array(NSOrderedSet(array: app.targets.map(targetName))).compactMap { $0 as? String }.joined(separator: ", "))
+                LabeledContent("Runs on") { Text(verbatim: runsOn(app)) }
+                if let screen = loaded?.screenText {
+                    LabeledContent("Screen") { Text(verbatim: screen) }
                 }
+                capabilities
                 Section("What it connects to") {
                     if app.services.isEmpty && app.hosts.isEmpty {
                         Text("Nothing: it works without the network.")
@@ -304,7 +325,15 @@ struct StoreAppDetails: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                LabeledContent("Identifier") { Text(verbatim: app.id).textSelection(.enabled) }
+                Section {
+                    LabeledContent("Identifier") { Text(verbatim: app.id).textSelection(.enabled) }
+                    if let framework = loaded?.framework {
+                        LabeledContent("Framework") { Text(verbatim: framework) }
+                    }
+                    if let api = loaded?.api {
+                        LabeledContent("Applet API") { Text(verbatim: "\(api)") }
+                    }
+                }
             }
             .formStyle(.grouped)
             HStack {
@@ -326,6 +355,15 @@ struct StoreAppDetails: View {
         }
         .padding(20)
         .frame(width: 480)
+        // The details of the version shown: again when the store lists a
+        // newer one while the sheet is open, and on Try Again.
+        .task(id: "\(app.id) \(app.version) \(attempt)") {
+            details = .loading
+            switch await store.details(of: app) {
+            case .success(let answer): details = .loaded(answer)
+            case .failure(let failure): details = .failed(failure)
+            }
+        }
         // The window may show another page, or a device that cannot run the
         // applet (it was removed, or one that can has just linked for the
         // first time): the sheet moves it to one that can.
@@ -411,6 +449,56 @@ struct StoreAppDetails: View {
                 failure = UserFacingError(error, deviceName: device.displayName, kind: device.kind)
             }
         }
+    }
+
+    /// What the package needs of a device and what it uses where a device
+    /// has it, a row per capability by its id (`input.buttons`), as the
+    /// package states it: the owner chose ids over words that explain them.
+    /// While the details are on their way, or why they are not.
+    @ViewBuilder
+    private var capabilities: some View {
+        switch details {
+        case .loading:
+            Section {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading details…").foregroundStyle(.secondary)
+                }
+            }
+        case .failed(let failure):
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: failure.title)
+                    Text(verbatim: failure.advice).font(.callout).foregroundStyle(.secondary)
+                }
+                Button("Try Again") { attempt += 1 }
+            }
+        case .loaded(let details):
+            if !details.needs.isEmpty {
+                Section("What it needs") {
+                    ForEach(details.needs, id: \.self, content: capabilityRow)
+                }
+            }
+            if !details.uses.isEmpty {
+                Section("What it uses if the device has it") {
+                    ForEach(details.uses, id: \.self, content: capabilityRow)
+                }
+            }
+        }
+    }
+
+    private func capabilityRow(_ id: String) -> some View {
+        Text(verbatim: id).textSelection(.enabled)
+    }
+
+    /// The devices it runs on, each once: the store's names for those its
+    /// package was built for, and until the details are here, the entry's
+    /// targets.
+    private func runsOn(_ app: StoreApp) -> String {
+        let names = loaded?.deviceNames ?? app.targets.map(targetName).reduce(into: []) { names, name in
+            if !names.contains(name) { names.append(name) }
+        }
+        return names.joined(separator: ", ")
     }
 
     /// A target of a family Hub knows gets the family's name (`3ds-dev`:

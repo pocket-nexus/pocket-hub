@@ -54,6 +54,7 @@ pub mod methods {
     pub const DAEMONS_LOGS: &str = "daemons.logs";
     pub const DAEMONS_RUNTIME: &str = "daemons.runtime";
     pub const STORE_APPS: &str = "store.apps";
+    pub const STORE_DETAILS: &str = "store.details";
     pub const STORE_INSTALL: &str = "store.install";
     /// The notification that asks Hub to stop a call.
     pub const CANCEL: &str = "cancel";

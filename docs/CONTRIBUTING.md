@@ -72,7 +72,7 @@ device is on.
 | `crates/hub-setup` | The first install of a 3DS: finding a console's ftpd, its software and the pairing written onto its storage, software releases |
 | `crates/hub-daemons` | The Bun runtime (downloaded on demand), daemon packages, their processes and the daemon socket |
 | `crates/hub-net` | `net.http`: a device's HTTP requests performed by Hub, with the destination policy |
-| `crates/hub-applet-store` | The applet store's client, and the link's `catalog` and `install` served from it |
+| `crates/hub-applet-store` | The applet store's client (the catalog, verified packages, icons, and an app's details as the store reads them out of its package), and the link's `catalog` and `install` served from it |
 | `crates/hub-api` | The control API's types and client, shared by the two binaries |
 | `crates/hubd` | `pocket-hubd`, the resident core and the control API's server |
 | `crates/hub-cli` | `pocket-hub`, the command line |

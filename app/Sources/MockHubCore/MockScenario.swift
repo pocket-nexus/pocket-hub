@@ -241,10 +241,17 @@ public struct MockStoreApp: Sendable {
     public var hosts: [String]
     /// The output name a device's apps report gives it once installed.
     public var output: String
+    /// What its package says (`store.details`): the capabilities it needs and
+    /// uses, and with `touch` set, a surface of that kind laid out for
+    /// 320 × 240 to 640 × 720 points.
+    public var needs: [String]
+    public var uses: [String]
+    public var touch: Bool?
 
     public init(id: String, title: String, summary: String, author: String = "pocket-nexus", version: String = "1.0.0",
                 official: Bool = true, targets: [String] = ["3ds", "3ds-dev"], bytes: Int = 120_000, cached: Bool = true,
-                services: [String] = [], hosts: [String] = [], output: String? = nil)
+                services: [String] = [], hosts: [String] = [], output: String? = nil,
+                needs: [String] = ["text.glyphs.baked", "input.buttons"], uses: [String] = [], touch: Bool? = nil)
     {
         self.id = id
         self.title = title
@@ -258,6 +265,31 @@ public struct MockStoreApp: Sendable {
         self.services = services
         self.hosts = hosts
         self.output = output ?? String(id.split(separator: ".").last ?? Substring(id))
+        self.needs = needs
+        self.uses = uses
+        self.touch = touch
+    }
+
+    /// The store's names for the devices it knows, in its order; the mock's
+    /// own `3ds` target is a 3DS too.
+    static let deviceNames: [(target: String, name: String)] = [
+        ("rg-ds-plus", "Omarchy Pocket"), ("tab5-home", "M5Stack Tab5"), ("3ds-dev", "Nintendo 3DS"), ("3ds", "Nintendo 3DS"),
+    ]
+
+    /// The StoreDetails object, as the store reads it out of the package: a
+    /// device per target in the store's order, one it has no name for last.
+    var detailsJSON: JSONValue {
+        let rank = { (target: String) in Self.deviceNames.firstIndex { $0.target == target } ?? Self.deviceNames.count }
+        let devices: [JSONValue] = targets.sorted { rank($0) < rank($1) }.map { target in
+            let name = Self.deviceNames.first { $0.target == target }?.name ?? target
+            return ["target": .string(target), "name": .string(name), "hostAbi": 12]
+        }
+        let surface: JSONValue = touch.map { touch in
+            ["touch": .bool(touch), "size": ["min": [320, 240], "max": [640, 720]]]
+        } ?? .null
+        return ["id": .string(id), "version": .string(version), "devices": .array(devices),
+                "needs": .array(needs.map(JSONValue.string)), "uses": .array(uses.map(JSONValue.string)),
+                "surface": surface, "framework": "solid", "api": 1]
     }
 
     /// The StoreApp object; `device` adds `installed` and `update` for that device.
@@ -382,8 +414,10 @@ public struct MockScenario: Sendable {
     public static var storeCatalog: [MockStoreApp] {
         [
             MockStoreApp(id: "nexus.pocket.hackernews", title: "Hacker News", summary: "Top stories from Hacker News.",
-                         version: "1.1.0", targets: ["3ds", "3ds-dev", "tab5-home"], bytes: 96_512, services: [],
-                         hosts: ["hacker-news.firebaseio.com"], output: "hn"),
+                         version: "1.1.0", targets: ["3ds", "3ds-dev", "tab5-home", "rg-ds-plus"], bytes: 96_512, services: [],
+                         hosts: ["hacker-news.firebaseio.com"], output: "hn",
+                         needs: ["text.glyphs.baked", "input.buttons", "display.auxiliary", "input.touch.auxiliary", "net.http"],
+                         uses: ["input.analog.left", "system.agent"], touch: true),
             MockStoreApp(id: "nexus.pocket.weather", title: "Weather", summary: "Today's forecast where you are.",
                          version: "0.4.0", bytes: 210_944, services: ["weather"], hosts: ["api.open-meteo.com"]),
             MockStoreApp(id: "nexus.pocket.notes", title: "Notes", summary: "Notes on the device.",

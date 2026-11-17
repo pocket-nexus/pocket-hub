@@ -83,10 +83,11 @@ declined.
 
 A device's **Applets** page lists what is installed on it. Each applet can be
 opened, updated when the store has a newer version, or deleted from its …
-menu; deleting an applet also deletes its data on the device. Below, **Available
-in the Store** lists the applets that device can run, and Install puts one on
-it. To install an applet you have as a file, drop the `.pocket` file on the
-page.
+menu; deleting an applet also deletes its data on the device. **Details**, in
+that menu and beside each applet of the store, says which devices an applet
+runs on, what it needs of them and what it connects to. Below, **Available in
+the Store** lists the applets that device can run, and Install puts one on it.
+To install an applet you have as a file, drop the `.pocket` file on the page.
 
 The console's own store page lists the same applets and installs them through
 Pocket Hub.
@@ -132,6 +133,7 @@ pocket-hub pair                               # the devices that ask to be paire
 pocket-hub pair --code 314159                 # the code the Tab5 shows
 pocket-hub devices
 pocket-hub store                              # what the store offers
+pocket-hub store details dev.pocket-nexus.hn  # what its package says it needs
 pocket-hub store install dev.pocket-nexus.hn
 pocket-hub device push demo.pocket            # an applet from a file
 pocket-hub device shot out.png

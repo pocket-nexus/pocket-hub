@@ -725,6 +725,16 @@
         }
       }
     },
+    "Applet API" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小程序 API"
+          }
+        }
+      }
+    },
     "Applets" : {
       "localizations" : {
         "en" : {
@@ -1809,6 +1819,16 @@
         }
       }
     },
+    "Framework" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "框架"
+          }
+        }
+      }
+    },
     "Getting the update ready…" : {
       "localizations" : {
         "en" : {
@@ -2445,6 +2465,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "实时日志"
+          }
+        }
+      }
+    },
+    "Loading details…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在载入详细信息…"
           }
         }
       }
@@ -4045,6 +4075,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "存储…"
+          }
+        }
+      }
+    },
+    "Screen" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕"
           }
         }
       }
@@ -6125,6 +6165,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "它会连接的地方"
+          }
+        }
+      }
+    },
+    "What it needs" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它需要的功能"
+          }
+        }
+      }
+    },
+    "What it uses if the device has it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备具备时它会使用的功能"
           }
         }
       }

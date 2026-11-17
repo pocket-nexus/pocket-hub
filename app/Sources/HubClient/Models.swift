@@ -685,6 +685,79 @@ public struct StoreCatalog: Codable, Sendable, Hashable {
     }
 }
 
+/// What an applet's package says about it, as the store reads it out of the
+/// package (§2 StoreDetails, the answer of `store.details`): of the newest
+/// listed version. No client reads a manifest of its own.
+public struct StoreDetails: Codable, Sendable, Hashable {
+    /// A device the package was built for.
+    public struct BuiltFor: Codable, Sendable, Hashable {
+        /// The target its build names: `3ds-dev`, `rg-ds-plus`.
+        public var target: String
+        /// The store's name for the device, the same in every language; the
+        /// target itself for a device the store has no name for.
+        public var name: String
+        /// nil when the store names no build.
+        public var hostAbi: Int?
+
+        public init(target: String, name: String, hostAbi: Int? = nil) {
+            self.target = target
+            self.name = name
+            self.hostAbi = hostAbi
+        }
+    }
+
+    /// The surface the applet lays itself out for.
+    public struct Surface: Codable, Sendable, Hashable {
+        /// `[width, height]` in points, the least and the most it is laid out for.
+        public struct Size: Codable, Sendable, Hashable {
+            public var min: [Int]
+            public var max: [Int]
+
+            public init(min: [Int], max: [Int]) {
+                self.min = min
+                self.max = max
+            }
+        }
+
+        /// A touch surface of its own, not the device's screen.
+        public var touch: Bool
+        public var size: Size?
+
+        public init(touch: Bool, size: Size? = nil) {
+            self.touch = touch
+            self.size = size
+        }
+    }
+
+    public var id: String
+    public var version: String
+    /// In the store's order.
+    public var devices: [BuiltFor]
+    /// The capabilities it needs of a device, by id (`input.buttons`, `net.http`).
+    public var needs: [String]
+    /// The ones it uses where a device has them.
+    public var uses: [String]
+    /// nil when the package names no surface.
+    public var surface: Surface?
+    /// What its interface is written with (`solid`).
+    public var framework: String?
+    /// The version of the applet API it is written for.
+    public var api: Int?
+
+    public init(id: String, version: String, devices: [BuiltFor], needs: [String] = [], uses: [String] = [],
+                surface: Surface? = nil, framework: String? = nil, api: Int? = nil)
+    {
+        self.id = id
+        self.version = version
+        self.devices = devices
+        self.needs = needs
+        self.uses = uses
+        self.surface = surface
+        self.framework = framework
+        self.api = api
+    }
+}
+
 // MARK: - Setup
 
 /// A host that answers like an FTP server on ftpd's port.

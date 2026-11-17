@@ -1,7 +1,8 @@
 //! For tests: a fake applet store on loopback that answers the routes Hub
-//! reads (`/v1/apps`, `/v1/packages/<sha256>`, `/v1/icons/<sha256>`) with
-//! faults on demand, packages built in the test, the real packages kept in
-//! `tests/fixtures`, and ed25519 test keys.
+//! reads (`/v1/apps`, `/v1/packages/<sha256>`, `/v1/icons/<sha256>`,
+//! `/v1/details/<sha256>`) with faults on demand, packages built in the
+//! test, the real packages kept in `tests/fixtures` with the live store's
+//! details of them, and ed25519 test keys.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -47,6 +48,39 @@ pub fn fixtures() -> PathBuf {
 
 pub fn fixture(name: &str) -> Vec<u8> {
     std::fs::read(fixtures().join(name)).unwrap_or_else(|error| panic!("fixture {name}: {error}"))
+}
+
+/// The live store's `/v1/details` answer for a fixture's package (`hn`, `youtube`).
+pub fn fixture_details(name: &str) -> Value {
+    serde_json::from_slice(&fixture(&format!("{name}.details.json"))).unwrap()
+}
+
+/// The store's names for the devices it knows, in its order
+/// (`store/src/details.ts` `DEVICES`).
+const DEVICES: [(&str, &str); 3] = [("rg-ds-plus", "Omarchy Pocket"), ("tab5-home", "M5Stack Tab5"), ("3ds-dev", "Nintendo 3DS")];
+
+/// The details the store reads out of a package with no capabilities and no
+/// surface, as a package built by `build_package` is: its builds, in the
+/// store's order of devices with one it has no name for last, and the
+/// applet API version its manifest names.
+pub fn plain_details(package: &[u8]) -> Value {
+    let parsed = pocket_package::Package::parse(package, true).expect("a package the test built or kept");
+    let manifest: Value = serde_json::from_slice(parsed.manifest()).unwrap();
+    let rank = |target: &str| DEVICES.iter().position(|(known, _)| *known == target).unwrap_or(DEVICES.len());
+    let mut builds: Vec<(String, u32)> = (0..parsed.variant_count()).map(|index| parsed.variant(index).unwrap()).map(|v| (v.target.to_owned(), v.host_abi)).collect();
+    builds.sort_by_key(|(target, _)| rank(target));
+    let devices: Vec<Value> = builds
+        .iter()
+        .map(|(target, abi)| {
+            let name = DEVICES.iter().find(|(known, _)| known == target).map_or(target.as_str(), |(_, name)| name);
+            json!({"target": target, "name": name, "build": {"target": target, "hostAbi": abi, "profile": "0".repeat(64), "hash": "0".repeat(16), "sections": []}})
+        })
+        .collect();
+    let mut details = json!({"devices": devices, "needs": [], "uses": []});
+    if let Some(api) = manifest["applet"]["version"].as_u64() {
+        details["api"] = json!(api);
+    }
+    details
 }
 
 /// A 128 × 128 PNG stand-in: the store's own check is not Hub's, so any
@@ -186,7 +220,8 @@ impl FakeStore {
     }
 
     /// Lists a package: its catalog entry is made from the package's facts
-    /// and signed by `key`. Returns the entry.
+    /// and signed by `key`, and its details are `plain_details` (a test
+    /// gives others with `set_details`). Returns the entry.
     pub fn publish(&self, key: &SigningKey, package: Vec<u8>, icon: Vec<u8>, author: &str, summary: &str) -> Entry {
         let facts = crate::package::read(&package).expect("a package the test built or kept");
         let mut entry = Entry {
@@ -205,9 +240,11 @@ impl FakeStore {
             targets: facts.variants.iter().map(|v| v.target.clone()).collect(),
         };
         entry.signature = sign(key, &entry);
+        let details = serde_json::to_vec(&plain_details(&package)).unwrap();
         let mut state = self.state.lock().unwrap();
         state.files.insert(format!("/v1/packages/{}", entry.package), package);
         state.files.insert(format!("/v1/icons/{}", entry.icon), icon);
+        state.files.insert(format!("/v1/details/{}", entry.package), details);
         state.apps.retain(|app| app["id"] != entry.id.as_str());
         state.apps.push(listed(&entry, key));
         entry
@@ -224,6 +261,17 @@ impl FakeStore {
             Some(app) => *app = value,
             None => state.apps.push(value),
         }
+    }
+
+    /// What `/v1/details/<sha256>` answers for a package: these details, or
+    /// with None a `404` as for a package the store does not list.
+    pub fn set_details(&self, sha256: &str, details: Option<Value>) {
+        let path = format!("/v1/details/{sha256}");
+        let mut state = self.state.lock().unwrap();
+        match details {
+            Some(details) => state.files.insert(path, serde_json::to_vec(&details).unwrap()),
+            None => state.files.remove(&path),
+        };
     }
 
     pub fn unlist(&self, id: &str) {
@@ -291,8 +339,11 @@ async fn serve(mut socket: tokio::net::TcpStream, state: Arc<Mutex<State>>, mut 
             }
         } else {
             let sha = path.rsplit('/').next().unwrap_or("").to_owned();
+            // A fault names a file by its hash: a package's details, named by
+            // the package's hash, are not that file.
+            let fault = if path.starts_with("/v1/details/") { None } else { state.faults.get(&sha).cloned() };
             match state.files.get(&path) {
-                Some(bytes) => (bytes.clone(), 200, state.faults.get(&sha).cloned()),
+                Some(bytes) => (bytes.clone(), 200, fault),
                 None => (br#"{"error":"no listed version has that file"}"#.to_vec(), 404, None),
             }
         }

@@ -295,16 +295,18 @@ fn devices_setup_and_daemons_in_both_modes() {
     shutdown(home.path());
 }
 
-/// `store` and `store install` against the fake applet store, in both
+/// `store`, `store details` and `store install` against the fake applet store, in both
 /// output modes. The first command starts the core with the store's URL and
 /// key; the later ones reach that core.
 #[test]
 fn the_store_in_both_modes() {
-    use pocket_hub_applet_store::test_support::{FakeStore, build_package, icon, public, test_key};
+    use pocket_hub_applet_store::test_support::{FakeStore, build_package, fixture, fixture_details, icon, public, test_key};
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let store = runtime.block_on(FakeStore::start());
     let notes = store.publish(&test_key(1), build_package("dev.pocket-nexus.notes", "1.0.0", "Notes", &[("3ds-dev", "notes")], 30_000), icon(1), "pocket-nexus", "Notes.");
     store.publish(&test_key(2), build_package("io.example.rg", "2.0.0", "RG", &[("rg-ds-plus", "rg")], 100), icon(2), "someone", "Elsewhere.");
+    let hn = store.publish(&test_key(1), fixture("hn.pocket"), fixture("hn.png"), "pocket-nexus", "Hacker News.");
+    store.set_details(&hn.package, Some(fixture_details("hn")));
     let home = home();
     let _stop = Stop(home.path());
     let key = public(&test_key(1));
@@ -319,8 +321,23 @@ fn the_store_in_both_modes() {
     assert!(lines[0].starts_with("TITLE") && lines[0].contains("SIZE") && !lines[0].contains("ON DEVICE"), "{}", table.stdout);
     assert!(table.stdout.contains("Notes") && table.stdout.contains("RG (by someone)") && table.stdout.contains("Catalog of "), "{}", table.stdout);
     let json = with_store(&["--json", "store"]).json();
-    assert_eq!(json["apps"].as_array().unwrap().len(), 2);
+    assert_eq!(json["apps"].as_array().unwrap().len(), 3);
     assert!(json["apps"][0].get("installed").is_none() && json["fetchedAt"].is_i64(), "{json}");
+
+    // An applet's details, as the store reads them out of its package.
+    let details = with_store(&["store", "details", &hn.id]);
+    assert_eq!(details.status, 0, "{}", details.stderr);
+    let lines: Vec<&str> = details.stdout.lines().collect();
+    assert_eq!(lines[0], "dev.pocket-nexus.hn 0.3.0");
+    assert_eq!(lines[1], "Built for:   Omarchy Pocket (rg-ds-plus, host ABI 12), M5Stack Tab5 (tab5-home, host ABI 12), Nintendo 3DS (3ds-dev, host ABI 12)");
+    assert!(details.stdout.contains("Uses:        input.analog.left, system.agent\n"), "{}", details.stdout);
+    assert!(details.stdout.contains("Surface:     a touch surface of its own, 320 × 240 to 640 × 720 points\n"), "{}", details.stdout);
+    let plain = with_store(&["store", "details", &notes.id]);
+    assert_eq!(plain.stdout, "dev.pocket-nexus.notes 1.0.0\nBuilt for:   Nintendo 3DS (3ds-dev, host ABI 12)\nNeeds:       nothing\nUses:        nothing\nApplet API:  1\n");
+    let json = with_store(&["--json", "store", "details", &hn.id]).json();
+    assert_eq!((json["devices"][2]["hostAbi"].as_u64(), json["surface"]["size"]["max"][1].as_u64(), json["framework"].as_str()), (Some(12), Some(720), Some("solid")), "{json}");
+    let unlisted = with_store(&["--json", "store", "details", "io.example.none"]);
+    assert_eq!((unlisted.status, unlisted.json()["error"]["data"]["kind"].as_str()), (1, Some("not_found")));
 
     // A device, paired on a card and linked.
     let work = home.path().join("work");
