@@ -28,9 +28,9 @@ Wi-Fi.
 ## Install
 
 1. Download Pocket Hub from [hub.pocket.nexus](https://hub.pocket.nexus)
-   (`Pocket-Hub-<version>-arm64.zip`, also on the
+   (`Pocket-Hub-<version>-arm64.dmg`, also on the
    [latest release](https://github.com/pocket-nexus/pocket-hub/releases/latest)).
-2. Unzip it and move **Pocket Hub** to Applications.
+2. Open it and drag **Pocket Hub** to Applications.
 3. Open it. The app is not notarized yet, so macOS stops it the first time:
    choose **Open Anyway** in System Settings › Privacy & Security, then open it
    again.
