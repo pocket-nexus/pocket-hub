@@ -374,29 +374,44 @@ public struct ServiceState: OpenStringEnum {
     public static let failed = ServiceState(rawValue: "failed")
 }
 
-/// One installed service.
+/// One installed release of a service (CONTROL-API.md §2 `Service`).
 public struct Service: Codable, Sendable, Hashable, Identifiable {
     public var id: String
-    public var version: String
+    /// `dev` for a development install; nil for one an earlier Pocket Hub installed.
+    public var release: String?
+    /// The capabilities its manifest requires, sorted.
+    public var requires: [String]
+    /// Its manifest's host entries.
+    public var hosts: [String]
     public var state: ServiceState
     public var pid: Int?
     public var since: EpochMilliseconds?
     public var channels: Int
     public var lastExit: ServiceExit?
     public var error: String?
+    /// `earlier` for a service an earlier Pocket Hub installed; nil otherwise.
+    public var reason: String?
 
-    public init(id: String, version: String, state: ServiceState, pid: Int? = nil, since: EpochMilliseconds? = nil,
-                channels: Int = 0, lastExit: ServiceExit? = nil, error: String? = nil)
+    public init(id: String, release: String? = "dev", requires: [String] = [], hosts: [String] = [], state: ServiceState,
+                pid: Int? = nil, since: EpochMilliseconds? = nil, channels: Int = 0, lastExit: ServiceExit? = nil,
+                error: String? = nil, reason: String? = nil)
     {
         self.id = id
-        self.version = version
+        self.release = release
+        self.requires = requires
+        self.hosts = hosts
         self.state = state
         self.pid = pid
         self.since = since
         self.channels = channels
         self.lastExit = lastExit
         self.error = error
+        self.reason = reason
     }
+
+    /// Installed by an earlier Pocket Hub: listed, never run, until the owner
+    /// removes it or installs it again.
+    public var isEarlier: Bool { reason == "earlier" }
 }
 
 /// `{code, signal, at}`: `code` an integer or null, `signal` a name such as `SIGTERM` or null.

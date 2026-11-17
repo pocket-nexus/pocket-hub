@@ -354,10 +354,11 @@ pub fn services(services: &[Service]) -> String {
                 (ServiceState::Failed, Some(error)) => format!("failed: {error}"),
                 (state, _) => serde_json::to_value(state).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default(),
             };
-            vec![d.id.clone(), d.version.clone(), state, d.pid.map(|p| p.to_string()).unwrap_or_else(|| "-".into()), d.channels.to_string()]
+            let release = d.release.clone().unwrap_or_else(|| "-".into());
+            vec![d.id.clone(), release, state, d.pid.map(|p| p.to_string()).unwrap_or_else(|| "-".into()), d.channels.to_string()]
         })
         .collect();
-    table(&["ID", "VERSION", "STATE", "PID", "CHANNELS"], rows)
+    table(&["ID", "RELEASE", "STATE", "PID", "CHANNELS"], rows)
 }
 
 /// A free-form object (a device's runtime status) as `key: value` lines.
@@ -412,11 +413,14 @@ pub fn event_line(event: &Value) -> String {
             Ok(service) => {
                 let pid = service.pid.map(|pid| format!(" pid {pid}")).unwrap_or_default();
                 let state = serde_json::to_value(service.state).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
-                format!("service {} {}: {state}{pid}, {} channel(s)", service.id, service.version, service.channels)
+                format!("service {} release {}: {state}{pid}, {} channel(s)", service.id, service.release.as_deref().unwrap_or("-"), service.channels)
             }
             Err(_) => format!("service.changed {}", event["service"]),
         },
-        "service.removed" => format!("service {} removed", text("id")),
+        "service.removed" => match event["release"].as_str() {
+            Some(release) => format!("service {} release {release} removed", text("id")),
+            None => format!("service {} removed", text("id")),
+        },
         "service.log" => format!("{} {} {}: {}", local_time(event["at"].as_i64().unwrap_or(0)), text("id"), text("stream"), text("text")),
         "hub.changed" => format!("hub renamed \"{}\"", event["hub"]["name"].as_str().unwrap_or("")),
         other => format!("{other} {event}"),

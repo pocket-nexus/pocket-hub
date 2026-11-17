@@ -8,7 +8,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use common::*;
-use service_host::{ServiceState, LogStream, OpenError, Supervisor, SupervisorError};
+use service_host::{LogStream, OpenError, Removed, ServiceState, Supervisor, SupervisorError};
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -311,7 +311,8 @@ async fn logs_are_captured_in_order() {
     assert!(seqs.windows(2).all(|pair| pair[1] == pair[0] + 1));
     let first = live.recv().await.unwrap();
     assert_eq!((first.app.as_str(), first.stream), ("app.chatty", LogStream::Hub));
-    assert!(first.text.starts_with("starting app.chatty 1.0.0"));
+    assert!(first.text.starts_with("starting app.chatty release dev"), "{}", first.text);
+    assert_eq!(first.release.as_deref(), Some("dev"));
     supervisor.shutdown().await;
 }
 
@@ -347,37 +348,35 @@ async fn start_stop_and_restart_by_the_owner() {
 }
 
 #[tokio::test]
-async fn an_install_over_an_idle_service_stops_it_and_the_next_start_runs_the_new_version() {
+async fn an_install_over_an_idle_service_stops_it_and_the_next_start_runs_the_new_install() {
     let bun = bun_or_skip!();
     let home = temp_home();
     let supervisor = supervisor_with(home.path(), bun, &[("app.up", json!({}))], |config| {
         config.timings.idle_override = Some(Duration::from_secs(30));
     })
     .await;
-    // With a channel open, the old version keeps running.
+    // With a channel open, the process of the replaced install keeps running.
     let channel = supervisor.open_channel(offer("app.up")).await.unwrap();
-    let source = fixture_package(home.path(), "app.up", "2.0.0", json!({}));
+    assert_eq!(channel.info.release, "dev");
+    let source = fixture_package(home.path(), "app.up", "2", json!({"install": 2}));
     let report = supervisor.install(&source).await.unwrap();
-    assert_eq!(report.previous.as_deref(), Some("1.0.0"));
+    assert_eq!(report.service.release, "dev");
     let status = supervisor.status("app.up").unwrap();
-    assert_eq!((status.state, status.version.as_deref(), status.running_version.as_deref()), (ServiceState::Running, Some("2.0.0"), Some("1.0.0")));
-    assert!(home.path().join("services/app.up/1.0.0").is_dir());
+    assert_eq!((status.state, status.release.as_deref(), status.running_release.as_deref()), (ServiceState::Running, Some("dev"), Some("dev")));
+    assert!(std::fs::read_to_string(report.service.dir.join("fixture.json")).unwrap().contains("2"));
     drop(channel);
     assert!(eventually(Duration::from_secs(2), || supervisor.status("app.up").unwrap().channels == 0).await);
 
     // With none, an install stops it.
-    let source = fixture_package(home.path(), "app.up", "3.0.0", json!({}));
+    let source = fixture_package(home.path(), "app.up", "3", json!({"install": 3}));
     supervisor.install(&source).await.unwrap();
     assert_eq!(supervisor.status("app.up").unwrap().state, ServiceState::Stopped);
-    // The versions no process runs are gone.
-    assert!(eventually(Duration::from_secs(2), || !home.path().join("services/app.up/1.0.0").exists()).await);
-    assert!(!home.path().join("services/app.up/2.0.0").exists());
     let channel = supervisor.open_channel(offer("app.up")).await.unwrap();
-    assert_eq!(channel.info.version, "3.0.0");
+    assert_eq!(channel.info.release, "dev");
     drop(channel);
 
     // Remove stops it first.
-    assert!(supervisor.remove("app.up", false).await.unwrap());
+    assert_eq!(supervisor.remove("app.up", None, false).await.unwrap(), Removed::Releases(vec!["dev".into()]));
     assert!(supervisor.status("app.up").is_none());
     assert_eq!(supervisor.open_channel(offer("app.up")).await.err(), Some(OpenError::NoService));
     supervisor.shutdown().await;

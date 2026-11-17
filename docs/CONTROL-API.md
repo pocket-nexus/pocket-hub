@@ -41,15 +41,18 @@ notification before it is ignored. A second `hello` is `-32600`; another
 answered `-32700`; a line over 1 MiB is answered `-32600` and the connection is
 closed.
 
-**The protocol is 2.** Version 1 is the API of Pocket Hub 0.2.2 and earlier,
-before the methods, objects and events of services took their names (§3, §4).
-A client that says 1 is refused with `-32602` and one sentence that names both
-versions, and a core of version 1 refuses a client that says 2 the same way;
-neither side reads the other's names.
+**The protocol is 3.** Every change that breaks a client of the version
+before takes the next number. Version 1 is the API of Pocket Hub 0.2.2 and
+earlier, before the methods, objects and events of services took their names;
+version 2 named them and installed a service by its own version; version 3
+installs it as a release (§2 `Service`, §3 Services, §4). A client that says
+another version is refused with `-32602` and one sentence that names both, and
+a core of another version refuses a client of this one the same way; neither
+side reads the other's names.
 
 ```
-→ {"jsonrpc":"2.0","id":1,"method":"hub.hello","params":{"protocol":2,"client":{"kind":"cli","name":"pocket-hub","version":"0.1.0"}}}
-← {"jsonrpc":"2.0","id":1,"result":{"protocol":2,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}}
+→ {"jsonrpc":"2.0","id":1,"method":"hub.hello","params":{"protocol":3,"client":{"kind":"cli","name":"pocket-hub","version":"0.1.0"}}}
+← {"jsonrpc":"2.0","id":1,"result":{"protocol":3,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}}
 ```
 
 **`hub.hello` and `hub.shutdown` are frozen.** Every protocol version, past and
@@ -68,7 +71,7 @@ number, never the sentence.
 
 ```
 → {"jsonrpc":"2.0","id":1,"method":"hub.hello","params":{"protocol":1,"client":{"kind":"gui","name":"Pocket Hub","version":"0.2.2"}}}
-← {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"This Hub speaks protocol 2, not 1.","data":{"protocol":2}}}
+← {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"This Hub speaks protocol 3, not 1.","data":{"protocol":3}}}
 ```
 
 `client.kind` is `gui`, `cli` or `remote`. **The client's kind and name are its
@@ -165,7 +168,7 @@ above) and **`1`** for every failure of the operation itself, whose
 | `cancelled` | the client cancelled the call | |
 | `setup` | a setup step failed | `step`: the `stage` it failed in (§3 Setup). `reason?`: `unreachable` (the console did not answer), `companions_full` (the device already holds 8 computers), `release_unavailable` (the program could not be fetched), `storage` (a read or a write on the device failed), `card` (the folder is not a card of that device). `detail?`: the failing step in the setup's own words, for a log. `device?` and `confirmed: false` when a key was stored for the device and its final readback did not return: that device is then listed with `setupUnconfirmed` |
 | `invalid` | an argument is unusable (not a `.pocket`, a bad name) | |
-| `service` | a service could not be installed, started or stopped | `id?` |
+| `service` | a service could not be installed, started or stopped | `id?`, and `reason?`: `manifest` (its `pocket.service.json` is refused; `detail` names the field, absent for a fault of the file as a whole), `runtime` (Bun could not be fetched for it), `dependencies` (the package's dependencies would not install; `detail` is the end of `bun install`'s output, at most 4 KiB), `earlier` (an earlier Pocket Hub installed it, §2 `Service`) |
 | `release` | the release of a device's program could not be used | `reason`: `unreachable` (the release source did not answer, or not with a release), `not_found` (no such tag), `rejected` (the file fails its checksum or is not a program of that device) |
 | `store` | the applet store could not be used | `reason`: `unreachable` (no answer, or not the store's answer), `rejected` (a downloaded file does not match its hash, its publisher's signature does not verify, or the package is not what its catalog entry says) |
 | `pairing` | a pairing by a code did not complete (§3 Pairing) | `reason`: `wrong_code` (the device did not take the code: it is not the one it shows), `bad_proof` (the device did not prove that it holds the key Hub sent), `gone` (the device left, or its request ended, before it answered). Nothing was stored in any of them |
@@ -214,18 +217,21 @@ is the same object in a Device's `busy` and in the error `busy`.
 | `since` | integer | when Hub read the request |
 | `expires` | integer | when Hub closes it: 5 minutes after `since`, the time the device keeps its code |
 
-**Service** — one installed service:
+**Service** — one installed release of a service (SERVICE-PROTOCOL.md §1):
 
 | Field | Type | Content |
 | --- | --- | --- |
 | `id` | string | the applet id it serves |
-| `version` | string | |
+| `release` | string or null | `dev` for a development install, the only kind there is; null for one an earlier Pocket Hub installed |
+| `requires` | array of strings | the capabilities its manifest requires, sorted |
+| `hosts` | array of strings | its manifest's host entries, as written |
 | `state` | string | `stopped`, `starting`, `running`, `stopping`, `failed` |
 | `pid` | integer or null | |
 | `since` | integer or null | when it entered this state |
 | `channels` | integer | channels open on it |
 | `lastExit` | object or null | `{code, signal, at}`: `code` an integer or null, `signal` a name such as `SIGTERM` or null |
 | `error` | string or null | why it is `failed` |
+| `reason` | string or null | `earlier` for a service an earlier Pocket Hub installed: listed `failed`, never run, nothing of it read or deleted until the owner removes it or installs it again; else null |
 
 **StoreApp** — one applet the store offers, at its newest listed version:
 
@@ -378,9 +384,9 @@ waits: with none `"*"` is `not_found`, with several it is `invalid`.
 | Method | Params | Result |
 | --- | --- | --- |
 | `services.list` | | `{services: [Service]}` |
-| `services.install` | `{path}` (a folder or a `.tar.gz`) | `Service`. Progress: `{stage, message}`; `stage` is `runtime` while Hub downloads Bun for it, then `installing` |
-| `services.remove` | `{id, purge?}` | `{}`. The service's data folder stays unless `purge` is true |
-| `services.start`, `services.stop`, `services.restart` | `{id}` | `Service` |
+| `services.install` | `{path}` (a folder or a `.tar.gz`) | `Service`: the package installed as the id's `dev` release, replacing the one before and one an earlier Pocket Hub installed. Progress: `{stage, message}`; `stage` is `runtime` while Hub downloads Bun for it, then `installing`. A refused manifest is the error `service` with `reason: "manifest"`; dependencies that will not install, `reason: "dependencies"` |
+| `services.remove` | `{id, release?, purge?}` | `{}`. Without `release`, every release of the id, and one an earlier Pocket Hub installed. The service's data folder stays unless `purge` is true. An id or a release that is not installed is `not_found` |
+| `services.start`, `services.stop`, `services.restart` | `{id, release?}` | `Service`. `release`, when given, must be the one installed (else `not_found`). Starting one an earlier Pocket Hub installed is the error `service` with `reason: "earlier"` |
 | `services.logs` | `{id, tail?}` | `{lines: [{at, stream, text}]}`; `tail` defaults to 200 |
 | `services.runtime` | `{install?}` | `{version, installed, path}`: the Bun that Hub runs services on. With `install: true` Hub downloads Bun now. Progress: `{done, total}` |
 
@@ -420,8 +426,8 @@ of what `store.install` fetches until the store publishes services.
 | `device.screenshot` | `id`, `path`, `width`, `height`, `frame` | the device sent a screenshot unasked |
 | `pairing.changed` | `requests: [PairRequest]` | the requests that wait for a code changed (§3 Pairing): the whole list, as `pairing.list` answers it |
 | `service.changed` | `service: Service` | a service was installed or changed state |
-| `service.removed` | `id` | |
-| `service.log` | `id`, `at`, `stream`, `text` | a line of a service's output |
+| `service.removed` | `id`, `release` | one release was removed; `release` is null for a service an earlier Pocket Hub installed |
+| `service.log` | `id`, `release`, `at`, `stream`, `text` | a line of a service's output; `release` is the one the process runs, or null |
 | `hub.changed` | `hub: {id, name, version}` | the name changed |
 | `store.changed` | `fetchedAt` | the catalog Hub holds, or what it has cached of it (packages, icons), changed; a client calls `store.apps` again |
 

@@ -270,10 +270,10 @@ fn devices_setup_and_services_in_both_modes() {
     assert_eq!(run(home.path(), &["services"]).stdout.trim(), "No service is installed.");
     let package = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sdk/service/examples/link-channel");
     let installed = run(home.path(), &["service", "install", package.to_str().unwrap()]);
-    assert_eq!(installed.stdout.trim(), "Installed dev.pocket-nexus.link-channel 0.1.0.", "{}", installed.stderr);
+    assert_eq!(installed.stdout.trim(), "Installed dev.pocket-nexus.link-channel, release dev.", "{}", installed.stderr);
     let mut first = String::new();
     BufReader::new(watch.stdout.take().unwrap()).read_line(&mut first).unwrap();
-    assert!(first.starts_with("service dev.pocket-nexus.link-channel 0.1.0: stopped"), "{first}");
+    assert!(first.starts_with("service dev.pocket-nexus.link-channel release dev: stopped"), "{first}");
     let _ = watch.kill();
     let _ = watch.wait();
     let services = run(home.path(), &["--json", "services"]).json();
@@ -281,7 +281,7 @@ fn devices_setup_and_services_in_both_modes() {
     let started = run(home.path(), &["service", "start", "dev.pocket-nexus.link-channel"]);
     assert!(started.stdout.contains("running"), "{}", started.stdout);
     let logs = run(home.path(), &["--json", "service", "logs", "dev.pocket-nexus.link-channel"]).json();
-    assert!(logs["lines"].as_array().unwrap().iter().any(|line| line["text"].as_str().unwrap().contains("installed 0.1.0")));
+    assert!(logs["lines"].as_array().unwrap().iter().any(|line| line["text"].as_str().unwrap().contains("installed release dev")));
     assert!(run(home.path(), &["service", "stop", "dev.pocket-nexus.link-channel"]).stdout.contains("stopped"));
     assert_eq!(run(home.path(), &["service", "remove", "dev.pocket-nexus.link-channel"]).stdout.trim(), "Removed dev.pocket-nexus.link-channel; its data folder is kept.");
     assert_eq!(run(home.path(), &["service", "start", "dev.pocket-nexus.link-channel"]).status, 1);
@@ -709,16 +709,16 @@ fn a_core_of_another_protocol_is_named_and_stopped_never_replaced() {
     assert_eq!(
         status.stderr.trim(),
         format!(
-            "pocket-hub: The Pocket Hub core on {} speaks protocol 1 of the control API and this pocket-hub speaks 2: use the pocket-hub of its version, or stop it with `pocket-hub shutdown`.",
+            "pocket-hub: The Pocket Hub core on {} speaks protocol 1 of the control API and this pocket-hub speaks 3: use the pocket-hub of its version, or stop it with `pocket-hub shutdown`.",
             earlier.socket.display()
         )
     );
     assert!(!home.path().join("logs").exists(), "no core of this version was started beside it");
-    assert_eq!(earlier.calls(), ["hub.hello 2"]);
+    assert_eq!(earlier.calls(), ["hub.hello 3"]);
 
     let stopped = run(home.path(), &["shutdown"]);
     assert_eq!((stopped.status, stopped.stdout.trim()), (0, "The Pocket Hub core stopped."), "{}", stopped.stderr);
-    assert_eq!(earlier.calls(), ["hub.hello 2", "hub.hello 2", "hub.hello 1", "hub.shutdown"]);
+    assert_eq!(earlier.calls(), ["hub.hello 3", "hub.hello 3", "hub.hello 1", "hub.shutdown"]);
     assert!(!earlier.socket.exists());
     let none = run(home.path(), &["shutdown"]);
     assert_eq!(none.status, 3);

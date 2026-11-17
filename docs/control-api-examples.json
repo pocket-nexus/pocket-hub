@@ -430,7 +430,7 @@
         "id": 2,
         "method": "hub.hello",
         "params": {
-          "protocol": 2,
+          "protocol": 3,
           "client": {
             "kind": "gui",
             "name": "Pocket Hub",
@@ -442,7 +442,7 @@
         "jsonrpc": "2.0",
         "id": 2,
         "result": {
-          "protocol": 2,
+          "protocol": 3,
           "hub": {
             "id": "fedcba9876543210",
             "name": "Studio Mac",
@@ -616,13 +616,16 @@
         "id": 39,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
+          "release": "dev",
+          "requires": [],
+          "hosts": [],
           "state": "stopped",
           "pid": null,
           "since": 1767225600000,
           "channels": 0,
           "lastExit": null,
-          "error": null
+          "error": null,
+          "reason": null
         }
       },
       "progress": [
@@ -651,13 +654,16 @@
           "services": [
             {
               "id": "dev.pocket-nexus.link-channel",
-              "version": "0.1.0",
+              "release": "dev",
+              "requires": [],
+              "hosts": [],
               "state": "running",
               "pid": 4242,
               "since": 1767225600000,
               "channels": 1,
               "lastExit": null,
-              "error": null
+              "error": null,
+              "reason": null
             }
           ]
         }
@@ -681,7 +687,7 @@
             {
               "at": 1767225600000,
               "stream": "hub",
-              "text": "installed 0.1.0"
+              "text": "installed release dev"
             }
           ]
         }
@@ -716,7 +722,9 @@
         "id": 43,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
+          "release": "dev",
+          "requires": [],
+          "hosts": [],
           "state": "running",
           "pid": 4242,
           "since": 1767225600000,
@@ -726,7 +734,8 @@
             "signal": null,
             "at": 1767225600000
           },
-          "error": null
+          "error": null,
+          "reason": null
         }
       }
     },
@@ -763,7 +772,9 @@
         "id": 42,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
+          "release": "dev",
+          "requires": [],
+          "hosts": [],
           "state": "running",
           "pid": 4242,
           "since": 1767225600000,
@@ -773,7 +784,8 @@
             "signal": null,
             "at": 1767225600000
           },
-          "error": null
+          "error": null,
+          "reason": null
         }
       }
     },
@@ -791,7 +803,9 @@
         "id": 44,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
+          "release": "dev",
+          "requires": [],
+          "hosts": [],
           "state": "stopped",
           "pid": null,
           "since": 1767225600000,
@@ -801,7 +815,8 @@
             "signal": null,
             "at": 1767225600000
           },
-          "error": null
+          "error": null,
+          "reason": null
         }
       }
     },
@@ -1446,13 +1461,16 @@
         "topic": "service.changed",
         "service": {
           "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
+          "release": "dev",
+          "requires": [],
+          "hosts": [],
           "state": "stopped",
           "pid": null,
           "since": 1767225600000,
           "channels": 0,
           "lastExit": null,
-          "error": null
+          "error": null,
+          "reason": null
         }
       }
     },
@@ -1462,9 +1480,10 @@
       "params": {
         "topic": "service.log",
         "id": "dev.pocket-nexus.link-channel",
+        "release": "dev",
         "at": 1767225600000,
         "stream": "hub",
-        "text": "installed 0.1.0"
+        "text": "installed release dev"
       }
     },
     "service.removed": {
@@ -1472,7 +1491,8 @@
       "method": "event",
       "params": {
         "topic": "service.removed",
-        "id": "dev.pocket-nexus.link-channel"
+        "id": "dev.pocket-nexus.link-channel",
+        "release": "dev"
       }
     },
     "store.changed": {
@@ -1536,9 +1556,9 @@
         "id": 1,
         "error": {
           "code": -32602,
-          "message": "This Hub speaks protocol 2, not 1.",
+          "message": "This Hub speaks protocol 3, not 1.",
           "data": {
-            "protocol": 2
+            "protocol": 3
           }
         }
       }

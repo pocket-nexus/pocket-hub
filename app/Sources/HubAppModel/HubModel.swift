@@ -250,10 +250,12 @@ public final class HubModel {
                 list.append(service)
             }
             services = Self.sorted(list)
-        case .serviceRemoved(let id):
-            services?.removeAll { $0.id == id }
-            serviceLogs[id] = nil
-        case .serviceLog(let id, let line):
+        case .serviceRemoved(let id, let release):
+            // One release of the id (each id holds one now), or one an
+            // earlier Pocket Hub installed (no release).
+            services?.removeAll { $0.id == id && (release == nil || $0.release == release) }
+            if services?.contains(where: { $0.id == id }) != true { serviceLogs[id] = nil }
+        case .serviceLog(let id, _, let line):
             serviceLogs[id, default: LogBuffer(capacity: 1000)].append(line)
         case .storeChanged:
             store.catalogDidChange()

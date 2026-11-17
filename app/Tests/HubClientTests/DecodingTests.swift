@@ -131,12 +131,12 @@ struct DecodingTests {
 
     @Test func services() throws {
         let running = try decode(Service.self, """
-        {"id":"nexus.pocket.weather","version":"0.3.1","state":"running","pid":48211,"since":1762876800000,
+        {"id":"nexus.pocket.weather","release":"dev","requires":[],"hosts":["api.open-meteo.com"],"reason":null,"state":"running","pid":48211,"since":1762876800000,
          "channels":1,"lastExit":null,"error":null}
         """)
         #expect(running.state == .running && running.pid == 48211 && running.lastExit == nil)
         let failed = try decode(Service.self, """
-        {"id":"nexus.pocket.notes","version":"1.2.0","state":"failed","pid":null,"since":null,"channels":0,
+        {"id":"nexus.pocket.notes","release":"dev","requires":[],"hosts":[],"reason":null,"state":"failed","pid":null,"since":null,"channels":0,
          "lastExit":{"code":1,"signal":null,"at":1762876800000},"error":"exited with code 1"}
         """)
         #expect(failed.state == .failed && failed.pid == nil && failed.since == nil)
@@ -147,8 +147,8 @@ struct DecodingTests {
     }
 
     @Test func hubObjects() throws {
-        let hello = try decode(HelloResult.self, #"{"protocol":2,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}"#)
-        #expect(hello.protocol == 2 && hello.hub.name == "Studio Mac")
+        let hello = try decode(HelloResult.self, #"{"protocol":3,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}"#)
+        #expect(hello.protocol == 3 && hello.hub.name == "Studio Mac")
         let status = try decode(HubStatus.self, """
         {"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0","home":"/Users/x/Library/Application Support/Pocket Hub",
          "startedAt":1762876800000,"carriers":[{"kind":"tcp","port":8628},{"kind":"usb"}],"bun":{"version":null,"installed":false}}
@@ -285,13 +285,18 @@ struct DecodingTests {
             Issue.record("device.screenshot"); return
         }
         #expect(shot.result == ScreenshotResult(path: "/p.png", width: 400, height: 480, frame: 9))
-        guard case .serviceChanged(let service) = try event(#"{"topic":"service.changed","service":{"id":"d","version":"1","state":"starting","pid":null,"since":5,"channels":0,"lastExit":null,"error":null}}"#) else {
+        guard case .serviceChanged(let service) = try event(#"{"topic":"service.changed","service":{"id":"d","release":"dev","requires":[],"hosts":["x.com"],"state":"starting","pid":null,"since":5,"channels":0,"lastExit":null,"error":null,"reason":null}}"#) else {
             Issue.record("service.changed"); return
         }
-        #expect(service.state == .starting)
-        #expect(try event(#"{"topic":"service.removed","id":"d"}"#) == .serviceRemoved(id: "d"))
-        #expect(try event(#"{"topic":"service.log","id":"d","at":7,"stream":"stdout","text":"ok"}"#)
-            == .serviceLog(id: "d", line: ServiceLogLine(at: 7, stream: "stdout", text: "ok")))
+        #expect(service.state == .starting && service.release == "dev" && service.hosts == ["x.com"] && !service.isEarlier)
+        guard case .serviceChanged(let earlier) = try event(#"{"topic":"service.changed","service":{"id":"e","release":null,"requires":[],"hosts":[],"state":"failed","pid":null,"since":null,"channels":0,"lastExit":null,"error":"Installed by an earlier Pocket Hub; install it again.","reason":"earlier"}}"#) else {
+            Issue.record("an earlier service.changed"); return
+        }
+        #expect(earlier.isEarlier && earlier.release == nil)
+        #expect(try event(#"{"topic":"service.removed","id":"d","release":"dev"}"#) == .serviceRemoved(id: "d", release: "dev"))
+        #expect(try event(#"{"topic":"service.removed","id":"e","release":null}"#) == .serviceRemoved(id: "e", release: nil))
+        #expect(try event(#"{"topic":"service.log","id":"d","release":"dev","at":7,"stream":"stdout","text":"ok"}"#)
+            == .serviceLog(id: "d", release: "dev", line: ServiceLogLine(at: 7, stream: "stdout", text: "ok")))
         #expect(try event(#"{"topic":"hub.changed","hub":{"id":"h","name":"New","version":"0.1.0"}}"#)
             == .hubChanged(HubIdentity(id: "h", name: "New", version: "0.1.0")))
         guard case .unknown(let topic, _) = try event(#"{"topic":"agent.something","x":1}"#) else {

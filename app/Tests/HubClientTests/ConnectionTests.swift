@@ -39,9 +39,9 @@ struct ConnectionTests {
         let peer = await server.nextPeer()
         let request = try await peer.next()
         #expect(request["method"] == "hub.hello")
-        #expect(request["params"] == ["protocol": 2, "client": ["kind": "gui", "name": "Pocket Hub", "version": "0.1.0"]])
+        #expect(request["params"] == ["protocol": 3, "client": ["kind": "gui", "name": "Pocket Hub", "version": "0.1.0"]])
         #expect(request["id"]?.intValue != nil)
-        peer.write(#"{"jsonrpc":"2.0","id":\#(request["id"]!.intValue!),"result":{"protocol":2,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}}"# + "\n")
+        peer.write(#"{"jsonrpc":"2.0","id":\#(request["id"]!.intValue!),"result":{"protocol":3,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}}"# + "\n")
         let hello = try await call.value
         #expect(hello.hub.id == "fedcba9876543210")
         await connection.close()

@@ -39,7 +39,7 @@ if (import.meta.main) await serve(service);
 
 ```json
 // pocket.service.json
-{ "service": 1, "id": "com.example.my-applet", "version": "1.0.0", "entry": "service.ts" }
+{ "service": 1, "id": "com.example.my-applet", "entry": "service.ts" }
 ```
 
 `id` is the applet's manifest id; a service serves that applet only. The

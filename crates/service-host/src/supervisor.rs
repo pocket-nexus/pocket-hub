@@ -27,7 +27,10 @@ use crate::config::Config;
 use crate::instance::{self, Cmd, Phase, StopReason};
 use crate::logs::{LogLine, LogRing, LogStream};
 use crate::manifest::valid_id;
-use crate::registry::{InstallError, InstallReport, InstalledService, Registry};
+use crate::registry::{InstallError, InstallReport, InstalledService, Registry, Removed};
+
+/// What an id an earlier Pocket Hub installed says, as its `error`.
+pub const EARLIER_SENTENCE: &str = "Installed by an earlier Pocket Hub; install it again.";
 use crate::runtime::BunRuntime;
 use crate::util::{cut, epoch_ms, random_hex, same_secret, signal_group};
 use crate::wire;
@@ -65,6 +68,9 @@ pub enum OpenError {
 pub enum StartError {
     #[error("{0} is not installed")]
     NotInstalled(String),
+    /// The id is in the layout of an earlier Pocket Hub: it is not run.
+    #[error("{0} was installed by an earlier Pocket Hub")]
+    Earlier(String),
     #[error("{0}")]
     Failed(String),
 }
@@ -106,10 +112,14 @@ pub struct ExitInfo {
 #[serde(rename_all = "camelCase")]
 pub struct ServiceStatus {
     pub id: String,
-    /// The installed (current) version; None once removed.
-    pub version: Option<String>,
-    /// The version the running process was started from.
-    pub running_version: Option<String>,
+    /// The release a channel starts (`dev` for a development install); None
+    /// once removed, and for an id an earlier Pocket Hub installed.
+    pub release: Option<String>,
+    /// The release the running process was started from.
+    pub running_release: Option<String>,
+    /// The id is in the layout of an earlier Pocket Hub (`Registry::is_earlier`):
+    /// listed as `failed` and never run.
+    pub earlier: bool,
     pub state: ServiceState,
     /// Epoch milliseconds of when it entered `state`; None for a service that
     /// has not changed state since Hub started.
@@ -133,8 +143,9 @@ impl ServiceStatus {
     fn new(id: &str) -> Self {
         Self {
             id: id.to_owned(),
-            version: None,
-            running_version: None,
+            release: None,
+            running_release: None,
+            earlier: false,
             state: ServiceState::Stopped,
             since: None,
             pid: None,
@@ -155,7 +166,8 @@ pub enum ServiceEvent {
     /// A service's status changed.
     State(ServiceStatus),
     Installed(InstalledService),
-    Removed { id: String },
+    /// `release` was removed; None for an id an earlier Pocket Hub left.
+    Removed { id: String, release: Option<String> },
 }
 
 /// Publishes a status that changed, with `since` stamped when its state did.
@@ -178,7 +190,7 @@ pub(crate) struct ChannelSlot {
 pub(crate) struct Instance {
     pub serial: u64,
     pub token: String,
-    pub version: String,
+    pub release: String,
     pub pid: u32,
     pub phase: watch::Receiver<Phase>,
     pub cmd: mpsc::UnboundedSender<Cmd>,
@@ -432,40 +444,48 @@ impl Supervisor {
     /// The status of `id`, installed or with a process.
     pub fn status(&self, id: &str) -> Option<ServiceStatus> {
         let installed = self.inner.registry.get(id);
+        let earlier = installed.is_none() && self.inner.registry.is_earlier(id);
         let table = self.inner.lock();
         let mut status = match (table.services.get(id), &installed) {
             (Some(entry), _) => entry.status.clone(),
             (None, Some(_)) => ServiceStatus::new(id),
+            (None, None) if earlier => ServiceStatus::new(id),
             (None, None) => return None,
         };
-        status.version = installed.map(|service| service.version);
+        status.release = installed.map(|service| service.release);
+        if earlier && status.pid.is_none() {
+            // HOST-PROTOCOL: listed, never read or run, until the owner
+            // removes it or installs the id again.
+            status.earlier = true;
+            status.state = ServiceState::Failed;
+            status.last_error = Some(EARLIER_SENTENCE.into());
+        }
         Some(status)
     }
 
     /// Every installed service's status, and any other with a process, by id.
     pub fn statuses(&self) -> Vec<ServiceStatus> {
         let mut ids: Vec<String> = self.inner.registry.list().into_iter().map(|service| service.id).collect();
+        ids.extend(self.inner.registry.earlier());
         ids.extend(self.inner.lock().services.iter().filter(|(_, entry)| entry.instance.is_some()).map(|(id, _)| id.clone()));
         ids.sort();
         ids.dedup();
         ids.iter().filter_map(|id| self.status(id)).collect()
     }
 
-    /// Installs a package (`Registry::install`). A process of an older
-    /// version keeps running while it has channels and the new version takes
-    /// effect at its next start; one with no channel is stopped at once, so
+    /// Installs a package as the id's development release
+    /// (`Registry::install`). A process of the replaced release keeps running
+    /// while it has channels and the new one takes effect at its next start; one with no channel is stopped at once, so
     /// the next open starts the new version. A new package clears the hold
     /// after failed starts.
     pub async fn install(&self, source: &Path) -> Result<InstallReport, InstallError> {
-        let running: Vec<String> = {
-            let table = self.inner.lock();
-            table.services.values().filter_map(|entry| entry.instance.as_ref().map(|instance| instance.version.clone())).collect()
-        };
-        let report = self.inner.registry.install(source, &running).await?;
+        let report = self.inner.registry.install(source).await?;
         let id = report.service.id.clone();
-        let version = report.service.version.clone();
+        let release = report.service.release.clone();
         let idle_stop = self.inner.update(&id, |entry| {
-            entry.status.version = Some(version.clone());
+            entry.status.release = Some(release.clone());
+            entry.status.earlier = false;
+            entry.logs.set_release(Some(release.clone()));
             entry.failures = 0;
             entry.hold_until = None;
             entry.status.retry_at = None;
@@ -480,7 +500,7 @@ impl Supervisor {
             let _ = instance.cmd.send(Cmd::Stop(StopReason::Upgrade));
             Some(instance.phase.clone())
         });
-        self.inner.log(&id, &format!("installed {version}"));
+        self.inner.log(&id, &format!("installed release {release}"));
         let _ = self.inner.events.send(ServiceEvent::Installed(report.service.clone()));
         if let Some(mut phase) = idle_stop {
             let _ = phase.wait_for(|phase| matches!(phase, Phase::Down(_))).await;
@@ -488,19 +508,28 @@ impl Supervisor {
         Ok(report)
     }
 
-    /// Stops `id`'s process, then removes its packages, and its data folder
-    /// with `purge_data`. False when it was not installed.
-    pub async fn remove(&self, id: &str, purge_data: bool) -> io::Result<bool> {
+    /// Stops `id`'s process, then removes `release` (every release with
+    /// None, or what an earlier Pocket Hub left), and the data folder with
+    /// `purge_data`. Says what was removed.
+    pub async fn remove(&self, id: &str, release: Option<&str>, purge_data: bool) -> io::Result<Removed> {
         self.stop(id).await;
-        let removed = self.inner.registry.remove(id, purge_data).await?;
+        let removed = self.inner.registry.remove(id, release, purge_data).await?;
         {
             let mut table = self.inner.lock();
             if table.services.get(id).is_some_and(|entry| entry.instance.is_none()) {
                 table.services.remove(id);
             }
         }
-        if removed {
-            let _ = self.inner.events.send(ServiceEvent::Removed { id: id.to_owned() });
+        match &removed {
+            Removed::Nothing => {}
+            Removed::Earlier => {
+                let _ = self.inner.events.send(ServiceEvent::Removed { id: id.to_owned(), release: None });
+            }
+            Removed::Releases(releases) => {
+                for release in releases {
+                    let _ = self.inner.events.send(ServiceEvent::Removed { id: id.to_owned(), release: Some(release.clone()) });
+                }
+            }
         }
         Ok(removed)
     }
@@ -575,7 +604,7 @@ impl Supervisor {
             let instance = entry.instance.as_mut().filter(|instance| instance.serial == serial)?;
             instance.channels.insert(channel, ChannelSlot { socket, stop: stop_tx });
             entry.status.channels = instance.channels.len();
-            Some(ChannelInfo { app: offer.app.clone(), version: instance.version.clone(), pid: instance.pid, channel })
+            Some(ChannelInfo { app: offer.app.clone(), release: instance.release.clone(), pid: instance.pid, channel })
         });
         let Some(info) = info else {
             return Err(OpenError::Busy("the service ended as it attached".into()));
@@ -646,6 +675,9 @@ impl Supervisor {
     /// hold it off, and waits until it is connected. With no channel it
     /// stops again after its idle time, like any other.
     pub async fn start(&self, id: &str) -> Result<ServiceStatus, StartError> {
+        if self.inner.registry.is_earlier(id) {
+            return Err(StartError::Earlier(id.to_owned()));
+        }
         let service = self.inner.registry.get(id).ok_or_else(|| StartError::NotInstalled(id.to_owned()))?;
         let (serial, mut phase, _) = self.claim(&service, true).await.map_err(StartError::Failed)?;
         let pending = Pending { inner: &self.inner, app: id.to_owned(), serial };

@@ -10,8 +10,8 @@ public enum HubEvent: Sendable, Hashable {
     /// The requests to be paired that wait for a code: the whole list.
     case pairingChanged([PairRequest])
     case serviceChanged(Service)
-    case serviceRemoved(id: String)
-    case serviceLog(id: String, line: ServiceLogLine)
+    case serviceRemoved(id: String, release: String?)
+    case serviceLog(id: String, release: String?, line: ServiceLogLine)
     case hubChanged(HubIdentity)
     /// The catalog Hub holds, or what it has cached of it, changed: call `store.apps` again.
     case storeChanged(fetchedAt: EpochMilliseconds)
@@ -51,8 +51,8 @@ public enum HubEvent: Sendable, Hashable {
         case .deviceScreenshot: self = .deviceScreenshot(try params.decode())
         case .pairingChanged: self = .pairingChanged(try member("requests"))
         case .serviceChanged: self = .serviceChanged(try member("service"))
-        case .serviceRemoved: self = .serviceRemoved(id: try member("id"))
-        case .serviceLog: self = .serviceLog(id: try member("id"), line: try params.decode())
+        case .serviceRemoved: self = .serviceRemoved(id: try member("id"), release: params["release"]?.stringValue)
+        case .serviceLog: self = .serviceLog(id: try member("id"), release: params["release"]?.stringValue, line: try params.decode())
         case .hubChanged: self = .hubChanged(try member("hub"))
         case .storeChanged: self = .storeChanged(fetchedAt: try member("fetchedAt"))
         case nil: self = .unknown(topic: topic, params: params)

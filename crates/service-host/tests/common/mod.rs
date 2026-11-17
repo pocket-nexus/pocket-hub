@@ -52,7 +52,7 @@ pub fn config(home: &Path, bun: PathBuf) -> Config {
 pub fn fixture_package(parent: &Path, id: &str, version: &str, fixture: serde_json::Value) -> PathBuf {
     let dir = parent.join(format!("src-{id}-{version}"));
     std::fs::create_dir_all(&dir).unwrap();
-    let manifest = serde_json::json!({ "service": 1, "id": id, "version": version, "entry": "service.mjs" });
+    let manifest = serde_json::json!({ "service": 1, "id": id, "entry": "service.mjs" });
     std::fs::write(dir.join("pocket.service.json"), manifest.to_string()).unwrap();
     std::fs::copy(fixtures().join("service.mjs"), dir.join("service.mjs")).unwrap();
     std::fs::write(dir.join("fixture.json"), fixture.to_string()).unwrap();

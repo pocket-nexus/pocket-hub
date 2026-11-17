@@ -184,15 +184,20 @@ extension HubCalling {
         try await call("services.install", params: ["path": .string(path)], progress: typed(progress)).decoded()
     }
 
-    /// Removes a service; its data folder stays unless `purge`.
-    public func removeService(id: String, purge: Bool = false) async throws {
+    /// Removes a service: one release, or every release (and one an earlier
+    /// Pocket Hub installed) without `release`. Its data folder stays unless `purge`.
+    public func removeService(id: String, release: String? = nil, purge: Bool = false) async throws {
         var params: [String: JSONValue] = ["id": .string(id)]
+        if let release { params["release"] = .string(release) }
         if purge { params["purge"] = true }
         _ = try await call("services.remove", params: .object(params))
     }
 
-    public func service(_ action: ServiceAction, id: String) async throws -> Service {
-        try await call("services.\(action.rawValue)", params: ["id": .string(id)]).decoded()
+    /// Starts, stops or restarts a service; `release`, when given, must be the installed one.
+    public func service(_ action: ServiceAction, id: String, release: String? = nil) async throws -> Service {
+        var params: [String: JSONValue] = ["id": .string(id)]
+        if let release { params["release"] = .string(release) }
+        return try await call("services.\(action.rawValue)", params: .object(params)).decoded()
     }
 
     public func serviceLogs(id: String, tail: Int? = nil) async throws -> [ServiceLogLine] {

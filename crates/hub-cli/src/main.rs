@@ -216,9 +216,24 @@ const DEVICE_COMMANDS: [&str; 9] = ["status", "apps", "push", "launch", "remove"
 enum ServiceCommand {
     /// Install a service package: a folder or a .tar.gz.
     Install { path: PathBuf },
-    Start { id: String },
-    Stop { id: String },
-    Restart { id: String },
+    Start {
+        id: String,
+        /// The release it must be (`dev` for a development install).
+        #[arg(long)]
+        release: Option<String>,
+    },
+    Stop {
+        id: String,
+        /// The release it must be.
+        #[arg(long)]
+        release: Option<String>,
+    },
+    Restart {
+        id: String,
+        /// The release it must be.
+        #[arg(long)]
+        release: Option<String>,
+    },
     /// The service's output.
     Logs {
         id: String,
@@ -229,9 +244,12 @@ enum ServiceCommand {
         #[arg(long, default_value_t = 200)]
         tail: usize,
     },
-    /// Remove the service (its data folder is kept unless --purge).
+    /// Remove the service, or one release of it (its data folder is kept unless --purge).
     Remove {
         id: String,
+        /// Only this release.
+        #[arg(long)]
+        release: Option<String>,
         /// Remove the service's data folder too.
         #[arg(long)]
         purge: bool,
@@ -602,8 +620,8 @@ fn split_host(text: &str) -> Result<(String, Option<u16>), Failure> {
 }
 
 async fn service_command(client: &Client, out: &Out, command: ServiceCommand) -> Outcome {
-    let simple = |method: &'static str, id: String| async move {
-        let value = client.call(method, &ServiceIdParams { id }).await?;
+    let simple = |method: &'static str, id: String, release: Option<String>| async move {
+        let value = client.call(method, &ServiceIdParams { id, release }).await?;
         out.result(&value, || Ok(output::services(&[decode::<Service>(&value)?])))
     };
     match command {
@@ -618,15 +636,19 @@ async fn service_command(client: &Client, out: &Out, command: ServiceCommand) ->
                 .await?;
             out.result(&value, || {
                 let service: Service = decode(&value)?;
-                Ok(format!("Installed {} {}.", service.id, service.version))
+                Ok(format!("Installed {}, release {}.", service.id, service.release.as_deref().unwrap_or("-")))
             })
         }
-        ServiceCommand::Start { id } => simple(methods::SERVICES_START, id).await,
-        ServiceCommand::Stop { id } => simple(methods::SERVICES_STOP, id).await,
-        ServiceCommand::Restart { id } => simple(methods::SERVICES_RESTART, id).await,
-        ServiceCommand::Remove { id, purge } => {
-            let value = client.call(methods::SERVICES_REMOVE, &ServiceRemoveParams { id: id.clone(), purge: Some(purge) }).await?;
-            out.result(&value, || Ok(if purge { format!("Removed {id} and its data.") } else { format!("Removed {id}; its data folder is kept.") }))
+        ServiceCommand::Start { id, release } => simple(methods::SERVICES_START, id, release).await,
+        ServiceCommand::Stop { id, release } => simple(methods::SERVICES_STOP, id, release).await,
+        ServiceCommand::Restart { id, release } => simple(methods::SERVICES_RESTART, id, release).await,
+        ServiceCommand::Remove { id, release, purge } => {
+            let value = client.call(methods::SERVICES_REMOVE, &ServiceRemoveParams { id: id.clone(), release: release.clone(), purge: Some(purge) }).await?;
+            let what = match &release {
+                Some(release) => format!("{id} release {release}"),
+                None => id.clone(),
+            };
+            out.result(&value, || Ok(if purge { format!("Removed {what} and its data.") } else { format!("Removed {what}; its data folder is kept.") }))
         }
         ServiceCommand::Logs { id, follow, tail } => {
             if follow {

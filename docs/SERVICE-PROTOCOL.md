@@ -27,13 +27,14 @@ This page is the contract between three parts of this repository:
 ## 1. The service package
 
 A service is distributed as its own artifact, apart from the applet's `.pocket`:
-a folder (or a `.tar.gz` of it) with a manifest at its root.
+a folder (or a `.tar.gz` of it) with a manifest at its root. Installed from a
+folder or a file on this computer, it is a **development release**.
 
 ```
 pocket.service.json    the manifest
 service.ts             the entry (any name; the manifest names it)
 package.json           optional
-bun.lock               optional (or bun.lockb); with package.json, Hub runs `bun install --frozen-lockfile`
+bun.lock               optional (or bun.lockb); with package.json, Hub runs `bun install --frozen-lockfile --ignore-scripts`
 ```
 
 A `.tar.gz` holds the package at its root or in one top-level folder. A package
@@ -41,18 +42,83 @@ holds files, folders and links that stay inside it, at most **512 MiB** and
 **100,000** entries. An install from a folder skips `.git`, and `node_modules`
 when the package has a lockfile.
 
-`pocket.service.json`:
+### The manifest
 
-| Field | Type | Content |
-| --- | --- | --- |
-| `service` | integer | the manifest version, **1** |
-| `id` | string | the applet's manifest id (at most 128 bytes of `[A-Za-z0-9._-]`, not `.` or `..`); a service serves exactly this applet |
-| `version` | string | the service's version (SemVer) |
-| `entry` | string | the file Bun runs, relative to the package root, inside it |
-| `idleSeconds` | integer? | how long the process stays up with no channel open, 1 to 86,400; default **30** |
+`pocket.service.json`, at most **16 KiB**:
+
+| Field | Type | Content | Check |
+| --- | --- | --- | --- |
+| `service` | integer | the manifest version, **1** | any other value is refused, with the version named, before any other field is read |
+| `id` | string | the applet's manifest id; a service serves exactly this applet | 1 to 128 bytes of `[A-Za-z0-9._-]`, not `.` or `..` |
+| `entry` | string | the file Bun runs | a relative path of normal components inside the package, at most 1,024 bytes, naming a regular file reached through no link |
+| `requires` | array of strings? | the capabilities the service uses | each of `net`, `store`, `image`, `text`, `media`, `native`; no repeats; order carries no meaning. **A name this host does not provide is refused**, so a service written for a capability is never run without it. **This host provides none yet**: only a service that requires nothing installs. Absent or empty: a service that only computes for its applet |
+| `hosts` | array of strings? | the destinations the service's capabilities may reach | at most **32**, no repeats; each a host entry (below) |
+| `store` | object? | `{"maxBytes": <integer>}`, the size of the service's store | only with `store` in `requires`; `maxBytes` 1 to 268,435,456, default 16 MiB |
+| `idleSeconds` | integer? | how long the process stays up with no channel open | 1 to 86,400; default **30** |
 
 **A manifest with a field this table does not name is refused**, so a package
-written for a later manifest version is not half understood.
+written for a later manifest version is not half understood. That includes the
+`version` of the manifest before this one: **a service has no version of its
+own**; what is installed is a release (below).
+
+Each refusal is one sentence that names its field, and the control API's
+error `service` with `reason: "manifest"` carries the field in `detail`
+(CONTROL-API.md §1, Errors). The sentences:
+
+| Field | Refused when | Sentence |
+| --- | --- | --- |
+| (the file) | missing; over 16 KiB; not JSON; not an object | `pocket.service.json is missing` / `… is over 16384 bytes` / `… is not JSON: <why>` / `… is not a JSON object` |
+| `service` | absent, not an integer; another version | `` `service` must be the integer 1 `` / `manifest version 2 is not supported (this Hub reads version 1)` |
+| any other | not in the table | ``pocket.service.json names `version`, a field this Hub does not read`` |
+| `id`, `entry`, `requires`, `hosts`, `store`, `idleSeconds` | of the wrong type | `` `requires` must be an array of strings `` (the type the table says) |
+| `id` | outside its rule | `id "a/b": 1 to 128 bytes of A-Z a-z 0-9 . _ -, and not . or ..` |
+| `entry` | not a relative path inside; not a file there | `entry "../d.ts" is not a relative path inside the package` / `entry "d.ts" is not a file in the package` |
+| `requires` | not a capability; repeated; not provided | `requires names "signin", which is not a capability (net, store, image, text, media, native)` / `requires names "net" twice` / `requires "net", which this Hub does not provide yet` |
+| `hosts` | more than 32; not an entry; repeated; a wildcard over a public suffix | `hosts has 33 entries, more than 32` / `hosts entry "X.com" is not a lower-case host name, or `*.` and one` / `hosts names "x.com" twice` / `hosts entry "*.co.uk" covers co.uk, a public suffix` |
+| `store` | without `store` in `requires`; `maxBytes` out of range | ``` `store` is allowed only with "store" in requires ``` / `store.maxBytes 0 is not between 1 and 268435456` |
+| `idleSeconds` | out of range | `idleSeconds 0 is not between 1 and 86400` |
+
+### Host entries
+
+| Entry | Matches |
+| --- | --- |
+| `name.tld` | that name exactly: `x.com` matches `x.com`, not `api.x.com` |
+| `*.name.tld` | any name that ends in `.name.tld`, with at least one label before it, not `name.tld` itself: `*.googlevideo.com` matches `rr3---sn-q4f.googlevideo.com` |
+
+A name is lower-case labels of `[a-z0-9-]`, none starting or ending with `-`,
+at least two of them, at most 253 bytes, as an applet's `hosts` writes them.
+No address (a name whose last label is all digits, such as `192.0.2.1`), no
+port, no scheme.
+
+**A wildcard is refused when `name.tld` is a public suffix** of the Public
+Suffix List, its private section included: `*.co.uk`, `*.github.io` and
+`*.workers.dev` would admit every customer of a registry or a hosting
+platform. The host carries a dated copy of the list,
+`crates/service-host/data/public_suffix_list.dat` as publicsuffix.org serves it
+(its header names its version and commit), applies the list's own algorithm
+(its exception rules prevail, then the longest rule, then the implicit `*`),
+and compares names as ASCII, the list's Unicode rules converted by IDNA. The
+copy changes with this repository, never at run time.
+
+This host gives a service no capability yet, so `hosts` admits nothing today:
+it is checked at install and shown in the control API's `Service`.
+
+### Dependencies
+
+**A local install's dependencies are installed with
+`bun install --frozen-lockfile --ignore-scripts`**: only what the lockfile pins,
+and **no dependency's install script**, which would otherwise run at install
+time with the owner's rights. A package with `package.json` and no lockfile
+gets nothing installed and must ship what it needs. Dependencies that will not
+install (a lockfile that does not match `package.json`, a package that cannot
+be fetched) refuse the install with the control API's error `service`,
+`reason: "dependencies"`, and the end of `bun install`'s output.
+
+A dependency that needs its install script (to build a native addon, or to
+download a program) is installed without what the script would have made. The
+install succeeds; the service fails when it loads what is missing, with the
+dependency's own error in its log, and its state is `failed`. Such a package
+ships what the script makes, or does without the dependency.
 
 **Hub provides the SDK.** A service imports `@pocketjs/service` and declares no
 dependency for it: when a package's `node_modules` holds no `@pocketjs/service`
@@ -60,12 +126,53 @@ of its own, Hub links the copy it ships there, so the SDK a service runs always
 speaks the protocol of the Hub that started it. A package that brings its own
 copy keeps it.
 
-Hub keeps installed packages in `<home>/services/<id>/<version>/`, with the
-version in use named by `<home>/services/<id>/current.json`, and each service's
-own files in `<home>/service-data/<id>/` (mode 0700), which survives upgrades.
-**An install over a running service** stops the process at once when it has no
-channel; with channels open it keeps serving them on the old version, and the
-new one applies at its next start.
+### Releases and folders
+
+What is installed is a **release** of a service: `dev` for a development
+install. Hub keeps:
+
+| What | Where |
+| --- | --- |
+| a release, as installed | `<home>/services/<id>/<release>-<8 hex>/`, a folder name unique to that install |
+| the id's releases, each naming its folder | `<home>/services/<id>/releases.json` |
+| the service's own files, mode 0700, kept across installs | `<home>/service-data/<id>/` |
+| packages being installed | `<home>/services-staging/` |
+
+`<release>` is `dev`, or 16 lower-case hex digits; nothing installs a release
+of the second form yet.
+
+**How a release folder appears.** A package is unpacked and checked, and its
+dependencies installed, under `services-staging/`. `services/<id>/` appears
+only by renaming into place a staged folder that already holds
+`releases.json` and the first release, so a crash never leaves an id without
+`releases.json`.
+
+**Installing a release again cannot lose it.** `releases.json` names each
+release's folder, and a folder's name is unique (`<release>-<8 hex>`, random
+per install). An install renames the staged release into a fresh folder under
+`services/<id>/`, then replaces `releases.json` by writing a temporary file
+and renaming it, then removes the old folder; a process running from the old
+folder keeps the files it has open. At every instant `releases.json` names a
+complete folder, the old one or the new one. **At Hub's next start**, the
+staging folder is removed, so is any folder `releases.json` does not name, and
+a listed release whose folder is gone is dropped from it. A folder name that
+does not follow `<release>-<8 hex>` is never read.
+
+**An install over a running service** stops the process at once when it has
+no channel; with channels open it keeps serving them on the release it
+started from, and the new one applies at its next start.
+
+**What an earlier Pocket Hub left.** One rule, read once per id: a folder
+`services/<id>/` holding `releases.json` is of this layout; any other (a
+`<version>/` folder and `current.json`) is **earlier**. An earlier id is listed
+as one `Service` in state `failed` with `reason: "earlier"` and its sentence
+("Installed by an earlier Pocket Hub; install it again."), and **nothing under
+it is read, run or deleted** until the owner removes it, or installs the id
+again, which replaces it. Its `service-data/<id>/` is kept as any other's.
+
+**Which release a channel starts.** A device's `channel.open {app, hash}`
+starts the `dev` release of `app` when one is installed; an id with none (or
+an earlier one) is `no_daemon` (link specification §7.1).
 
 ## 2. The process
 

@@ -72,9 +72,12 @@ public struct HubOperationError: Error, Sendable, Equatable {
     /// `setup`: `unreachable`, `companions_full`, `release_unavailable`, `storage` or `card`;
     /// `release`: `unreachable`, `not_found` or `rejected`;
     /// `store`: `unreachable` or `rejected`;
-    /// `pairing`: `wrong_code`, `bad_proof` or `gone`.
+    /// `pairing`: `wrong_code`, `bad_proof` or `gone`;
+    /// `service`: `manifest`, `runtime`, `dependencies` or `earlier`.
     public var reason: String?
-    /// `setup`: the failing step in the setup's own words, for a log.
+    /// `setup`: the failing step in the setup's own words, for a log;
+    /// `service` `manifest`: the refused field; `service` `dependencies`: the
+    /// end of `bun install`'s output (at most 4 KiB).
     public var detail: String?
     /// `setup`: the device a key was stored for when its readback did not return
     /// (then `confirmed` is false); `service`: the service's id.

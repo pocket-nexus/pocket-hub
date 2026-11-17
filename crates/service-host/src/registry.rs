@@ -1,44 +1,73 @@
-//! §1: installed service packages.
+//! §1: installed services, as releases.
 //!
 //! ```text
-//! <home>/services/<id>/<version>/    a package, as installed
-//! <home>/services/<id>/current.json  the version that starts next
-//! <home>/service-data/<id>/          the service's own files, 0700, kept across upgrades
-//! <home>/services-staging/           packages being installed
+//! <home>/services/<id>/releases.json            the id's releases (the index), each naming its folder
+//! <home>/services/<id>/<release>-<8 hex>/        one release as installed: `dev` for a development install
+//! <home>/service-data/<id>/           the service's own files, 0700, kept across installs
+//! <home>/services-staging/            packages being installed
 //! ```
 //!
-//! A package is unpacked and checked, and its dependencies installed, in the
-//! staging folder; only a complete package is renamed into `services/`, and
-//! `current.json` is switched to it last, through a rename. A crash at any
-//! step leaves the previous version current.
+//! **How a release folder appears.** A package is unpacked and checked, and
+//! its dependencies installed, under `services-staging/`. `services/<id>/`
+//! appears only by renaming into place a staged folder that already holds
+//! `releases.json` and the first release. **A folder's name is unique**
+//! (`<release>-<8 hex>`, random per install), and the index names each
+//! release's folder; so a release installed again is renamed into a fresh
+//! folder first, the index is then replaced through a temporary file and a
+//! rename, and the old folder is removed last. At every instant the index
+//! names a complete folder, the old one or the new one. At the next start the
+//! staging folder is removed, and so is any folder the index does not name; a
+//! listed release whose folder is gone is dropped from the index.
+//!
+//! **What an earlier Pocket Hub left.** A folder `services/<id>/` with
+//! `releases.json` is of this layout; any other (`<version>/` and
+//! `current.json`, as Pocket Hub's previous protocol wrote them) is earlier.
+//! Nothing under an earlier id is read, run or deleted, until the owner
+//! removes it or installs the id again.
+//!
+//! A release is `dev` for a development install, the only kind there is
+//! until releases come from the store; the index holds any release name of
+//! the folder rule (`valid_release`), so the store's (16 hex) fit it as is.
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use crate::child::InheritNothing;
 use crate::archive::{self, ArchiveError};
-use crate::manifest::{valid_id, Manifest, ManifestError, MANIFEST_FILE};
+use crate::child::InheritNothing;
+use crate::manifest::{MANIFEST_FILE, Manifest, ManifestError, valid_id};
 use crate::runtime::{BunRuntime, RuntimeError};
 use crate::util::{epoch_ms, inherited_env, path_with, private_dir, random_hex, write_atomic};
 
-const CURRENT_FILE: &str = "current.json";
+/// The index of an id's releases.
+pub const INDEX_FILE: &str = "releases.json";
+/// The release of a development install.
+pub const DEV_RELEASE: &str = "dev";
 /// The output of `bun install` kept in a report: its end, where errors are.
 const MAX_INSTALL_OUTPUT: usize = 64 * 1024;
 
-/// An installed service: the current version of one id.
+/// Whether `release` may name a release folder: `dev`, or 16 lower-case hex
+/// digits (an applet package's footer hash, which `channel.open` carries).
+pub fn valid_release(release: &str) -> bool {
+    release == DEV_RELEASE || (release.len() == 16 && release.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+}
+
+/// One installed release of a service.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstalledService {
     pub id: String,
-    pub version: String,
+    pub release: String,
     pub entry: String,
     pub idle_seconds: u64,
-    /// The package folder: the process's working directory.
+    pub requires: Vec<String>,
+    pub hosts: Vec<String>,
+    /// The release's folder: the process's working directory.
     pub dir: PathBuf,
     /// The service's data folder (`POCKET_SERVICE_DATA`).
     pub data: PathBuf,
@@ -52,10 +81,10 @@ pub struct InstalledService {
 pub enum DependencyInstall {
     /// No `package.json`: nothing to install.
     None,
-    /// A `package.json` without `bun.lock`: Hub installs only what a lockfile
-    /// pins, so the package must ship what it needs.
+    /// A `package.json` without `bun.lock`: the host installs only what a
+    /// lockfile pins, so the package must ship what it needs.
     NoLockfile,
-    /// `bun install --frozen-lockfile` ran and succeeded.
+    /// `bun install --frozen-lockfile --ignore-scripts` ran and succeeded.
     Installed { output: String, millis: u64 },
 }
 
@@ -63,9 +92,20 @@ pub enum DependencyInstall {
 #[serde(rename_all = "camelCase")]
 pub struct InstallReport {
     pub service: InstalledService,
-    /// The version that was current before, if any.
-    pub previous: Option<String>,
+    /// The install replaced what an earlier Pocket Hub had left for the id.
+    pub replaced_earlier: bool,
     pub dependencies: DependencyInstall,
+}
+
+/// The releases removed by `Registry::remove`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Removed {
+    /// The id was not installed (nor left by an earlier Pocket Hub).
+    Nothing,
+    /// The id's folder of an earlier Pocket Hub.
+    Earlier,
+    /// These releases.
+    Releases(Vec<String>),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -78,29 +118,67 @@ pub enum InstallError {
     Manifest(#[from] ManifestError),
     #[error(transparent)]
     Runtime(#[from] RuntimeError),
-    #[error("`bun install --frozen-lockfile` failed ({status}):\n{output}")]
+    #[error("`bun install --frozen-lockfile --ignore-scripts` failed ({status}):\n{output}")]
     Dependencies { status: String, output: String },
-    #[error("`bun install --frozen-lockfile` did not finish in {seconds} s:\n{output}")]
+    #[error("`bun install --frozen-lockfile --ignore-scripts` did not finish in {seconds} s:\n{output}")]
     DependencyTimeout { seconds: u64, output: String },
     #[error("installing the package: {0}")]
     Io(#[from] io::Error),
 }
 
-#[derive(Serialize, Deserialize)]
+/// Where a test stops an install as a crash would (the staging folder is
+/// left as it is), to show what the next start makes of it.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FailPoint {
+    /// The staged `<id>/` holds `releases.json` and its release; not renamed
+    /// into `services/` yet.
+    BeforeRename,
+    /// A release installed into an existing `services/<id>/`, step 1: the
+    /// new folder renamed in; the index not replaced yet.
+    AfterFolder,
+    /// Step 2: the index names the new folder; the old one not removed yet.
+    AfterIndex,
+    /// Step 3: the old folder removed; nothing left to do.
+    AfterRemove,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Current {
-    version: String,
+struct Index {
+    releases: Vec<IndexEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IndexEntry {
+    release: String,
+    /// The release's folder under `services/<id>/`: `<release>-<8 hex>`.
+    folder: String,
     installed_at: i64,
+}
+
+/// A fresh, unique folder name for `release`.
+fn fresh_folder(release: &str) -> String {
+    format!("{release}-{}", &random_hex()[..8])
+}
+
+/// Whether `folder` is a folder name the index may name for `release`: the
+/// release, a dash and 8 lower-case hex digits. Nothing else is read, so an
+/// index cannot point a release out of its id's folder.
+fn valid_folder(release: &str, folder: &str) -> bool {
+    folder.strip_prefix(release).and_then(|rest| rest.strip_prefix('-')).is_some_and(|hex| hex.len() == 8 && hex.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
 }
 
 pub struct Registry {
     home: PathBuf,
     runtime: BunRuntime,
     install_timeout: Duration,
-    /// Hub's copy of the service SDK, linked into packages that lack one.
+    /// The host's copy of the service SDK, linked into packages that lack one.
     sdk: Option<PathBuf>,
     /// One install or removal at a time.
     lock: tokio::sync::Mutex<()>,
+    fail_point: Mutex<Option<FailPoint>>,
 }
 
 /// Where a package's own copy of the SDK would be.
@@ -108,12 +186,12 @@ pub const SDK_LINK: &str = "node_modules/@pocketjs/service";
 
 /// Links `sdk` at `<package>/node_modules/@pocketjs/service` when nothing is
 /// there: a package that brings its own copy keeps it. A link left dangling
-/// (Hub's home moved, the SDK folder was removed) is made again. True when a
+/// (the home moved, the SDK folder was removed) is made again. True when a
 /// link was made.
 ///
 /// A link and not a copy: every installed package then runs the SDK of the
-/// Hub that starts it, which is the one that speaks its protocol, and an
-/// upgrade of Hub upgrades them all without a reinstall.
+/// host that starts it, which is the one that speaks its protocol, and an
+/// upgrade of the host upgrades them all without a reinstall.
 pub fn link_sdk(package: &Path, sdk: &Path) -> io::Result<bool> {
     let link = package.join(SDK_LINK);
     match fs::symlink_metadata(&link) {
@@ -127,12 +205,24 @@ pub fn link_sdk(package: &Path, sdk: &Path) -> io::Result<bool> {
     Ok(true)
 }
 
+fn read_index(folder: &Path) -> Option<Index> {
+    serde_json::from_slice(&fs::read(folder.join(INDEX_FILE)).ok()?).ok()
+}
+
+fn write_index(folder: &Path, index: &Index) -> io::Result<()> {
+    write_atomic(&folder.join(INDEX_FILE), &serde_json::to_vec_pretty(index).expect("releases.json"))
+}
+
 impl Registry {
+    /// The registry of `home`, after the start's clean-up: what an install
+    /// interrupted by a crash left in the staging folder is removed, and so
+    /// is every release folder its id's index does not list (`sweep`).
     pub fn new(home: impl Into<PathBuf>, runtime: BunRuntime, install_timeout: Duration) -> Self {
         let home = home.into();
-        // What an install interrupted by a crash left.
         let _ = fs::remove_dir_all(home.join("services-staging"));
-        Self { home, runtime, install_timeout, sdk: None, lock: tokio::sync::Mutex::new(()) }
+        let registry = Self { home, runtime, install_timeout, sdk: None, lock: tokio::sync::Mutex::new(()), fail_point: Mutex::new(None) };
+        registry.sweep();
+        registry
     }
 
     /// Links `sdk` into every package installed from now on that has no SDK
@@ -140,6 +230,15 @@ impl Registry {
     pub fn with_sdk(mut self, sdk: Option<PathBuf>) -> Self {
         self.sdk = sdk;
         self
+    }
+
+    #[doc(hidden)]
+    pub fn set_fail_point(&self, point: Option<FailPoint>) {
+        *self.fail_point.lock().unwrap() = point;
+    }
+
+    fn fails_at(&self, point: FailPoint) -> bool {
+        *self.fail_point.lock().unwrap() == Some(point)
     }
 
     fn services(&self) -> PathBuf {
@@ -150,36 +249,93 @@ impl Registry {
         self.home.join("service-data").join(id)
     }
 
-    /// The current version of `id`, checked again from its files.
-    pub fn get(&self, id: &str) -> Option<InstalledService> {
-        if !valid_id(id) {
+    /// Each id of this layout: release folders its index does not list are
+    /// removed, listed releases whose folder is gone are dropped from it. An
+    /// earlier id is not touched.
+    fn sweep(&self) {
+        let Ok(entries) = fs::read_dir(self.services()) else { return };
+        for entry in entries.flatten() {
+            let folder = entry.path();
+            let id = entry.file_name().to_string_lossy().into_owned();
+            let Some(mut index) = read_index(&folder) else { continue };
+            let Ok(children) = fs::read_dir(&folder) else { continue };
+            for child in children.flatten() {
+                let name = child.file_name().to_string_lossy().into_owned();
+                let is_dir = child.file_type().is_ok_and(|kind| kind.is_dir());
+                if is_dir && !index.releases.iter().any(|listed| listed.folder == name) {
+                    tracing::info!(id, release = name, "removing a release folder its index does not list");
+                    let _ = fs::remove_dir_all(child.path());
+                } else if !is_dir && name.starts_with('.') && name.ends_with(".tmp") {
+                    // An index being replaced when the host stopped.
+                    let _ = fs::remove_file(child.path());
+                }
+            }
+            let before = index.releases.len();
+            index.releases.retain(|listed| valid_folder(&listed.release, &listed.folder) && folder.join(&listed.folder).is_dir());
+            if index.releases.len() != before {
+                tracing::warn!(id, "the index listed a release whose folder is gone");
+                let _ = write_index(&folder, &index);
+            }
+        }
+    }
+
+    /// Whether `id` is installed in the layout of an earlier Pocket Hub: its
+    /// folder has no `releases.json`. Nothing else of it is read.
+    pub fn is_earlier(&self, id: &str) -> bool {
+        valid_id(id) && self.services().join(id).is_dir() && !self.services().join(id).join(INDEX_FILE).exists()
+    }
+
+    /// Every id an earlier Pocket Hub left, sorted.
+    pub fn earlier(&self) -> Vec<String> {
+        let Ok(entries) = fs::read_dir(self.services()) else { return Vec::new() };
+        let mut ids: Vec<String> = entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).filter(|id| self.is_earlier(id)).collect();
+        ids.sort();
+        ids
+    }
+
+    /// One release of `id`, checked again from its files.
+    pub fn release(&self, id: &str, release: &str) -> Option<InstalledService> {
+        if !valid_id(id) || !valid_release(release) {
             return None;
         }
         let folder = self.services().join(id);
-        let current: Current = serde_json::from_slice(&fs::read(folder.join(CURRENT_FILE)).ok()?).ok()?;
-        let dir = folder.join(&current.version);
+        let entry = read_index(&folder)?.releases.into_iter().find(|listed| listed.release == release)?;
+        if !valid_folder(release, &entry.folder) {
+            tracing::warn!(id, release, folder = entry.folder, "the index names a folder outside the rule");
+            return None;
+        }
+        let dir = folder.join(&entry.folder);
         match Manifest::read(&dir) {
-            Ok(manifest) if manifest.id == id && manifest.version == current.version => Some(InstalledService {
+            Ok(manifest) if manifest.id == id => Some(InstalledService {
                 id: manifest.id,
-                version: manifest.version,
+                release: release.to_owned(),
                 entry: manifest.entry,
                 idle_seconds: manifest.idle_seconds,
+                requires: manifest.requires,
+                hosts: manifest.hosts,
                 dir,
                 data: self.data_dir(id),
-                installed_at: current.installed_at,
+                installed_at: entry.installed_at,
             }),
             Ok(_) => {
-                tracing::warn!(id, "the installed manifest does not match its folder");
+                tracing::warn!(id, release, "the installed manifest does not match its folder");
                 None
             }
             Err(error) => {
-                tracing::warn!(id, %error, "the installed package is broken");
+                tracing::warn!(id, release, %error, "the installed release is broken");
                 None
             }
         }
     }
 
-    /// Every installed service, by id.
+    /// The release of `id` a channel starts: the development release when
+    /// one is installed (the store's, by the device's hash, come with the
+    /// store's releases).
+    pub fn get(&self, id: &str) -> Option<InstalledService> {
+        self.release(id, DEV_RELEASE)
+    }
+
+    /// The release each installed id starts, by id.
     pub fn list(&self) -> Vec<InstalledService> {
         let Ok(entries) = fs::read_dir(self.services()) else { return Vec::new() };
         let mut list: Vec<_> = entries.flatten().filter_map(|entry| self.get(&entry.file_name().to_string_lossy())).collect();
@@ -187,21 +343,25 @@ impl Registry {
         list
     }
 
-    /// Installs the package in `source`, a folder or a `.tar.gz` (`.tgz`),
-    /// and makes it current. A `.tar.gz` may hold the package at its root or
-    /// in one folder at its root. Versions of the same id other than the new
-    /// one and those in `keep` are removed.
-    pub async fn install(&self, source: &Path, keep: &[String]) -> Result<InstallReport, InstallError> {
+    /// Installs the package in `source`, a folder or a `.tar.gz` (`.tgz`), as
+    /// the id's development release. A `.tar.gz` may hold the package at its
+    /// root or in one folder at its root. An install over what an earlier
+    /// Pocket Hub left replaces it: it is the owner's own action on the id.
+    pub async fn install(&self, source: &Path) -> Result<InstallReport, InstallError> {
         let _guard = self.lock.lock().await;
         let staging = self.home.join("services-staging").join(random_hex());
         private_dir(staging.parent().expect("staging parent"))?;
         fs::create_dir_all(&staging)?;
-        let result = self.install_staged(source, &staging, keep).await;
-        let _ = fs::remove_dir_all(&staging);
+        let result = self.install_staged(source, &staging).await;
+        // A failure point stands for a crash: what was staged stays for the
+        // next start to clean.
+        if !matches!(&result, Err(InstallError::Io(error)) if error.to_string().starts_with("injected failure")) {
+            let _ = fs::remove_dir_all(&staging);
+        }
         result
     }
 
-    async fn install_staged(&self, source: &Path, staging: &Path, keep: &[String]) -> Result<InstallReport, InstallError> {
+    async fn install_staged(&self, source: &Path, staging: &Path) -> Result<InstallReport, InstallError> {
         let unpacked = staging.join("package");
         fs::create_dir(&unpacked)?;
         let meta = fs::metadata(source).map_err(|error| InstallError::Source(format!("{}: {error}", source.display())))?;
@@ -239,43 +399,81 @@ impl Registry {
             link_sdk(&root, sdk)?;
         }
 
+        let release = DEV_RELEASE;
         let folder = self.services().join(&manifest.id);
-        fs::create_dir_all(&folder)?;
-        let dest = folder.join(&manifest.version);
-        let previous = self.get(&manifest.id).map(|service| service.version);
-        if fs::symlink_metadata(&dest).is_ok() {
-            // The same version again: the old folder is moved aside first; a
-            // process running from it keeps the files it has open.
-            fs::rename(&dest, staging.join("replaced"))?;
-        }
-        fs::rename(&root, &dest)?;
+        fs::create_dir_all(self.services())?;
         let installed_at = epoch_ms();
-        let current = serde_json::to_vec_pretty(&Current { version: manifest.version.clone(), installed_at }).expect("current.json");
-        write_atomic(&folder.join(CURRENT_FILE), &current)?;
+        let name = fresh_folder(release);
+        let entry = IndexEntry { release: release.to_owned(), folder: name.clone(), installed_at };
+        let mut replaced_earlier = false;
+        match read_index(&folder) {
+            Some(mut index) => {
+                // 1. The new folder, under its own name, beside the old one.
+                fs::rename(&root, folder.join(&name))?;
+                if self.fails_at(FailPoint::AfterFolder) {
+                    return Err(io::Error::other("injected failure after the new folder").into());
+                }
+                // 2. The index names it, in one rename.
+                let old = index.releases.iter().find(|listed| listed.release == release).map(|listed| listed.folder.clone());
+                index.releases.retain(|listed| listed.release != release);
+                index.releases.push(entry);
+                write_index(&folder, &index)?;
+                if self.fails_at(FailPoint::AfterIndex) {
+                    return Err(io::Error::other("injected failure after the index").into());
+                }
+                // 3. The old folder goes; a process running from it keeps
+                // the files it has open.
+                if let Some(old) = old.filter(|old| *old != name) {
+                    let _ = fs::remove_dir_all(folder.join(old));
+                }
+                if self.fails_at(FailPoint::AfterRemove) {
+                    return Err(io::Error::other("injected failure after the old folder's removal").into());
+                }
+            }
+            None => {
+                // The id's first release: the staged id folder holds its
+                // index before it is renamed into place.
+                let staged = staging.join("id");
+                fs::create_dir(&staged)?;
+                fs::rename(&root, staged.join(&name))?;
+                write_index(&staged, &Index { releases: vec![entry] })?;
+                if self.fails_at(FailPoint::BeforeRename) {
+                    return Err(io::Error::other("injected failure before the rename").into());
+                }
+                if folder.exists() {
+                    // An earlier Pocket Hub's folder for the id, replaced by
+                    // the owner's install.
+                    fs::rename(&folder, staging.join("earlier"))?;
+                    replaced_earlier = true;
+                }
+                fs::rename(&staged, &folder)?;
+            }
+        }
         private_dir(&self.data_dir(&manifest.id))?;
-        let mut keep = keep.to_vec();
-        keep.push(manifest.version.clone());
-        self.prune_locked(&manifest.id, &keep);
 
         let service = InstalledService {
             id: manifest.id.clone(),
-            version: manifest.version,
+            release: release.to_owned(),
             entry: manifest.entry,
             idle_seconds: manifest.idle_seconds,
-            dir: dest,
+            requires: manifest.requires,
+            hosts: manifest.hosts,
+            dir: folder.join(&name),
             data: self.data_dir(&manifest.id),
             installed_at,
         };
-        Ok(InstallReport { service, previous, dependencies })
+        Ok(InstallReport { service, replaced_earlier, dependencies })
     }
 
-    /// Runs `bun install --frozen-lockfile` in `root`, bounded in time; its
-    /// output (both streams) goes into the report or the error.
+    /// Runs `bun install --frozen-lockfile --ignore-scripts` in `root`,
+    /// bounded in time; its output (both streams) goes into the report or
+    /// the error. No dependency's install script runs: it would run outside
+    /// any enclosure, at install time, with the owner's rights.
     async fn install_dependencies(&self, root: &Path) -> Result<DependencyInstall, InstallError> {
         let bun = self.runtime.ensure().await?;
         let mut command = tokio::process::Command::new(&bun);
         command
-            .args(["install", "--frozen-lockfile"])
+            .args(["install", "--frozen-lockfile", "--ignore-scripts"])
             .current_dir(root)
             .env_clear()
             .envs(inherited_env())
@@ -286,7 +484,6 @@ impl Registry {
             .stderr(Stdio::piped())
             .process_group(0)
             .kill_on_drop(true)
-            // Lifecycle scripts run here: no descriptor of Hub's.
             .inherit_nothing();
         let started = Instant::now();
         let child = command.spawn()?;
@@ -294,7 +491,6 @@ impl Registry {
         let output = match tokio::time::timeout(self.install_timeout, child.wait_with_output()).await {
             Ok(output) => output?,
             Err(_) => {
-                // The whole group: `bun install` runs lifecycle scripts.
                 if let Some(pid) = pid {
                     crate::util::signal_group(pid, libc::SIGKILL);
                 }
@@ -310,52 +506,54 @@ impl Registry {
         Ok(DependencyInstall::Installed { output: text, millis: started.elapsed().as_millis() as u64 })
     }
 
-    /// Removes every version folder of `id` not named in `keep`, between
-    /// installs.
-    pub async fn prune(&self, id: &str, keep: &[String]) {
-        let _guard = self.lock.lock().await;
-        self.prune_locked(id, keep);
-    }
-
-    fn prune_locked(&self, id: &str, keep: &[String]) {
+    /// Removes `release` of `id`, or every release with None (and the id's
+    /// folder, also an earlier Pocket Hub's), and with `purge_data` the
+    /// service's data folder. The caller has stopped its process.
+    pub async fn remove(&self, id: &str, release: Option<&str>, purge_data: bool) -> io::Result<Removed> {
         if !valid_id(id) {
-            return;
-        }
-        let Ok(entries) = fs::read_dir(self.services().join(id)) else { return };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if entry.path().is_dir()
-                && !keep.contains(&name)
-                && let Err(error) = fs::remove_dir_all(entry.path())
-            {
-                tracing::warn!(id, version = name, %error, "removing an old service version");
-            }
-        }
-    }
-
-    /// Removes the service `id`: its packages, and with `purge_data` its data
-    /// folder. The caller has stopped its process. False when it was not
-    /// installed.
-    pub async fn remove(&self, id: &str, purge_data: bool) -> io::Result<bool> {
-        if !valid_id(id) {
-            return Ok(false);
+            return Ok(Removed::Nothing);
         }
         let _guard = self.lock.lock().await;
         let folder = self.services().join(id);
-        let existed = folder.exists();
-        if existed {
-            // The pointer first: from here on nothing starts it, whatever is
-            // left of the folder.
-            let _ = fs::remove_file(folder.join(CURRENT_FILE));
-            fs::remove_dir_all(&folder)?;
-        }
-        if purge_data {
+        let removed = match (read_index(&folder), release) {
+            (None, _) if !folder.exists() => Removed::Nothing,
+            (None, Some(_)) => Removed::Nothing,
+            (None, None) => {
+                fs::remove_dir_all(&folder)?;
+                Removed::Earlier
+            }
+            (Some(index), None) => {
+                // The index first: from here on nothing starts it, whatever
+                // is left of the folder.
+                let _ = fs::remove_file(folder.join(INDEX_FILE));
+                fs::remove_dir_all(&folder)?;
+                Removed::Releases(index.releases.into_iter().map(|listed| listed.release).collect())
+            }
+            (Some(mut index), Some(release)) => {
+                if !index.releases.iter().any(|listed| listed.release == release) {
+                    Removed::Nothing
+                } else if index.releases.len() == 1 {
+                    let _ = fs::remove_file(folder.join(INDEX_FILE));
+                    fs::remove_dir_all(&folder)?;
+                    Removed::Releases(vec![release.to_owned()])
+                } else {
+                    let gone = index.releases.iter().find(|listed| listed.release == release).map(|listed| listed.folder.clone());
+                    index.releases.retain(|listed| listed.release != release);
+                    write_index(&folder, &index)?;
+                    if let Some(gone) = gone.filter(|gone| valid_folder(release, gone)) {
+                        let _ = fs::remove_dir_all(folder.join(gone));
+                    }
+                    Removed::Releases(vec![release.to_owned()])
+                }
+            }
+        };
+        if purge_data && (removed != Removed::Nothing || release.is_none()) {
             match fs::remove_dir_all(self.data_dir(id)) {
                 Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
                 _ => {}
             }
         }
-        Ok(existed)
+        Ok(removed)
     }
 }
 

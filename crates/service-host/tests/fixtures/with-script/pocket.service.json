@@ -1,0 +1,5 @@
+{
+  "service": 1,
+  "id": "com.example.scripted",
+  "entry": "service.mjs"
+}

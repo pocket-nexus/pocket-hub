@@ -310,8 +310,9 @@ public actor MockHubCore {
 
     public func emitServiceLog(_ id: String, stream: String = "stdout", text: String) {
         let line: JSONValue = ["at": .number(Double(MockClock.now())), "stream": .string(stream), "text": .string(text)]
+        let release = scenario.services.first(where: { $0.id == id })?.release
         if let index = scenario.services.firstIndex(where: { $0.id == id }) { scenario.services[index].log.append(line) }
-        emit("service.log", ["id": .string(id), "at": line["at"]!, "stream": .string(stream), "text": .string(text)])
+        emit("service.log", ["id": .string(id), "release": release.map(JSONValue.string) ?? .null, "at": line["at"]!, "stream": .string(stream), "text": .string(text)])
     }
 
     /// Sends an event with arbitrary members to every subscribed session.
@@ -694,7 +695,7 @@ public actor MockHubCore {
             scenario.bunInstalled = true
             var name = URL(fileURLWithPath: path).lastPathComponent
             if name.hasSuffix(".tar.gz") { name.removeLast(7) }
-            var service = MockService(id: name, version: "1.0.0")
+            var service = MockService(id: name)
             service.since = MockClock.now()
             scenario.services.removeAll { $0.id == service.id }
             scenario.services.append(service)
@@ -704,10 +705,13 @@ public actor MockHubCore {
             let service = try resolveService(params)
             if params["purge"]?.boolValue == true { purged.insert(service.id) }
             scenario.services.removeAll { $0.id == service.id }
-            emit("service.removed", ["id": .string(service.id)])
+            emit("service.removed", ["id": .string(service.id), "release": service.release.map(JSONValue.string) ?? .null])
             return [:]
         case "services.start", "services.stop", "services.restart":
             let service = try resolveService(params)
+            if service.isEarlier, method != "services.stop" {
+                throw MockError.operation("service", "Installed by an earlier Pocket Hub; install it again.", ["id": .string(service.id), "reason": "earlier"])
+            }
             return try await changeService(service.id, action: String(method.dropFirst("services.".count)))
         case "services.logs":
             let service = try resolveService(params)
@@ -767,10 +771,14 @@ public actor MockHubCore {
         return device
     }
 
+    /// The service `params` names, and the release when it names one.
     private func resolveService(_ params: JSONValue) throws -> MockService {
         guard let id = params["id"]?.stringValue else { throw MockError.invalidParams("id") }
         guard let service = scenario.services.first(where: { $0.id == id }) else {
             throw MockError.operation("not_found", "No such service.", [:])
+        }
+        if let release = params["release"]?.stringValue, release != service.release {
+            throw MockError.operation("not_found", "No release \(release) of the service \(id) is installed.", [:])
         }
         return service
     }

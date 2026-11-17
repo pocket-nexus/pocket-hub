@@ -28,6 +28,7 @@ mod archive;
 mod channel;
 mod config;
 mod connector;
+mod hosts;
 mod instance;
 mod logs;
 mod manifest;
@@ -44,10 +45,11 @@ pub use config::{Config, Timings};
 pub use logs::{LogLine, LogStream};
 pub use manifest::{Manifest, ManifestError, MANIFEST_FILE};
 pub use methods::{HostOptions, Publisher, ServiceHost};
-pub use registry::{DependencyInstall, InstallError, InstallReport, InstalledService, Registry, SDK_LINK, link_sdk};
+pub use registry::{DEV_RELEASE, DependencyInstall, FailPoint, INDEX_FILE, InstallError, InstallReport, InstalledService, Registry, Removed, SDK_LINK, link_sdk, valid_release};
+pub use hosts::list_version as public_suffix_list_version;
 pub use runtime::{BunRuntime, Progress, RuntimeError, BUN_VERSION};
 pub use supervisor::{
-    ChannelOffer, ServiceEvent, ServiceState, ServiceStatus, ExitInfo, OpenError, StartError, Supervisor, SupervisorError,
+    EARLIER_SENTENCE, ChannelOffer, ServiceEvent, ServiceState, ServiceStatus, ExitInfo, OpenError, StartError, Supervisor, SupervisorError,
 };
 
 /// The version of the control connection's protocol (§4, `service.hello`).
