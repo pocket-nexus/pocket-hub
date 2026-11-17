@@ -281,7 +281,7 @@ fn devices_setup_and_services_in_both_modes() {
     let started = run(home.path(), &["service", "start", "dev.pocket-nexus.link-channel"]);
     assert!(started.stdout.contains("running"), "{}", started.stdout);
     let logs = run(home.path(), &["--json", "service", "logs", "dev.pocket-nexus.link-channel"]).json();
-    assert!(logs["lines"].as_array().unwrap().iter().any(|line| line["text"].as_str().unwrap().contains("installed 0.1.0")));
+    assert!(logs["lines"].as_array().unwrap().iter().any(|line| line["text"].as_str().unwrap().contains("installed release dev")));
     assert!(run(home.path(), &["service", "stop", "dev.pocket-nexus.link-channel"]).stdout.contains("stopped"));
     assert_eq!(run(home.path(), &["service", "remove", "dev.pocket-nexus.link-channel"]).stdout.trim(), "Removed dev.pocket-nexus.link-channel; its data folder is kept.");
     assert_eq!(run(home.path(), &["service", "start", "dev.pocket-nexus.link-channel"]).status, 1);
