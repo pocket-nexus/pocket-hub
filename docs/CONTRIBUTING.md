@@ -295,6 +295,20 @@ printf %s "$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/
 in, which the line after it replaces with a plain one (`gh` and `git` from
 Homebrew, cargo from rustup).
 
+Two more settings, both found when the runner hung:
+
+- **The launchd agent must run in the owner's session.** `svc.sh install`
+  writes `SessionCreate` true into the agent's plist
+  (`~/Library/LaunchAgents/actions.runner.pocket-nexus-pocket-hub.<name>.plist`),
+  which gives the runner a security session of its own where the login
+  keychain is locked, and notarytool then finds no profile. Set it to false
+  before `./svc.sh start`:
+  `plutil -replace SessionCreate -bool false <the plist>`.
+- **A Mac that reaches GitHub through a proxy gives the runner that proxy** in
+  its `.env` (`https_proxy=…`, `http_proxy=…`, `no_proxy=…`, and the same in
+  capitals); the runner hands it to each step, and `embed-core.sh` hands it
+  on to cargo.
+
 Publishing the release deploys [hub.pocket.nexus](https://hub.pocket.nexus)
 again (`.github/workflows/site.yml`): its Download button links the release's
 archive itself, so the page names the version, the size and the SHA-256 of the
