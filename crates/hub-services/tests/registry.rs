@@ -206,6 +206,27 @@ async fn invalid_manifests_are_refused_and_install_nothing() {
     assert!(registry.list().is_empty());
 }
 
+/// A package of Pocket Hub 0.2.1 and earlier, written before services took
+/// their names, is not read under its old names: the line names the file Hub
+/// expects, and an old version key in the new file is refused as malformed.
+#[tokio::test]
+async fn a_package_under_the_old_names_is_refused_with_the_file_hub_expects() {
+    let home = temp_home();
+    let registry = registry(home.path(), None);
+    let old = home.path().join("old");
+    fs::create_dir(&old).unwrap();
+    fs::write(old.join("pocket.daemon.json"), r#"{"daemon":1,"id":"a","version":"1.0.0","entry":"d.ts"}"#).unwrap();
+    fs::write(old.join("d.ts"), "").unwrap();
+    let error = registry.install(&old, &[]).await.unwrap_err();
+    assert!(matches!(error, InstallError::Manifest(ManifestError::Missing)), "{error}");
+    assert_eq!(error.to_string(), "pocket.service.json is missing");
+
+    let key = package(home.path(), "key", r#"{"daemon":1,"id":"a","version":"1.0.0","entry":"d.ts"}"#, &[("d.ts", "")]);
+    let error = registry.install(&key, &[]).await.unwrap_err();
+    assert!(error.to_string().contains("`service` must be the integer 1"), "{error}");
+    assert!(registry.list().is_empty());
+}
+
 #[tokio::test]
 async fn hostile_archives_are_refused() {
     let home = temp_home();

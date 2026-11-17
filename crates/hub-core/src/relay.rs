@@ -608,7 +608,8 @@ impl Conn {
         let channel = self.channel_by_key(key).expect("open");
         let channel_id = channel.id;
         if local == channel_id {
-            // The service closes its channel; it closes its socket after. The device is told `daemon` (CLOSE_BY_SERVICE).
+            // The service closes its channel; it closes its socket after. The
+            // device is told `daemon` (CLOSE_BY_SERVICE).
             self.close_channel(channel_id, Some(CLOSE_BY_SERVICE), None);
             return Ok(());
         }

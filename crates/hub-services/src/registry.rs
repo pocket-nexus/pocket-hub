@@ -1,10 +1,10 @@
 //! §1: installed service packages.
 //!
 //! ```text
-//! <home>/services/<id>/<version>/   a package, as installed
-//! <home>/services/<id>/current.json the version that starts next
-//! <home>/service-data/<id>/         the service's own files, 0700, kept across upgrades
-//! <home>/services-staging/          packages being installed
+//! <home>/services/<id>/<version>/    a package, as installed
+//! <home>/services/<id>/current.json  the version that starts next
+//! <home>/service-data/<id>/          the service's own files, 0700, kept across upgrades
+//! <home>/services-staging/           packages being installed
 //! ```
 //!
 //! A package is unpacked and checked, and its dependencies installed, in the
