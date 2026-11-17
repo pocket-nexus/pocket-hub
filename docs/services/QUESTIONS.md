@@ -93,11 +93,11 @@ keeps the runtime's meaning and the other side is "service host" (applied in
 link §7.9 to §7.11); on these pages "host" is the service host and "runtime"
 the device's program. **The crate and program names collide too**:
 `pocket-host` beside PocketJS's `pocket.host.json` and Omarchy Pocket's
-`omarchy-pocket-host`. *Recommendation*: **`crates/pocket-service-host`,
+`omarchy-pocket-host`. *Recommendation*: **`crates/service-host` (package `pocket-service-host`),
 `pocket-service-hostd`, command line `pocket-service-host`**, and Hub's own
 `ChannelHost` trait (`crates/hub-core/src/api.rs`, implemented by `hubd`'s
 `DaemonHost` in `crates/hubd/src/host.rs`) renamed **`ServiceConnector`** when
-the code moves (`DEVICES.md` §4). The owner confirms.
+the code moves (`DEVICES.md` §4). **Built in #26** (the crate and `ServiceConnector`); the program and command-line names wait for Omarchy Pocket's step. The owner confirms.
 
 **Q3. What consent binds, for a signed release.** (a) one release: every
 update asks again; (b) the applet's id and its publisher's key: asked again

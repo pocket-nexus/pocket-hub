@@ -23,9 +23,9 @@ Omarchy Pocket).
 | --- | --- | --- | --- |
 | `service` | integer | the manifest version, **1** | any other value: refused, with the version named, before any other field is read (as `pocket.daemon.json`'s `daemon` today) |
 | `id` | string | the applet's manifest id | 1 to 128 bytes of `[A-Za-z0-9._-]`, not `.` or `..` (the folder rule of today); **equal to the `id` of the applet package of the same release** (`TRUST.md` §6); **a development release has no applet package, so it has no such check** |
-| `entry` | string | the module the host loads; its default export is the service (`CAPABILITIES.md` §2) | a relative path of normal components inside the package, at most 1,024 bytes, naming a regular file reached through no link (today's rule) |
+| `entry` | string | the module the host loads. **Its default export is the service from the pull request of step 2 that brings the bootstrap** (`MIGRATION.md` §3); until then the entry is a program that calls `serve()`, as today | a relative path of normal components inside the package, at most 1,024 bytes, naming a regular file reached through no link (today's rule) |
 | `requires` | array of strings | the capabilities the service uses | each of `net`, `store`, `image`, `text`, `media`, `native` (six; `signin` is not one, `SETUP.md`); no repeats; order carries no meaning (the host sorts it where it signs or shows it). **A name the host does not know, or does not provide, is refused**, so a service written for a later capability is not run without it; `text` is refused until hosts implement it for services (`CAPABILITIES.md` §8). May be empty: a service that only computes for its applet |
-| `hosts` | array of strings | the destinations the service's `net` and the URL sources of its `image` and `media` may reach | at most **32**; each a lower-case DNS name as `applet.hosts` writes them (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`, at most 253 bytes), or such a name behind `*.` (§2); no repeats; no address, no port, no scheme. **May be empty**: a service with `net` and no hosts reaches only the origins its setup passed (`SETUP.md` §2; Home Assistant) |
+| `hosts` | array of strings | the destinations the service's `net` and the URL sources of its `image` and `media` may reach | at most **32**; each a lower-case DNS name as `applet.hosts` writes them (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`, at most 253 bytes), or such a name behind `*.` (§2); no repeats; no address, no port, no scheme. **A name whose last label is all digits is refused**: the pattern alone would take `192.0.2.1`, and no top-level domain is all digits **May be empty**: a service with `net` and no hosts reaches only the origins its setup passed (`SETUP.md` §2; Home Assistant) |
 | `store` | object? | `{ "maxBytes": <integer> }`: the store's size | only with `store` in `requires`; 1 to 268,435,456 (256 MiB); default 16 MiB. The id's releases share one store, whose limit is the newest installed release's (`QUESTIONS.md` Q16) |
 | `idleSeconds` | integer? | how long a process stays up with no channel open | 1 to 86,400; default **30** (unchanged) |
 | `setup` | string? | the setup guide's entry, `setup/SKILL.md` (`SETUP.md` §1) | a relative path inside the package to a regular file named `SKILL.md`; its folder holds at most 64 files and 1 MiB; the host never runs it |
@@ -68,7 +68,7 @@ copy of the Public Suffix List.
 | Kind | Content | Limit |
 | --- | --- | --- |
 | **A store release** | a `.tar.gz` holding, at its root or in one top-level folder, `pocket.service.json` and the module files the entry imports; **no `package.json`, lockfile or `node_modules`**: the publisher bundles dependencies into the entry (`bun build --target=browser --format=esm --external @pocketjs/service`) | at most **16 MiB** packed (the store's publish limit) and 512 MiB, 100,000 entries unpacked (today's limits) |
-| **A local development install** | a folder or a `.tar.gz` as today, and `package.json` with a lockfile allowed; the host runs `bun install --frozen-lockfile --ignore-scripts` for it | today's limits |
+| **A local development install** | a folder or a `.tar.gz` as today, and `package.json` with a lockfile allowed; the host runs `bun install --frozen-lockfile --ignore-scripts` for it: a dependency that needs its install script installs without it, and the service then fails when it loads, with that dependency's own error, and is listed `failed` | today's limits |
 
 A store release is bundled because **the host would otherwise run a dependency's
 install scripts outside any sandbox at install time**, and because the
@@ -79,7 +79,8 @@ polyfill of `node:path` without a warning, so a forbidden import is caught by
 the source check, not by the build. A native service builds with
 `--target=bun`.
 
-**The host provides the SDK.** `@pocketjs/service` is never part of a package: the host
+**The host provides the SDK** (from the bootstrap's pull request of step 2;
+until then today's rule holds: a package that brings its own copy keeps it). `@pocketjs/service` is never part of a package: the host
 links its own copy into the package's `node_modules` before each start, so
 the SDK a service runs speaks the protocol of the host that runs it. Today a
 package that brings its own copy keeps it; under this proposal the host's copy

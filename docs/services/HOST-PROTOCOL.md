@@ -67,7 +67,7 @@ locale, the proxy and certificate variables) beside the three.
 ## 3. The control connection
 
 As D§4, with these changes. **The handshake's `protocol` changes at every
-step that breaks it**: 1 is Pocket Hub 0.2.1's; **2 is step 1's** (pull request
+step that breaks it**: 1 is Pocket Hub's up to 0.2.2; **2 is step 1's** (pull request
 #23: the messages renamed, nothing else); **3 is step 2's** (`service.ready`'s
 members below, the host connection). A process that says another number is
 refused with a sentence naming the SDK the host expects. From step 2 on a
@@ -239,24 +239,39 @@ with the step that makes it (`MIGRATION.md` §3):
 
 **How a release folder appears.** `services/<id>/` appears only by renaming
 into place a staged folder (under `services-staging/`) that already holds
-`releases.json` and the first release; a later release is renamed into
-`services/<id>/` first, and `releases.json` is then replaced by writing a
-temporary file and renaming it. So a crash cannot leave a new install without
-`releases.json` (which the rule below would read as earlier), and a release
-folder that `releases.json` does not list is removed at the next start.
+`releases.json` and the first release, so a crash cannot leave a new install
+without `releases.json` (which the rule below would read as earlier).
+
+**Replacing a release without a window that loses it** (the `dev` release
+installed again, the same footer hash installed again). As built in #27, the
+old folder moves aside before the new one is renamed in, and a crash between
+the two renames loses the release, which the owner installs again. **Proposed
+instead**: `releases.json` names each release's folder (`{release, folder,
+…}`), and a folder's name is unique (`<release>-<8 hex>`). An install renames
+the staged release to a new folder name, then replaces `releases.json` by a
+temporary file and a rename, then removes the old folder. At every instant
+`releases.json` names a complete folder, the old or the new one. At start: a
+folder that `releases.json` does not name is removed, and **a listed release
+whose folder is gone is dropped from `releases.json`** with a log line (as
+#27 does).
 
 **How step 2 recognises what step 1 left.** One rule, read once per id at the
 host's start: **a folder `services/<id>/` holding `releases.json` is of step 2;
 any other is earlier.** An earlier id is listed as one `Service` in state
-`failed`, reason `earlier` ("installed by an earlier Pocket Hub; install it
-again"); nothing under it is read, run or deleted until the owner removes it.
+`failed`, reason `earlier`, `release` null ("installed by an earlier Pocket
+Hub; install it again"); nothing under it is read or run. **It is deleted only
+by the owner's own action**: removing the service, or installing it again,
+which replaces it.
 No `<version>/` folder or `current.json` is read beside `releases.json`.
 
 `<release>` is **the footer hash of the applet package of that release** (16
 hex, what `channel.open` carries), or `dev` for a development install.
 
 **One process per running release**: a device on version 3 of an applet and
-another on version 4 each get their own release's service, both with the id's
+another on version 4 each get their own release's service. Built in step 2 as
+one process per id, which is the same while `dev` is an id's only release;
+**the difference becomes real at step 9**, when two signed releases of one id
+can be installed at once. Each gets both with the id's
 one store, whose limit is the newest installed release's `store.maxBytes`
 (`QUESTIONS.md` Q16). The host keeps a release while a device it serves runs
 or holds its hash and removes the others. `channel.open {app, hash}` starts

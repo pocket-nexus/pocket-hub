@@ -3,7 +3,7 @@
 Proposal (see `README.md`). What changes in `docs/CONTROL-API.md` (§1) and
 `docs/DAEMON-PROTOCOL.md` (§2), read at `1bc2074`, and an order of work (§3)
 that says what each device and **an existing home or a resident core of
-Pocket Hub 0.2.1** meet at each step. Step 1 is pull request #23
+Pocket Hub 0.2.2** (the last release of protocol 1) meet at each step. Step 1 is pull request #23
 (`refactor/services-rename`, open); pull request #24
 (`fix/app-replaces-older-core`, on #23) proposes how an app meets a core of
 another version. Pull request #22 (merged; Pocket Hub 0.2.2) signs releases
@@ -11,7 +11,8 @@ with a Developer ID and notarizes them, which `TRUST.md` §2 relies on.
 
 ## 1. `docs/CONTROL-API.md`
 
-**Versions** (step 1 makes the control API's `protocol` 2, #23). **Pull
+**Versions** (step 1 makes the control API's `protocol` 2, #23; #27 makes it 3;
+the store's pull request 4; protocol 1 is every release up to 0.2.2). **Pull
 request #24**, built and measured against the real 0.2.0 and 0.2.1 cores, and
 **still the owner's to confirm, so proposed here**:
 
@@ -42,7 +43,7 @@ other method stays open to every local client, as today.
 
 | Row | Change |
 | --- | --- |
-| `daemon` | renamed `service` in step 1 (#23). From step 2 `data` gains `reason?`: `manifest`, `check`, `runtime`, `enclosure` (it could not be set up; nothing runs unenclosed), `earlier` (a package of step 1's layout, kept and not run), `store_format` (a store of a newer format, untouched), and the service's own `unknown_setup` or `invalid_setup` |
+| `daemon` | renamed `service` in step 1 (#23). From step 2 `data` gains `reason?`: `manifest`, `check`, `runtime`, `enclosure` (it could not be set up; nothing runs unenclosed), `earlier` (a package of step 1's layout, kept and not run), **`dependencies`** (a development package's `bun install` failed; its output in `detail`), `store_format` (a store of a newer format, untouched), and the service's own `unknown_setup` or `invalid_setup` |
 | `store` | `reason` gains `key` |
 | new: **`consent`** | the release runs its own programs and the owner has not allowed it; `data`: `{id, release}` |
 | new: **`denied`** | a consent-class method from a client that is not the app |
@@ -92,7 +93,7 @@ in the index, a sentence saying to install the applet from this Mac.
 
 | Section after #23 | What step 2 and later make of it |
 | --- | --- |
-| intro | the parts: `sdk/service`, `crates/pocket-service-host`, the relay in `hub-core` (`DEVICES.md` §4); "a service gets no device operation" with its mechanism |
+| intro | the parts: `sdk/service`, `crates/service-host` (package `pocket-service-host`), the relay in `hub-core` (`DEVICES.md` §4); "a service gets no device operation" with its mechanism |
 | §1 The service package | `MANIFEST.md` §1 to §3, the setup guide, the folders of `HOST-PROTOCOL.md` §8 and the rule for an earlier layout |
 | §2 The process | the bootstrap, the variables, the environments, the enclosure (`TRUST.md` §5) |
 | §3 Frames | the host connection's payload limit and id ranges |
@@ -106,7 +107,7 @@ in the index, a sentence saying to install the applet from this Mac.
 | --- | --- | --- | --- | --- | --- | --- |
 | 0 | here, PocketJS | these documents | | as today | links over Pocket Link 2; its applets' `companion.pocket` requests reach Hub as `net.http` and are answered `unavailable` | omarchy-pocketd answers `companion.pocket` |
 | 1 | here | **#23: names only.** `pocket.service.json`, `@pocketjs/service`, `POCKET_SERVICE_*`, the handshake at `protocol` 2, the control API at `protocol` 2, the command line and flag of §1. New folders `services/`, `service-data/`, `services-staging/`, `service.sock`, `<home>/sdk/service`. **Nothing under the old names is read, moved or deleted.** Only Advanced › Services › Install and `pocket-hub service install` install a service; the store's install, deep links and setup never do | **an owner of 0.2.1 who never opened Advanced has nothing under the old names**; one who installed a daemon finds `daemons/` and `daemon-data/` left where they were, unread, and installs the service again. An app of this step meeting a 0.2.1 core takes over from it (#24) | as before | as before | as before |
-| 2 | here | **the host parts into `crates/pocket-service-host`** (`DEVICES.md` §4); the manifest's new fields, releases, the bootstrap; **the host connection with `store`** (`CAPABILITIES.md` §5, its format); **the macOS enclosure, measured with the shipped Bun** (`TRUST.md` §5); the handshake at `protocol` 3; `service-data/` no longer given to any process; the control API's next `protocol` | a `services/<id>/` without `releases.json` is listed `failed`, reason `earlier`, and kept (`HOST-PROTOCOL.md` §8); `service-data/<id>/` stays until `purge` | services without capabilities behave as today | as before | as before |
+| 2 | here | four pull requests. **#26**: the service host as a crate, `crates/service-host` (package `pocket-service-host`), `ChannelHost` renamed `ServiceConnector`, the service methods mounted by `hubd`; control API protocol unchanged (2). **#27**: a service installed as a release (manifest without `version`, `requires` and `hosts` checked, the Public Suffix List in the crate, `releases.json`, the `earlier` state); **control API protocol 3**; `Service` gains `release` (null for an earlier one), `requires`, `hosts` and `reason`, and no member of a later step. **The store's pull request**: the bootstrap (an entry's default export is the service; the host's SDK copy always wins), the host connection, `store` (`CAPABILITIES.md` §5), the handshake at **3**, **control API protocol 4**. **The enclosure's pull request**: the macOS profile, measured with the shipped Bun (`TRUST.md` §5); a further protocol only if it changes a shape | a `services/<id>/` without `releases.json` is listed `failed`, reason `earlier`, until the owner removes it or installs again (`HOST-PROTOCOL.md` §8); `service-data/<id>/` stays until `purge` | services without capabilities behave as today | as before | as before |
 | 3 | here | **`net` for services** | | as before | as before | as before |
 | — | PocketJS | the specification's implementation and **a 3DS program release** | | | | |
 | 4 | here | **pin moved** with that release; the wire renames; the system service; **`image`, `text`, `media`** with the host-wide bounds; the media listener; **the package index** (`<home>/packages.json`, so the system channel checks the applet's hosts; today Hub allows every public destination, `PublicDestinations` in `crates/hub-net/src/lib.rs`) | the index is built from the store cache and from later pushes | **an older program strands**: one channel, no system service; Pocket Hub offers the update | as before | as before |

@@ -4,7 +4,7 @@
 nothing here changes `docs/CONTROL-API.md` or `docs/DAEMON-PROTOCOL.md`, which
 stay the contracts of the code until each change below lands.** Where a page
 says "Hub does", read "Hub would do once this is confirmed and built". The
-pages are read against this repository at `1bc2074` (Pocket Hub 0.2.1), its
+pages were read against this repository at `1bc2074` (Pocket Hub 0.2.1; `main` is now `4d4f84d`, 0.2.2, the last release of protocol 1), its
 PocketJS pin `89e1043` and its applets pin `a629fda`.
 
 The companion change to the link specification is
@@ -122,7 +122,7 @@ the host, from a guide the release ships (`SETUP.md`).
 | handshake messages | `daemon.hello`, `.ready`, `.refused`, `.stop` | **`service.hello`**, … (`protocol` 2) |
 | control API | `daemons.*`, `Daemon`, `daemon.*` events, kind `daemon` | **`services.*`**, **`Service`**, **`service.*`**, kind **`service`** (`protocol` 2) |
 | Hub's folders | `<home>/daemons/`, `daemon-data/`, `daemon.sock`, `sdk/daemon` | step 1 (#23): **`services/`**, **`service-data/`** (the old data folder's new name, no longer given to a process from step 2), **`services-staging/`**, **`service.sock`**, **`sdk/service`**; step 2 adds **`service-store/`**, the `store` capability's (`HOST-PROTOCOL.md` §8). The old folders are left unread |
-| Hub's crates and SDK folder | `crates/hub-daemons`, `sdk/daemon` | **`crates/hub-services`** (#23), whose parts move in step 2 to **`crates/pocket-service-host`** (recommended, Q2); **`sdk/service`** |
+| Hub's crates and SDK folder | `crates/hub-daemons`, `sdk/daemon` | **`crates/hub-services`** (#23), whose parts move in step 2 to **`crates/service-host` (package `pocket-service-host`)** (recommended, Q2); **`sdk/service`** |
 | framework capabilities of the system service | none | **`image.url`**, **`text.glyphs.deferred`**, **`media.url`** |
 | the console's link: `link.companion`, `globalThis.link`, `@pocketjs/framework/link` | as is | **not decided**: a split by concern is proposed (`QUESTIONS.md` Q1) |
 | the role name `companion` in the link's fields | `companion` | unchanged |
