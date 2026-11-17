@@ -52,6 +52,25 @@ neither side reads the other's names.
 ← {"jsonrpc":"2.0","id":1,"result":{"protocol":2,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}}
 ```
 
+**`hub.hello` and `hub.shutdown` are frozen.** Every protocol version, past and
+future, keeps these two methods with these shapes: `hub.hello` takes
+`{protocol, client: {kind, name, version}}` and answers `{protocol, hub: {id,
+name, version}}`, and `hub.shutdown` takes `{}` and answers `{}` (§3). So a
+client of one version can always learn which core it has met and ask a core of
+another version to stop. **No other method is ever called in another
+version's dialect.**
+
+**A core that refuses a hello for its protocol says its own**: from protocol 2
+on, the `-32602` error carries `data: {protocol}`, the version the core speaks.
+A core of Pocket Hub 0.2.1 and earlier sends no `data`; a refusal without it
+means protocol 1, the only version before the field existed. A client reads the
+number, never the sentence.
+
+```
+→ {"jsonrpc":"2.0","id":1,"method":"hub.hello","params":{"protocol":1,"client":{"kind":"gui","name":"Pocket Hub","version":"0.2.1"}}}
+← {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"This Hub speaks protocol 2, not 1.","data":{"protocol":2}}}
+```
+
 `client.kind` is `gui`, `cli` or `remote`. **The client's kind and name are its
 identity**: they label the device mutex's holder (§3) and are where a remote
 client's limits will attach. A client on the local socket may call every
@@ -71,6 +90,40 @@ two clients starting it together are both served by the one that won. The
 answer to `hub.shutdown` is written before the socket closes; **the core is
 gone when the client's connection has ended and `hubd.sock` no longer exists**,
 which is what a client that has to know waits for.
+
+**A resident core outlives the app**, so an updated app meets the core of the
+version it replaced. **The app takes over from an older core, and only from
+an older one**, when it connects:
+
+- When the core speaks a lower protocol (its refusal's `data.protocol`, or 1
+  without it), or the same protocol and its `hub.version` orders below the
+  version of the core the app carries (as its `pocket-hubd --version` says it;
+  SemVer precedence), the app says hello in the core's protocol, calls
+  `hub.shutdown`, waits until the core is gone (above) for up to 20 s, and
+  starts its own core. Equal versions: nothing happens.
+- **A newer core is never replaced.** One that speaks a higher protocol is
+  left running and the app tells the owner that a newer Pocket Hub is already
+  running on this Mac and this copy is older; one of the same protocol and a
+  higher version is used as it is, since it speaks this app's protocol. Two
+  installed copies therefore never take turns ending each other's core: the
+  newest one's runs.
+- When the older core is not gone after 20 s, the app says so and does nothing
+  else (no signal, no removing the socket), until the owner asks it to try
+  again. When the app has no core of its own to start, it replaces nothing.
+- **Quit and Stop stops whatever core is there**, older or newer, through the
+  two frozen methods.
+
+**The command line never replaces a core.** Against a core of another protocol
+it says so in one line and does nothing; `pocket-hub shutdown` stops a core of
+any version through the two frozen methods.
+
+`hub.shutdown` does not wait for a device operation: the core closes each link
+with `going_away` as soon as its answer is written. A push, an install or an
+update of the 3DS's software under way then ends unfinished on the device,
+which keeps what it had (it writes into a staging file and commits only a
+whole, checked transfer: link specification §6.2 `runtime.push` and
+`runtime.native.install`, §6.4 `install`) and links again to the core that
+follows (§2.4).
 
 **A core that cannot start says why and exits; it does not fall back.** When
 the link port (TCP 8628) is taken, the core does not move to another port: it
@@ -98,9 +151,10 @@ on purpose (`--link-port`).
 
 ### Errors
 
-`error.code` is JSON-RPC's for a malformed call (`-32600`, `-32601`, `-32602`)
-and **`1`** for every failure of the operation itself, whose `error.data.kind`
-says which:
+`error.code` is JSON-RPC's for a malformed call (`-32600`, `-32601`, `-32602`;
+of these only a hello refused for its protocol has `data`, `{protocol}`, Hello
+above) and **`1`** for every failure of the operation itself, whose
+`error.data.kind` says which:
 
 | `kind` | Meaning | More in `data` |
 | --- | --- | --- |
