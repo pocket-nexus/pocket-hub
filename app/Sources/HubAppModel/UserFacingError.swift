@@ -93,6 +93,12 @@ public struct UserFacingError: Error, Identifiable, Sendable, Equatable {
                 self.init(title: String(localized: "Pocket Hub couldn't download what services need to run."),
                           advice: String(localized: "Check this Mac's internet connection, then try again."),
                           detail: detail)
+            case .service where operation.reason == "enclosure":
+                // SERVICE-PROTOCOL.md §2: a service runs only inside its
+                // enclosure, and this one could not be set up.
+                self.init(title: String(localized: "This service couldn't be started safely."),
+                          advice: String(localized: "Pocket Hub runs services in a protected space on this Mac and couldn't set one up for this one. Try again; if it keeps happening, update Pocket Hub."),
+                          detail: detail)
             case .service where operation.reason == "store_format":
                 // CONTROL-API.md §1 Errors: its store was written by a newer
                 // Pocket Hub, which this one leaves as it is.

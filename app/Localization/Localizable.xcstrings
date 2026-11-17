@@ -3843,6 +3843,22 @@
         }
       }
     },
+    "Pocket Hub runs services in a protected space on this Mac and couldn't set one up for this one. Try again; if it keeps happening, update Pocket Hub." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub runs services in a protected space on this Mac and couldn't set one up for this one. Try again; if it keeps happening, update Pocket Hub."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub 会在这台 Mac 上的受保护空间中运行服务，但无法为这个服务准备好这样的空间。请再试一次；如果问题持续出现，请更新 Pocket Hub。"
+          }
+        }
+      }
+    },
     "Pocket Hub saves screenshots in %@, where this Mac saves its own. Check that the folder exists and that Pocket Hub may write to it. The screenshot is on the clipboard." : {
       "localizations" : {
         "zh-Hans" : {
@@ -5629,6 +5645,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这类设备或它当前的软件版本不支持此操作。"
+          }
+        }
+      }
+    },
+    "This service couldn't be started safely." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This service couldn't be started safely."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法安全地启动这个服务。"
           }
         }
       }

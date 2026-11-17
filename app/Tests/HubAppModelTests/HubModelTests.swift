@@ -192,6 +192,23 @@ struct HubModelTests {
         #expect(h.model.services?.first { $0.id == "nexus.pocket.weather" }?.store == ServiceStore(bytes: 18_432, maxBytes: 16_777_216, fileBytes: 45_056))
     }
 
+    /// CONTROL-API.md §1 Errors: a service whose enclosure could not be set
+    /// up is refused with `reason: "enclosure"`, said in the app's words.
+    @Test func aServiceThatCannotBeEnclosedIsSaidPlainly() async throws {
+        let h = try await Harness(.demo)
+        defer { Task { await h.tearDown() } }
+        await h.core.failNext("services.start", with: .init(kind: "service", message: "The service did not start: its enclosure could not be set up: sandbox-exec: execvp() failed.",
+                                                            data: ["reason": "enclosure", "id": "nexus.pocket.weather"]))
+        do {
+            try await h.model.perform(.start, service: "nexus.pocket.weather")
+            Issue.record("expected service")
+        } catch {
+            let message = try #require(UserFacingError(error))
+            #expect(message.title == String(localized: "This service couldn't be started safely."))
+            #expect(message.detail?.contains("enclosure") == true, "Hub's sentence stays as the detail")
+        }
+    }
+
     /// CONTROL-API.md §1 Errors: dependencies that would not install are
     /// `service` with `reason: "dependencies"`; the app words its own sentence
     /// and shows the end of `bun install`'s output after Hub's.
