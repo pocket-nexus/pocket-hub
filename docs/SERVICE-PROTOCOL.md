@@ -109,7 +109,10 @@ it is checked at install and shown in the control API's `Service`.
 `bun install --frozen-lockfile --ignore-scripts`**: only what the lockfile pins,
 and **no dependency's install script**, which would otherwise run at install
 time with the owner's rights. A package with `package.json` and no lockfile
-gets nothing installed and must ship what it needs.
+gets nothing installed and must ship what it needs. Dependencies that will not
+install (a lockfile that does not match `package.json`, a package that cannot
+be fetched) refuse the install with the control API's error `service`,
+`reason: "dependencies"`, and the end of `bun install`'s output.
 
 A dependency that needs its install script (to build a native addon, or to
 download a program) is installed without what the script would have made. The
@@ -130,8 +133,8 @@ install. Hub keeps:
 
 | What | Where |
 | --- | --- |
-| a release, as installed | `<home>/services/<id>/<release>/` |
-| the id's releases | `<home>/services/<id>/releases.json` |
+| a release, as installed | `<home>/services/<id>/<release>-<8 hex>/`, a folder name unique to that install |
+| the id's releases, each naming its folder | `<home>/services/<id>/releases.json` |
 | the service's own files, mode 0700, kept across installs | `<home>/service-data/<id>/` |
 | packages being installed | `<home>/services-staging/` |
 
@@ -141,14 +144,19 @@ of the second form yet.
 **How a release folder appears.** A package is unpacked and checked, and its
 dependencies installed, under `services-staging/`. `services/<id>/` appears
 only by renaming into place a staged folder that already holds
-`releases.json` and the first release; a later release is renamed into
-`services/<id>/` first, and `releases.json` is then replaced by writing a
-temporary file and renaming it. An install of a release already installed
-moves the old folder aside first: a process running from it keeps its open
-files. So a crash never leaves an id without `releases.json`. **At Hub's next
-start**, the staging folder is removed, so is a release folder that
-`releases.json` does not list, and a listed release whose folder is gone is
-dropped from it.
+`releases.json` and the first release, so a crash never leaves an id without
+`releases.json`.
+
+**Installing a release again cannot lose it.** `releases.json` names each
+release's folder, and a folder's name is unique (`<release>-<8 hex>`, random
+per install). An install renames the staged release into a fresh folder under
+`services/<id>/`, then replaces `releases.json` by writing a temporary file
+and renaming it, then removes the old folder; a process running from the old
+folder keeps the files it has open. At every instant `releases.json` names a
+complete folder, the old one or the new one. **At Hub's next start**, the
+staging folder is removed, so is any folder `releases.json` does not name, and
+a listed release whose folder is gone is dropped from it. A folder name that
+does not follow `<release>-<8 hex>` is never read.
 
 **An install over a running service** stops the process at once when it has
 no channel; with channels open it keeps serving them on the release it
