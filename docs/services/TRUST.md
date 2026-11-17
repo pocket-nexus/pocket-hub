@@ -166,7 +166,9 @@ service's code can be read in that review.
 
 ## 5. The enclosure
 
-**macOS, measured on 2026-11-17** with Bun **1.4.4** (the version Hub pins)
+**macOS: the profile below is the one #29 ships, unchanged, measured in the
+shipped host** with Bun 1.4.4 and the SDK after #28; a test asserts each row.
+First measured on 2026-11-17 with Bun **1.4.4** (the version Hub pins)
 and Bun 1.4.2, on macOS 27.2: a real SDK service (the SDK's `serve`, `attach`,
 a request handler) run by `sandbox-exec` against the SDK's mock Hub, which
 offered it a channel and sent it requests. The service tried what a hostile
@@ -182,8 +184,7 @@ environment is the canonical one.
 | read `~/.zshrc`, list the home folder | denied | denied |
 | load `libSystem` through `bun:ffi` and call it | **allowed** | **allowed** (accepted: every system call it makes still meets the profile) |
 | `sysctl` `KERN_PROC_ALL` (every process on the machine) | **allowed** (650 KB) | denied |
-| `sysctl` `KERN_PROCARGS2` of an ancestor (the parent; the reviewer's run also read the grandparent shell's) | **allowed**: its command line, no environment | **allowed** for every ancestor that runs as the owner; denied for pid 1 (launchd, root) and for Finder, the owner's but not an ancestor |
-| `KERN_PROCARGS2` of a process that is not an ancestor | not tried | denied |
+| `sysctl` `KERN_PROCARGS2` of another process | allowed for an ancestor when the service shares its process group (this page's first run) | **denied for every other process, ancestors included, in the shipped host**: Hub starts each service in a process group of its own, and from there no other command line is readable (#29, checked again outside Hub with the same profile: same group readable, own group refused); the shipped test asserts it |
 | TCP, start a program | denied | denied |
 | `Intl` with a time zone, `crypto.subtle` | worked | worked |
 | the working directory reached through a symbolic link (`/tmp/…`), with the profile's paths canonical | worked | worked |
@@ -209,16 +210,40 @@ environment is the canonical one.
 (allow network-outbound (remote unix-socket (path-literal (param "SOCKET"))))
 ```
 
-**Accepted leaks, with what they expose**: `bun:ffi` and native calls inside
-the profile (nothing the profile denies); **the command lines of the host and
-its ancestors**, without their environments: a core started by the app has the
-app above it (its path); a core started by `pocket-hub` keeps that command and
-the shell and terminal above it while they live (a core whose starter exited
-is the child of launchd, pid 1, whose arguments were refused); so a secret
-passed as an argument to anything in that chain can be read; the
-machine's name and its hardware and OS version (`hw.*`, `kern.os*`,
-`kern.hostname`); the metadata of the listed ancestors (that the folders
-exist). **Measured as failing**: `(deny process-info*)` without a target
+**Accepted leaks, with what they expose**, each asserted by the shipped test:
+`dlopen` of a system library and a call through it (every system call it makes
+still meets the profile); the machine's name and its hardware and OS version
+(`hw.*`, `kern.os*`, `kern.hostname`); the metadata of the folders above the
+package. **Not a leak in the shipped host**: other processes' command lines,
+which this page's first run could read only because its service shared its
+starter's process group.
+
+**What #29 adds to make it hold**: every path handed to the profile is
+canonical, **the target of the package's link to the SDK included**, since the
+enclosure follows it; a refused socket comes back as `ECONNREFUSED`, not
+`EPERM`; a failed setup is detected by `sandbox-exec`'s own line on standard
+error. **When the enclosure cannot be set up**: the owner's start is refused
+with `service` / `enclosure`, a device's `channel.open` gets `busy` (the pinned
+specification has no `enclosure` refusal; the proposed code replaces `busy`
+when the pin moves), and the service is listed `failed`. **Cost, measured**:
+about 5 ms per start (spawn to `service.hello`: 13.5 ms enclosed, 8.1 ms
+without, medians of 60).
+
+**On a system that is not macOS**, until a Linux mechanism is measured, the
+host refuses every start with `service` / `enclosure`: the narrowest form of
+the owner's rule while no official release exists and Q44 is open.
+
+**`bun install --ignore-scripts` for a development package runs as Hub,
+outside the enclosure, with the network.** It can fetch what the package's
+lockfile names (from any registry or URL the lockfile records, since a
+development package is not reviewed) and write `node_modules` inside the
+package folder; it cannot run a dependency's scripts, and it runs no code of
+the package. *Recommendation*: enclose it at the Omarchy Pocket step in a
+profile of its own (write to the package folder, outbound TCP to the
+registries the lockfile names), or drop dependency installs for development
+packages in favour of bundling, as store releases already are.
+
+**Measured as failing**: `(deny process-info*)` without a target
 makes Bun 1.4.4 crash at start. The sysctl list is what Bun ran with, not a
 minimum; it was not reduced further. Not measured: Bun's first run with no
 transpiler cache on a slow disk, an older macOS.

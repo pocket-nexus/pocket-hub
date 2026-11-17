@@ -72,7 +72,8 @@ export default service;
 export type ServiceFactory = (host: Host) => Service | Promise<Service>;
 
 export interface Service {
-  /** When present, the host answers the device's channel.open only once it resolves. */
+  /** When present, the SDK holds the host's channel offers and attaches them
+   *  once it resolves, inside the host's 10 s attach window (built in #28). */
   ready?: Promise<void>;
   /** One call per accepted channel: one applet run on one device. */
   attach(channel: AppletChannel, info: ChannelInfo): void | Promise<void>;
@@ -114,6 +115,12 @@ no `serve()` and reads no environment.** Today a daemon ends with
 code, and a device that hosts the same service has neither. The host's own
 bootstrap (`HOST-PROTOCOL.md` §2) does that part.
 
+**For an author coming from a daemon** (built in #28): there is no `serve()`;
+the entry's default export is `(host) => Service`; `host.store` takes the place
+of the data folder, and the old `service-data/<id>/` is not migrated into it;
+the environment holds the three `POCKET_SERVICE_*` variables and the locale,
+and no `HOME` or `PATH`.
+
 `AppletChannel` keeps every member it has today (`on`, `request`, `emit`,
 `emitStream`, `onEvent`, `state`, `onClose`, `close`, the call and stream
 handles, `messageLimit`, the head step, the bounds of 8 requests and 4
@@ -137,7 +144,8 @@ alike.
 **A capability the manifest does not require is refused by the SDK before a
 frame leaves**, with `ServiceError("not_required")`; the host refuses it again,
 because the SDK is code inside the process (`TRUST.md` §1). Every member of
-`Host` and of the channel exists whatever the manifest says, so code that
+`Host` and of the channel exists whatever the manifest says, a capability this
+host does not provide included (its calls fail `not_required`), so code that
 reads `host.net` does not crash on another host; it fails its call.
 
 **Every call of every capability takes an optional `AbortSignal`** as
@@ -294,11 +302,12 @@ export interface Store {
 }
 ```
 
-**Semantics.** One store per applet id on a host, shared by every store
-release and every process of that id, kept across upgrades, deleted only when
+**Semantics.** One store per applet id on a host for its signed releases,
+shared by all of them and every process of that id, kept across upgrades, deleted only when
 the owner removes the applet's service and asks for its data to go
-(`services.remove` with `purge`). **A development install has a store of its
-own** (`TRUST.md` §8). **A `set` is atomic and durable before it resolves**: a
+(`services.remove` with `purge`). **A development release has a store of its
+own** (`service-store/<id>@dev/`, `HOST-PROTOCOL.md` §8, `TRUST.md` §8), which
+no signed release reads. **A `set` is atomic and durable before it resolves**: a
 reader sees the old value or the new one, never a part, and a crash after the
 resolve keeps the new one. The last `set` of a key wins; there are no
 transactions across keys. Tokens and sessions live here: X's `auth_token`
@@ -306,11 +315,11 @@ and `ct0`, Discord's bot token, Home Assistant's token (its address is a granted
 
 | Limit | Value |
 | --- | --- |
-| Key | 1 to **256** bytes of UTF-8, no control character. **A string with a lone surrogate is refused by the SDK** (`ServiceError("invalid")`) before it is encoded, since it would encode to the same bytes as another key; the host refuses bytes that are not valid UTF-8 (`invalid`) |
+| Key | 1 to **256** bytes of UTF-8 (`too_large` past 256); **`invalid` for an empty key, a control character, or a lone surrogate** (refused by the SDK before it is encoded, since it would encode to the same bytes as another key); the host refuses bytes that are not valid UTF-8 (`invalid`) |
 | Value | at most **4 MiB** |
 | Whole store | the `store.maxBytes` of **the newest release installed**, which every running release of the id writes under: default **16 MiB**, at most **256 MiB** (`QUESTIONS.md` Q16) |
 | `list` page | at most **1,000** keys, in byte order of the key |
-| Open | **8** calls per service |
+| Open | **8** calls per host connection, which is one per process, and one process per id while `dev` is an id's only release (`HOST-PROTOCOL.md` §8) |
 
 **The host checks**: `store` in `requires`; the limits. Error `quota`: the write
 would pass the limit, and nothing was written. A missing key is no error:
@@ -332,10 +341,10 @@ file mode (`QUESTIONS.md` Q26).
 | A `set` | the value's whole body is received first; then one transaction replaces the row and updates `meta` (the key's and value's bytes are what `usage` counts); the quota is checked inside that transaction against `meta.bytes`; the commit is the reply's precondition | "atomic and durable": the old value or the new one, and a reply only after `synchronous=FULL` has synced the write-ahead log |
 | The folder | created with mode 0700 and synced (`fsync` of the folder) after the database and its `-wal` file are created | a crash right after creation keeps the files |
 | `list` | `after` is the last key returned (exclusive), keys in byte order; `more` says whether a later key exists at that moment; keys added or removed between pages show or not by their order | a cursor that is a key needs no server state |
-| `CANCEL` | **before the body's last byte**: nothing is written and the reply is `cancelled`; **after it**: the transaction completes and the `set`'s own reply is sent | a write either happened whole or did not, and the service is told which |
-| Disk use | `maxBytes` bounds **`meta.bytes`**: the sum of every key's and value's length. It does not bound the file: SQLite's pages and the write-ahead log add to it. The host keeps both small: `auto_vacuum = INCREMENTAL` with `PRAGMA incremental_vacuum` after a commit that leaves more than a quarter of the pages free, and `PRAGMA wal_checkpoint(TRUNCATE)` after a commit that leaves the log over 4 MiB. `Service.store` reports the file's size beside `bytes` | the quota is the service's data, which it controls; the overhead is the host's |
+| `CANCEL` and time | **a `set` cancelled before its body's last byte** writes nothing and is answered `cancelled`; **after it**, the transaction completes and its commit decides the reply; a `set` whose body is complete is never timed out. **A `delete` is never cancelled** once received. An empty value is a body of one `END` frame, which needs no credit | a write either happened whole or did not, and the service is told which |
+| Disk use | `maxBytes` bounds **`meta.bytes`**: the sum of every key's and value's length. It does not bound the file: SQLite's pages and the write-ahead log add to it. The host keeps both small: `auto_vacuum = INCREMENTAL` with `PRAGMA incremental_vacuum` after a commit that leaves more than a quarter of the pages free, and `PRAGMA wal_checkpoint(TRUNCATE)` after a commit that leaves the log over 4 MiB. `Service.store` is `{bytes, maxBytes, fileBytes}`, `fileBytes` being the database and its write-ahead log | the quota is the service's data, which it controls; the overhead is the host's |
 | A limit below the usage | when a newer release's `maxBytes` is below `meta.bytes`, nothing is deleted: a `set` that would raise `meta.bytes` fails `quota`, and a `set` that lowers it or a `delete` succeeds | the service shrinks its own data |
-| A newer format | a host that finds a `user_version` above its own refuses that store: a capability call gets `REPLY ERROR` `store_format` on the host connection, and a control call the error `service` with reason `store_format`; the file is not touched | no reading of a format it does not know |
+| A newer format | a host that finds a `user_version` above its own does not touch the file: the listing shows the service with `reason: "store_format"`; the owner's `services.start` or `.restart` is refused with `service` / `store_format`; a device's `channel.open` still starts the process, and each of its store calls gets `REPLY ERROR` `store_format` | no reading of a format it does not know |
 
 ```sql
 PRAGMA auto_vacuum = INCREMENTAL;        -- before any table exists
@@ -355,8 +364,25 @@ PRAGMA user_version = 1;
 COMMIT;
 ```
 
-Each connection then sets `PRAGMA synchronous = FULL`. A `set` or `delete`
-changes `entries` and the one `meta` row in one transaction.
+Each connection then sets:
+
+```sql
+PRAGMA synchronous = FULL;
+PRAGMA fullfsync = ON;              -- macOS only
+PRAGMA checkpoint_fullfsync = ON;   -- macOS only
+```
+
+A `set` or `delete` changes `entries` and the one `meta` row in one
+transaction. **On macOS `fsync` does not reach the disk's medium; the two
+`fullfsync` pragmas make SQLite use `F_FULLFSYNC`.** Measured in #28 (2,000
+`set`s of 16 bytes, median / 99th percentile): `synchronous = FULL` alone
+0.07 / 0.44 ms, with `checkpoint_fullfsync` 0.06 / 0.12 ms, with `fullfsync`
+too 5.39 / 12.00 ms; both are on, since the store holds sign-in state and is
+written rarely. On Linux `fsync` is the flush and neither pragma applies.
+**The guarantee**: a `set` that has been answered survives a crash of the
+process (tested in #28: 1,000 `SIGKILL`s, all 75,700 answered `set`s present,
+none partial), and, by SQLite's and Apple's documentation and not by test, a
+crash of the system and a loss of power.
 
 
 **The framework does not use `store`.** An applet without a service keeps its

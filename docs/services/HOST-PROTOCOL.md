@@ -120,7 +120,7 @@ frame types of L§4.2 and L§4.3, no `APP` flag and no channel id, `REQUEST` wit
 | Rule | Value | Reason |
 | --- | --- | --- |
 | Payload limit | **65,536** bytes; one JSON object fits one frame | a request names a URL of up to 16 KiB and headers of up to 16 KiB (`CAPABILITIES.md` §4); the device's 16 KiB comes from its memory, not from a Unix socket |
-| Ids of the service's requests | **`1`–`0x7fffffff`**, from one counter per connection, never reused on it | the service is the requester here, as a device is on the link |
+| Ids of the service's requests | **`1`–`0x7fffffff`**, from one counter per connection, **strictly increasing** | the service is the requester here, as a device is on the link |
 | Ids of the host's requests | **`0x80000001`–`0xffffffff`**: the host sends one kind, `setup` (§6) | |
 | The host's standalone events | id **0** | |
 | Open requests of the service | at most **64** on the connection, and each capability's bound (`CAPABILITIES.md`); one more is answered `busy` at once | |
