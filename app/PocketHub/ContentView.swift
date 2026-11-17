@@ -46,10 +46,12 @@ struct ContentView: View {
             // away it has nothing true to say.
             if !live { state.storeDetails = nil }
         }
+        // The window opens on the store, and goes back to it when the device
+        // it shows is removed.
         .onChange(of: state.model.devices.map(\.id), initial: true) { _, ids in
             guard state.model.isLive else { return }
-            if case .device(let id) = state.selection, !ids.contains(id) { state.selection = nil }
-            if state.selection == nil, let first = ids.first { state.selection = .device(first) }
+            if case .device(let id) = state.selection, !ids.contains(id) { state.selection = .store }
+            if state.selection == nil { state.selection = .store }
         }
     }
 }
@@ -87,6 +89,11 @@ struct Sidebar: View {
         @Bindable var state = state
         let model = state.model
         List(selection: $state.selection) {
+            // The store comes first and is there whatever the devices are:
+            // its catalog is the whole store's, and only its buttons need a
+            // device (StorePage).
+            Label("Store", systemImage: "bag")
+                .tag(SidebarItem.store)
             Section("Devices") {
                 if model.isLive {
                     ForEach(model.devices) { device in
@@ -106,10 +113,8 @@ struct Sidebar: View {
                         .selectionDisabled()
                 }
             }
-            // The store is not a place beside the devices: what it offers
-            // depends on the device and goes onto it, so it is part of each
-            // device's Applets page. Below the devices is only what runs on
-            // this Mac, a developer surface kept out of the owner's way.
+            // Below the devices is only what runs on this Mac, a developer
+            // surface kept out of the owner's way.
             Section("Advanced") {
                 Label("Daemons", systemImage: "gearshape.2")
                     .tag(SidebarItem.daemons)
@@ -168,6 +173,8 @@ struct Detail: View {
             ConnectionStatusView()
         } else {
             switch state.selection {
+            case .store:
+                StorePage()
             case .device(let id):
                 if let device = model.device(id) {
                     DeviceDetailView(device: device)

@@ -46,8 +46,9 @@ running, and then (a window that is already open stays as it is):
    said so, and nothing else happens.
 2. **It chooses a device**, among the paired devices whose target the applet
    has a variant for: one that is linked before one that is not, and the one
-   whose page is open before another. The window goes to that device's
-   Applets page.
+   the Store installs on before another. The window goes to the Store page,
+   installing on that device; with no device that can run the applet, the
+   device the Store installs on stays as it was.
 3. **It opens the applet's sheet**: what the applet is, and the one action
    that fits the device: Install, Update when the device holds an older
    version, Open when it holds this one. With several devices that can run

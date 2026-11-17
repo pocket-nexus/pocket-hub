@@ -55,8 +55,8 @@ own.
 **The applet store's website opens the app on an applet.** Each applet's page
 at [applets.pocket.nexus](https://applets.pocket.nexus) has a button that is
 a `pocket-hub://store/app/<id>` link (`docs/DEEP-LINKS.md`): the app comes to
-the front on that applet, on a device that can run it, and the owner installs
-it from there. A link only shows; it never installs by itself.
+the front on its Store page with that applet's sheet, a device that can run it
+chosen, and the owner installs it from there. A link only shows; it never installs by itself.
 
 **A daemon is the computer side of one applet**: a Bun process Hub starts when
 a device opens that applet's channel and stops when it is idle. Applet and

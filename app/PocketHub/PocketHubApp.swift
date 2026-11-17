@@ -57,16 +57,15 @@ struct HubCommands: Commands {
                 .disabled(!state.model.isLive)
         }
         CommandGroup(after: .toolbar) {
+            // The Store page and a device's applets (their updates) both
+            // come from the catalog this fetches again.
             Button("Refresh Store") { state.model.store.reload(refresh: true) }
                 .keyboardShortcut("r")
-                .disabled(state.selectedDeviceID == nil || !state.model.isLive)
+                .disabled(!state.model.isLive)
         }
         CommandMenu("Device") {
             Button("Take Screenshot") {
-                if let id = state.selectedDeviceID {
-                    state.deviceTab = .screenshot
-                    state.takeScreenshot(of: id, reveal: false)
-                }
+                if let id = state.selectedDeviceID { state.takeScreenshot(of: id) }
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .disabled(!selectedDeviceIsLinked || !selectedDeviceSupports(.screenshot))

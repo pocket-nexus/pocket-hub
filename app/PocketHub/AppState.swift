@@ -6,13 +6,16 @@ import SwiftUI
 
 /// Where the window is: the sidebar selection and the sheets.
 enum SidebarItem: Hashable {
+    /// The applet store: the whole catalog, whatever devices are paired.
+    case store
     case device(String)
     case daemons
 }
 
-/// The sections of a device's page.
+/// The sections of a device's page. A screenshot has no section: it is
+/// kept where the owner keeps screenshots (AppState.keep).
 enum DeviceTab: Hashable {
-    case applets, screenshot, log, details
+    case applets, log, details
 }
 
 /// State shared by the window, the menu bar item and the app delegate.
@@ -64,6 +67,7 @@ final class AppState {
         // POCKET_HUB_NO_LAUNCH=1 keeps the app from starting a core (useful with a mock started by hand).
         let launch = ProcessInfo.processInfo.environment["POCKET_HUB_NO_LAUNCH"] != "1"
         model = HubModel(clientName: "Pocket Hub", version: version, launchCore: launch)
+        model.onScreenshot = { [weak self] deviceId, shot in self?.keep(shot, of: deviceId) }
         model.start()
         Task { await self.watchPairRequests() }
         #if DEBUG
@@ -179,44 +183,53 @@ final class AppState {
         presentedError = failure
     }
 
-    /// Opens the store's sheet of an applet, on a device that can run it when
-    /// there is one.
+    /// Opens the Store page with an applet's sheet, the device to install
+    /// on being one that can run it when there is one.
     func show(storeApp app: StoreApp) {
-        showDevice(for: app)
+        selection = .store
+        chooseDevice(for: app)
         storeDetails = app
         showWindow()
     }
 
-    /// Puts the window on the Applets page of the device that fits `app` best
-    /// (StoreModel.device(for:preferring:)), where the store's list says what
-    /// that device holds of it. With no device that can run it, the window
-    /// stays where it is.
-    func showDevice(for app: StoreApp) {
-        guard let device = model.store.device(for: app, preferring: selectedDeviceID) else { return }
-        show(app, on: device.id)
+    /// Makes the device that fits `app` best (StoreModel.device(for:preferring:))
+    /// the one the store installs on, where the store's list says what that
+    /// device holds of it. The device chosen now is kept when it can run the
+    /// applet; with no device that can, nothing changes.
+    func chooseDevice(for app: StoreApp) {
+        guard let device = model.store.device(for: app, preferring: model.store.deviceId) else { return }
+        model.store.choose(device: device.id)
     }
 
-    /// The same, for a device the owner chose in the sheet.
-    func show(_ app: StoreApp, on deviceId: String) {
-        selection = .device(deviceId)
-        deviceTab = .applets
-        model.store.choose(device: deviceId)
-    }
-
-    /// Takes a screenshot from anywhere (menu bar, keyboard), copies it and shows it.
-    func takeScreenshot(of deviceId: String, reveal: Bool) {
+    /// Takes a screenshot from anywhere (toolbar, menu bar, keyboard). It is
+    /// kept as every screenshot is (`keep`).
+    func takeScreenshot(of deviceId: String) {
         Task {
             do {
-                let shot = try await model.takeScreenshot(of: deviceId)
-                await ScreenshotFile.copyToPasteboard(path: shot.path)
-                if reveal {
-                    deviceTab = .screenshot
-                    show(device: deviceId)
-                }
+                try await model.takeScreenshot(of: deviceId)
             } catch {
                 let device = model.device(deviceId)
                 presentedError = UserFacingError(error, deviceName: device?.displayName, kind: device?.kind ?? DeviceKind(rawValue: ""))
                 if presentedError != nil { showWindow() }
+            }
+        }
+    }
+
+    /// Keeps a screenshot that arrived, asked for or sent by the device: a
+    /// copy in the folder where this Mac keeps its own screenshots
+    /// (ScreenshotDestination), as Simulator keeps a simulated device's, and
+    /// the image on the clipboard. No page shows it.
+    private func keep(_ shot: ScreenshotResult, of deviceId: String) {
+        let name = model.device(deviceId)?.displayName ?? deviceId
+        let folder = ScreenshotDestination.folder()
+        Task {
+            await ScreenshotFile.copyToPasteboard(path: shot.path)
+            do {
+                try await ScreenshotFile.copy(path: shot.path, into: folder, device: name)
+            } catch {
+                presentedError = .screenshotNotSaved(folder: FileManager.default.displayName(atPath: folder.path),
+                                                     detail: error.localizedDescription)
+                showWindow()
             }
         }
     }

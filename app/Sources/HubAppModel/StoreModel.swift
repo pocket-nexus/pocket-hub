@@ -5,9 +5,11 @@ import os
 
 /// The applet store as the app shows it (CONTROL-API.md §3 "Store").
 ///
-/// The page lists the store's applets for one device (the one chosen, or the
-/// only one paired), with each applet's `installed` and `update`; with no device
-/// paired it lists the whole catalog. `known` holds the whole catalog by id so
+/// The Store page lists the whole catalog (`all`), whatever devices are
+/// paired or connected. Its actions go onto one device, the one chosen to
+/// install on (the one chosen, else the first linked, else the first): the
+/// store's list for that device (`apps`) gives each applet it can run with
+/// its `installed` and `update`. `known` holds the whole catalog by id so
 /// other pages can give installed applets a title and an icon.
 ///
 /// Hub answers a failed catalog fetch with the error `store`, never the older
@@ -47,6 +49,9 @@ public final class StoreModel {
     public private(set) var page: Page = .idle
     /// A refresh of the list on screen is under way.
     public private(set) var isRefreshing = false
+    /// The whole catalog in the store's order (by title), whatever the
+    /// device: what the Store page lists. Kept across outages, as `known` is.
+    public private(set) var all: [StoreApp] = []
     /// The whole catalog by applet id, for titles and icons elsewhere. Kept
     /// across outages: it names applets, it does not describe live state.
     public private(set) var known: [String: StoreApp] = [:]
@@ -109,6 +114,14 @@ public final class StoreModel {
         return []
     }
 
+    /// The store's list for `device` (the applets it can run, with
+    /// `installed` and `update`), when it is the device chosen and its list
+    /// is here; nil otherwise.
+    public func list(for device: String) -> [StoreApp]? {
+        guard deviceId == device, case .loaded(let catalog) = page else { return nil }
+        return catalog.apps
+    }
+
     // MARK: - Loading
 
     /// Fetches the page's list again. With `refresh`, Hub fetches the catalog
@@ -128,7 +141,7 @@ public final class StoreModel {
         isRefreshing = true
         reloadPending = false
         loadTask = Task { [weak self, client] in
-            let result: Result<(StoreCatalog, StoreCatalog?), any Error>
+            let result: Result<(StoreCatalog, StoreCatalog), any Error>
             do {
                 switch context {
                 case .noDevice:
@@ -140,7 +153,9 @@ public final class StoreModel {
                     let forDevice = knownTarget
                         ? try await client.storeApps(device: id, refresh: refresh)
                         : StoreCatalog(apps: [], fetchedAt: 0)
-                    let all = try? await client.storeApps(device: nil, refresh: false)
+                    // The whole catalog, which the Store page lists: from
+                    // the catalog Hub holds, which the call above fetched.
+                    let all = try await client.storeApps(device: nil, refresh: false)
                     result = .success((forDevice, all))
                 }
             } catch {
@@ -155,14 +170,15 @@ public final class StoreModel {
         return false
     }
 
-    private func finishLoad(_ result: Result<(StoreCatalog, StoreCatalog?), any Error>, generation: Int) {
+    private func finishLoad(_ result: Result<(StoreCatalog, StoreCatalog), any Error>, generation: Int) {
         guard generation == loadGeneration else { return }
         loadTask = nil
         isRefreshing = false
         switch result {
         case .success(let (catalog, all)):
             page = .loaded(catalog)
-            if let all { known = Dictionary(all.apps.map { ($0.id, $0) }, uniquingKeysWith: { $1 }) }
+            self.all = all.apps
+            known = Dictionary(all.apps.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         case .failure(let error):
             if let hubError = error as? HubError, hubError.isCancelled { return }
             page = .failed(UserFacingError(storeError: error))

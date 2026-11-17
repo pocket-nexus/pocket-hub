@@ -48,6 +48,11 @@ struct StoreModelTests {
         let icon = try #require(app(store, "nexus.pocket.notes")?.icon)
         #expect(FileManager.default.fileExists(atPath: icon))
         #expect(store.known.count == 5, "the catalog by id comes from the whole catalog")
+        // The Store page lists the whole catalog, in the store's order,
+        // whatever the device; the device's own list says what it can run.
+        #expect(store.all.map(\.id) == ["nexus.pocket.hackernews", "nexus.pocket.weather", "nexus.pocket.notes", "io.example.pixels", "io.example.tabonly"])
+        #expect(store.list(for: "0123456789abcdef")?.contains { $0.id == "io.example.tabonly" } == false)
+        #expect(store.list(for: "89abcdef01234567") == nil, "another device's list is not here")
     }
 
     @Test func installingShowsProgressAndEndsInstalled() async throws {

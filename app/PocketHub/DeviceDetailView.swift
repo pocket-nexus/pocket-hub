@@ -9,7 +9,9 @@ extension UTType {
     static let pocketApplet = UTType(filenameExtension: "pocket", conformingTo: .data) ?? .data
 }
 
-/// One device: its state, its applets, a screenshot, its live log.
+/// One device: its state, its applets, its live log, its details. The store
+/// is a page of its own (StorePage); a screenshot is saved, not shown
+/// (AppState.keep).
 struct DeviceDetailView: View {
     let device: Device
     @Environment(AppState.self) private var state
@@ -46,10 +48,6 @@ struct DeviceDetailView: View {
             switch tab {
             case .applets:
                 DeviceOverview(device: device, unlink: unlinkNote, report: report)
-            case .screenshot:
-                ScreenshotView(device: device, shot: model.screenshots[device.id],
-                               isTaking: model.takingScreenshot.contains(device.id), take: takeScreenshot)
-                    .padding(20)
             case .log:
                 DeviceLogView(device: device)
             case .details:
@@ -125,9 +123,10 @@ struct DeviceDetailView: View {
         // button for it.
         ToolbarItemGroup(placement: .primaryAction) {
             if device.supports(.screenshot) {
-                Button("Take Screenshot", systemImage: "camera", action: takeScreenshot)
+                // Saved where this Mac saves its own screenshots, and copied.
+                Button("Take Screenshot", systemImage: "camera") { state.takeScreenshot(of: device.id) }
                     .disabled(!device.isLinked || model.takingScreenshot.contains(device.id))
-                    .help("Take a screenshot of both screens")
+                    .help(String(localized: "Save a screenshot of both screens to \(FileManager.default.displayName(atPath: ScreenshotDestination.folder().path))"))
             }
             if device.supports(.push) {
                 Button("Install Applet…", systemImage: "square.and.arrow.down") { state.importingApplet = true }
@@ -139,13 +138,6 @@ struct DeviceDetailView: View {
                 Button("Remove from Pocket Hub…", role: .destructive) { state.confirmingRemoveDevice = true }
             }
             .help("More actions")
-        }
-    }
-
-    private func takeScreenshot() {
-        state.deviceTab = .screenshot
-        Task {
-            do { try await model.takeScreenshot(of: device.id) } catch { report(error) }
         }
     }
 
@@ -174,11 +166,10 @@ struct DeviceDetailView: View {
 }
 
 extension DeviceTab {
-    /// The sections a device's page has: Screenshot and Log for a device
-    /// that takes them (`supports`), Applets and Details for every device.
+    /// The sections a device's page has: Log for a device that sends one
+    /// (`supports`), Applets and Details for every device.
     static func offered(by device: Device) -> [DeviceTab] {
         var tabs: [DeviceTab] = [.applets]
-        if device.supports(.screenshot) { tabs.append(.screenshot) }
         if device.supports(.logs) { tabs.append(.log) }
         return tabs + [.details]
     }
@@ -196,7 +187,6 @@ struct DeviceTabPicker: View {
             ForEach(DeviceTab.offered(by: device), id: \.self) { tab in
                 switch tab {
                 case .applets: Text("Applets").tag(tab)
-                case .screenshot: Text("Screenshot").tag(tab)
                 case .log: Text("Log").tag(tab)
                 case .details: Text("Details").tag(tab)
                 }
@@ -313,10 +303,9 @@ struct ConnectionLine: View {
 }
 
 /// The Applets page: the device's card, its software update when there is
-/// one, the applets it holds (Open, and Update when the store has a newer
-/// version), and the store's applets it does not hold yet (Install), as
-/// grouped cards. The two groups of applets follow the Apple Watch app's
-/// "installed" and "available".
+/// one, and the applets it holds (Open, and Update when the store has a
+/// newer version), as grouped cards. What the store offers is the Store
+/// page (StorePage).
 struct DeviceOverview: View {
     let device: Device
     let unlink: DeviceUnlinked?
@@ -352,11 +341,11 @@ struct DeviceOverview: View {
                     }
                 }
             }
-            AvailableAppletsSection(device: device)
         }
         .formStyle(.grouped)
         // The store's list is for one device at a time: this one, while its
-        // page is shown.
+        // page is shown, so the rows above know their updates. The Store
+        // page then installs on this device until the owner chooses another.
         .task(id: device.id) {
             let store = model.store
             store.choose(device: device.id)

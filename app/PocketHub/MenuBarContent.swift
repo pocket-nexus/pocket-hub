@@ -124,7 +124,7 @@ struct DeviceMenuItems: View {
             Divider()
         }
         if device.supports(.screenshot) {
-            Button("Take Screenshot") { state.takeScreenshot(of: device.id, reveal: true) }
+            Button("Take Screenshot") { state.takeScreenshot(of: device.id) }
                 .disabled(!device.isLinked || device.busy != nil)
         }
         Button("Show in Pocket Hub") { state.show(device: device.id) }

@@ -3,102 +3,120 @@ import HubAppModel
 import HubClient
 import SwiftUI
 
-/// The store's applets a device does not hold yet, a group of the device's
-/// Applets page, each with Install. What the device holds is the group above
-/// it, with Update when the store has a newer version (AppletRow).
-///
-/// The store is part of each device rather than a page of its own: Hub
-/// answers its list for one device (CONTROL-API.md §3 "Store", by the
-/// device's target), and every action on it goes onto that device.
-/// DeviceOverview makes the store's device the one shown.
-struct AvailableAppletsSection: View {
-    let device: Device
+/// The applet store: the whole catalog (StoreModel.all), whatever devices
+/// are paired or connected. What an applet's button does goes onto the
+/// device chosen in the toolbar's Install On menu, as the store's list for
+/// that device says (`installed`, `update`, CONTROL-API.md §3 "Store"): an
+/// applet it cannot run has no button. With no device paired the page lists
+/// and shows details, and installs nothing.
+struct StorePage: View {
     @Environment(AppState.self) private var state
 
     private var store: StoreModel { state.model.store }
+    /// The device the page installs on.
+    private var device: Device? { store.deviceId.flatMap(state.model.device) }
 
     var body: some View {
-        Section {
-            content
-        } header: {
-            HStack {
-                Text("Available in the Store")
-                Spacer()
-                if store.isRefreshing {
-                    ProgressView().controlSize(.small)
-                }
-                Button("Refresh", systemImage: "arrow.clockwise") { store.reload(refresh: true) }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.borderless)
-                    .help("Fetch the store's list again")
-                    .disabled(!device.hasKnownTarget)
+        Form {
+            Section {
+                content
+            } footer: {
+                footer
             }
-        } footer: {
-            footer
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Store")
+        .toolbar { toolbar }
+        .task {
+            if store.page == .idle { store.reload() }
+        }
+        // While an applet's sheet is open it shows this failure itself: an
+        // alert of this page would wait behind the sheet.
+        .alert(item: Binding(get: { state.storeDetails == nil ? store.installFailure : nil },
+                             set: { store.installFailure = $0 })) { failure in
+            Alert(title: Text(verbatim: failure.title),
+                  message: Text(verbatim: [failure.advice, failure.detail].compactMap { $0 }.joined(separator: "\n\n")))
         }
     }
 
+    /// The whole catalog. A failed fetch is said in its place, never an
+    /// older list (CONTROL-API.md §3 `store.apps`); a fetch for another
+    /// device keeps the list on screen while its buttons wait.
     @ViewBuilder
     private var content: some View {
-        if !device.hasKnownTarget {
-            // Never linked: its target, which decides what the store offers it, is unknown.
-            EmptySectionNote(title: Text("\(device.displayName) hasn't connected yet"),
-                             detail: Text("Once it connects, the store shows the applets it can run."))
-        } else if store.deviceId != device.id {
-            loading
+        if case .failed(let failure) = store.page {
+            VStack(spacing: 8) {
+                EmptySectionNote(title: Text(verbatim: failure.title), detail: Text(verbatim: failure.advice))
+                if let detail = failure.detail {
+                    Text(verbatim: detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                Button("Try Again") { store.reload(refresh: true, clearing: true) }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 8)
+        } else if store.all.isEmpty {
+            if case .loaded = store.page {
+                EmptySectionNote(title: Text("No Applets"), detail: Text("The store offers nothing yet."))
+            } else {
+                ProgressView("Loading the store…")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
         } else {
-            switch store.page {
-            case .idle, .loading:
-                loading
-            case .failed(let failure):
-                VStack(spacing: 8) {
-                    EmptySectionNote(title: Text(verbatim: failure.title), detail: Text(verbatim: failure.advice))
-                    if let detail = failure.detail {
-                        Text(verbatim: detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                    }
-                    Button("Try Again") { store.reload(refresh: true, clearing: true) }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 8)
-            case .loaded(let catalog):
-                // An applet the device holds is a row of the group above.
-                let available = catalog.apps.filter { $0.action == .install }
-                if catalog.apps.isEmpty {
-                    EmptySectionNote(title: Text("No Applets"),
-                                     detail: Text("The store offers nothing for this device yet."))
-                } else if available.isEmpty {
-                    EmptySectionNote(title: Text("All Installed"),
-                                     detail: Text("Everything the store offers for this device is on it."))
-                } else {
-                    ForEach(available) { app in
-                        StoreRow(app: app, device: device) { state.storeDetails = app }
-                    }
-                }
+            ForEach(store.all) { app in
+                StoreRow(app: app, device: device) { state.storeDetails = app }
             }
         }
     }
 
-    private var loading: some View {
-        ProgressView("Loading the store…")
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-    }
-
-    /// Why Install is off, when it is: the one message for an install the
-    /// link ended under (no alert, and not "turn it on"), else the device
-    /// being away.
+    /// Why the buttons are off or absent, when they are: no device, one
+    /// that never connected (its target, which says what it can run, is
+    /// unknown), one that installs by itself, an install the link ended
+    /// under (no alert, and not "turn it on"), one that is away.
     @ViewBuilder
     private var footer: some View {
-        if let interrupted = store.interrupted, interrupted.deviceId == device.id, !device.isLinked {
-            Text("The connection to \(device.displayName) ended while installing \(interrupted.appTitle). When it reconnects, this list shows whether \(interrupted.appTitle) was installed.")
-                .foregroundStyle(.orange)
-        } else if !device.supports(.push) {
-            // Its applets come from its own store page, which asks this Mac
-            // for them (CONTROL-API.md §2 `supports`): the list shows what
-            // that page offers, and has no Install.
-            Text(installsItself(device))
-        } else if device.hasKnownTarget && !device.isLinked {
-            Text(verbatim: notConnectedForInstall(device))
+        if state.model.devices.isEmpty {
+            Text("Add a device to Pocket Hub to install applets on it.")
+        } else if let device {
+            if let interrupted = store.interrupted, interrupted.deviceId == device.id, !device.isLinked {
+                Text("The connection to \(device.displayName) ended while installing \(interrupted.appTitle). When it reconnects, this list shows whether \(interrupted.appTitle) was installed.")
+                    .foregroundStyle(.orange)
+            } else if !device.hasKnownTarget {
+                Text("\(device.displayName) hasn't connected yet. Once it does, the store shows what it can install.")
+            } else if !device.supports(.push) {
+                // Its applets come from its own store page, which asks this
+                // Mac for them (CONTROL-API.md §2 `supports`): the list shows
+                // what that page offers, and has no Install.
+                Text(installsItself(device))
+            } else if !device.isLinked {
+                Text(verbatim: notConnectedForInstall(device))
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            // The device the buttons install on: one menu for the page, so
+            // a row says what that device holds of each applet.
+            if let device {
+                Menu {
+                    Picker("Install On", selection: Binding(get: { device.id }, set: { store.choose(device: $0) })) {
+                        ForEach(state.model.devices) { device in
+                            Label(device.displayName, systemImage: device.kind.symbolName(filled: device.isLinked))
+                                .tag(device.id)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("Install on \(device.displayName)", systemImage: device.kind.symbolName(filled: device.isLinked))
+                        .labelStyle(.titleAndIcon)
+                }
+                .help("Choose the device to install applets on")
+            }
+            Button("Refresh", systemImage: "arrow.clockwise") { store.reload(refresh: true) }
+                .disabled(store.isRefreshing)
+                .help("Fetch the store's list again")
         }
     }
 }
@@ -120,10 +138,12 @@ func notConnectedForInstall(_ device: Device) -> String {
         : String(localized: "\(device.displayName) isn't connected. Turn it on to install applets.")
 }
 
-/// One applet: icon, title, author, summary, version and size, and its action.
+/// One applet: icon, title, author, summary, version and size, and what it
+/// can do on the device the store installs on (StoreAppAction).
 struct StoreRow: View {
     let app: StoreApp
-    let device: Device
+    /// The device the Store page installs on; nil with none paired.
+    let device: Device?
     let showDetails: () -> Void
     @Environment(AppState.self) private var state
 
@@ -143,28 +163,103 @@ struct StoreRow: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .help("What this applet reaches, and where it runs")
-            action
-                .frame(minWidth: 110, alignment: .trailing)
+            if let device {
+                StoreAppAction(app: app, device: device) { state.presentedError = $0 }
+                    .frame(minWidth: 110, alignment: .trailing)
+            }
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture(count: 2, perform: showDetails)
         .accessibilityElement(children: .contain)
     }
+}
+
+/// What an applet can do on a device, as the store's list for that device
+/// says: Install, Update when it holds an older version, Open when it holds
+/// this one, the progress of an install while one runs. A device that takes
+/// no applet from the computer has no Install and no Update (its page's
+/// footer says where it installs); an applet the device cannot run says so.
+/// A row's button is plain; the sheet's is its one prominent button.
+struct StoreAppAction: View {
+    let app: StoreApp
+    let device: Device
+    var prominent = false
+    /// A failure of Open: a row shows it in the window, the sheet over itself.
+    let report: (UserFacingError) -> Void
+    @Environment(AppState.self) private var state
+
+    private var store: StoreModel { state.model.store }
+
+    var body: some View {
+        if let install = store.install(for: app, on: device.id) {
+            InstallProgressView(install: install) { store.cancelInstall(of: app, on: device.id) }
+        } else if !device.hasKnownTarget {
+            // What it can run is unknown until it connects (the page's footer).
+            EmptyView()
+        } else if let list = store.list(for: device.id) {
+            if let offer = list.first(where: { $0.id == app.id }) {
+                action(for: offer)
+            } else {
+                Text("Not for \(device.displayName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else if case .failed = store.page {
+            // The page, or the device's page under the sheet, says why its list is not here.
+            EmptyView()
+        } else {
+            ProgressView().controlSize(.small)
+        }
+    }
 
     @ViewBuilder
-    private var action: some View {
-        let store = state.model.store
-        if !device.supports(.push) {
-            // No Install: the section's footer says where this device installs.
+    private func action(for offer: StoreApp) -> some View {
+        let unavailable = installUnavailableReason(device)
+        switch offer.action {
+        case .install where !device.supports(.push), .update where !device.supports(.push):
             EmptyView()
-        } else if let install = store.install(for: app, on: device.id) {
-            InstallProgressView(install: install) { store.cancelInstall(of: app, on: device.id) }
-        } else {
-            let unavailable = installUnavailableReason(state.model.device(device.id))
-            Button("Install") { store.install(app, on: device.id) }
+        case .install:
+            Button("Install") { store.install(offer, on: device.id) }
+                .prominent(prominent)
                 .disabled(unavailable != nil)
                 .help(unavailable ?? String(localized: "Install \(app.title) on \(device.displayName)"))
+        case .update:
+            Button("Update") { store.install(offer, on: device.id) }
+                .prominent(prominent)
+                .disabled(unavailable != nil)
+                .help(unavailable ?? String(localized: "Install version \(offer.version)"))
+        case .installed:
+            if state.model.launching[device.id] == app.id {
+                ProgressView().controlSize(.small)
+            } else {
+                Button("Open", action: open)
+                    .controlSize(prominent ? .large : .regular)
+                    .disabled(unavailable != nil || device.runningApp?.id == app.id)
+                    .help(unavailable ?? String(localized: "Open \(app.title) on \(device.displayName)"))
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func open() {
+        Task {
+            do { try await store.open(app, on: device.id) } catch {
+                if let failure = UserFacingError(error, deviceName: device.displayName, kind: device.kind) { report(failure) }
+            }
+        }
+    }
+}
+
+private extension View {
+    /// The sheet's one prominent button; a row's plain one.
+    @ViewBuilder
+    func prominent(_ on: Bool) -> some View {
+        if on {
+            buttonStyle(.borderedProminent).controlSize(.large)
+        } else {
+            self
         }
     }
 }
@@ -172,7 +267,7 @@ struct StoreRow: View {
 /// Why an install cannot run on the device now, in the owner's words; nil
 /// when it can.
 @MainActor
-private func installUnavailableReason(_ device: Device?) -> String? {
+func installUnavailableReason(_ device: Device?) -> String? {
     guard let device else { return String(localized: "The device is no longer paired.") }
     if !device.isLinked { return String(localized: "\(device.displayName) isn't connected right now.") }
     if let busy = device.busy { return busy.displayText }
@@ -232,8 +327,9 @@ struct AuthorLabel: View {
 /// (docs/DEEP-LINKS.md §2), which is why the action is here: the link shows
 /// this sheet and the owner installs from it.
 ///
-/// The sheet acts on the device whose page the window shows, and the store's
-/// list for that device says what it holds (`installed`, `update`). Nothing
+/// The sheet acts on the device the store installs on (the Store page's
+/// Install On, or the device whose page opened it), and the store's list for
+/// that device says what it holds (`installed`, `update`). Nothing
 /// here is invented: every line is a field of the store's entry, or of the
 /// details the store reads out of the package (`store.details`), asked for
 /// when the sheet opens. Until they are here, the devices it runs on are the
@@ -263,8 +359,9 @@ struct StoreAppDetails: View {
     private var store: StoreModel { state.model.store }
     /// The paired devices that can run the applet.
     private var able: [Device] { store.devices(running: app) }
-    /// The device the sheet acts on: the one shown, when it can run the applet.
-    private var device: Device? { able.first { $0.id == state.selectedDeviceID } }
+    /// The device the sheet acts on: the one the store installs on, when it
+    /// can run the applet.
+    private var device: Device? { able.first { $0.id == store.deviceId } }
     /// The applet as the store offers it to that device now; nil until its
     /// list is here.
     private var offer: StoreApp? {
@@ -287,7 +384,9 @@ struct StoreAppDetails: View {
                     AuthorLabel(app: app)
                 }
                 Spacer(minLength: 12)
-                if let device { action(on: device) }
+                if let device {
+                    StoreAppAction(app: app, device: device, prominent: true) { failure = $0 }
+                }
             }
             Text(verbatim: app.summary)
             note
@@ -298,7 +397,7 @@ struct StoreAppDetails: View {
                 if able.count > 1 {
                     // Several devices can run it: the owner says which one.
                     Picker("Device", selection: Binding(get: { device?.id ?? "" },
-                                                        set: { state.show(app, on: $0) })) {
+                                                        set: { store.choose(device: $0) })) {
                         ForEach(able) { Text($0.displayName).tag($0.id) }
                     }
                 }
@@ -364,60 +463,16 @@ struct StoreAppDetails: View {
             case .failure(let failure): details = .failed(failure)
             }
         }
-        // The window may show another page, or a device that cannot run the
-        // applet (it was removed, or one that can has just linked for the
-        // first time): the sheet moves it to one that can.
+        // The store may install on a device that cannot run the applet (it
+        // was removed, or one that can has just linked for the first time):
+        // the sheet chooses one that can.
         .onChange(of: able.map(\.id), initial: true) {
-            if device == nil { state.showDevice(for: app) }
+            if device == nil { state.chooseDevice(for: app) }
         }
         .alert(item: Binding(get: { failure ?? store.installFailure },
                              set: { _ in failure = nil; store.installFailure = nil })) { failure in
             Alert(title: Text(verbatim: failure.title),
                   message: Text(verbatim: [failure.advice, failure.detail].compactMap { $0 }.joined(separator: "\n\n")))
-        }
-    }
-
-    /// Install, Update or Open, as the store's list for the device says; the
-    /// progress of an install while one runs.
-    @ViewBuilder
-    private func action(on device: Device) -> some View {
-        if let install = store.install(for: app, on: device.id) {
-            InstallProgressView(install: install) { store.cancelInstall(of: app, on: device.id) }
-        } else if let offer {
-            let unavailable = installUnavailableReason(device)
-            switch offer.action {
-            case .install where !device.supports(.push), .update where !device.supports(.push):
-                // The note below says where this device installs it.
-                EmptyView()
-            case .install:
-                Button("Install") { store.install(offer, on: device.id) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(unavailable != nil)
-                    .help(unavailable ?? String(localized: "Install \(app.title) on \(device.displayName)"))
-            case .update:
-                Button("Update") { store.install(offer, on: device.id) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(unavailable != nil)
-                    .help(unavailable ?? String(localized: "Install version \(offer.version)"))
-            case .installed:
-                if state.model.launching[device.id] == app.id {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Button("Open") { open(on: device) }
-                        .controlSize(.large)
-                        .disabled(unavailable != nil || device.runningApp?.id == app.id)
-                        .help(unavailable ?? String(localized: "Open \(app.title) on \(device.displayName)"))
-                }
-            case nil:
-                EmptyView()
-            }
-        } else if case .failed = store.page {
-            // The device's page, under this sheet, says why its list is not here.
-            EmptyView()
-        } else {
-            ProgressView().controlSize(.small)
         }
     }
 
@@ -440,14 +495,6 @@ struct StoreAppDetails: View {
             Text(installsItself(device))
         } else if let device, !device.isLinked {
             Text(verbatim: notConnectedForInstall(device))
-        }
-    }
-
-    private func open(on device: Device) {
-        Task {
-            do { try await store.open(app, on: device.id) } catch {
-                failure = UserFacingError(error, deviceName: device.displayName, kind: device.kind)
-            }
         }
     }
 

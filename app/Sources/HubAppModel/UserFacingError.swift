@@ -171,6 +171,18 @@ extension UserFacingError {
     }
 }
 
+// MARK: - Screenshots
+
+extension UserFacingError {
+    /// A screenshot the app could not copy where the owner keeps screenshots
+    /// (ScreenshotDestination). The image is on the pasteboard all the same.
+    public static func screenshotNotSaved(folder: String, detail: String) -> UserFacingError {
+        UserFacingError(title: String(localized: "The screenshot couldn't be saved."),
+                        advice: String(localized: "Pocket Hub saves screenshots in \(folder), where this Mac saves its own. Check that the folder exists and that Pocket Hub may write to it. The screenshot is on the clipboard."),
+                        detail: detail)
+    }
+}
+
 // MARK: - Links (docs/DEEP-LINKS.md §2)
 
 extension UserFacingError {

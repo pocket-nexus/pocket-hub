@@ -81,22 +81,25 @@ declined.
 
 ## Applets
 
+**Store**, at the top of the sidebar, lists every applet of the store, with or
+without a device. Its buttons act on the device chosen in **Install on** in
+the toolbar: Install, Update when the device holds an older version, Open when
+it holds this one. **Details**, beside each applet, says which devices it runs
+on, what it needs of them and what it connects to.
+
 A device's **Applets** page lists what is installed on it. Each applet can be
 opened, updated when the store has a newer version, or deleted from its …
-menu; deleting an applet also deletes its data on the device. **Details**, in
-that menu and beside each applet of the store, says which devices an applet
-runs on, what it needs of them and what it connects to. Below, **Available in
-the Store** lists the applets that device can run, and Install puts one on it.
-To install an applet you have as a file, drop the `.pocket` file on the page.
+menu; deleting an applet also deletes its data on the device. To install an
+applet you have as a file, drop the `.pocket` file on the page.
 
 The console's own store page lists the same applets and installs them through
 Pocket Hub.
 
 **A Tab5 installs its applets itself**: open **Mac** on its home screen, and it
-lists what Pocket Hub offers for it and installs from there. Its page on the
-Mac shows the same list, opens and deletes the applets it holds, and has no
-Install and takes no dropped file: the Tab5's software does not accept an
-applet sent from the computer.
+lists what Pocket Hub offers for it and installs from there. With the Tab5
+chosen, the Store shows what it holds and has no Install; its page opens and
+deletes its applets and takes no dropped file: the Tab5's software does not
+accept an applet sent from the computer.
 
 Each applet's page on [applets.pocket.nexus](https://applets.pocket.nexus) has
 an Install button that opens Pocket Hub on that applet. A link from a website
@@ -104,7 +107,10 @@ only shows the applet; installing is always your click in Pocket Hub.
 
 ## The rest of the window
 
-- **Screenshot**: both screens of the console as they are now.
+- **Take Screenshot** (the camera in the toolbar): both screens of the console
+  as they are now, saved where this Mac saves its own screenshots (the Desktop
+  unless you chose another folder) and copied to the clipboard. A screenshot
+  the console takes by itself is saved the same way.
 - **Log**: what the console and its applets write, while you watch.
 - **Details**: the device's model, software version, connection and address.
   When an update of the 3DS's software is available, the Applets page offers
