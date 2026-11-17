@@ -27,7 +27,7 @@
 
 import type { ServiceFactory } from "@pocketjs/service";
 import type { Json, StreamReader } from "@pocketjs/service";
-import { ServiceError, serve } from "@pocketjs/service";
+import { ServiceError } from "@pocketjs/service";
 
 const BLOB_MAX = 4 * 1024 * 1024;
 const CHUNK = 16 * 1024;
@@ -137,7 +137,6 @@ const service: ServiceFactory = ({ log }) => ({
   },
 });
 
+// Pocket Hub loads this module and calls its default export with the host
+// (SERVICE-PROTOCOL.md §2).
 export default service;
-
-// Pocket Hub runs the package's entry as a program (SERVICE-PROTOCOL.md §2).
-if (import.meta.main) await serve(service);

@@ -1,63 +1,68 @@
 # @pocketjs/service
 
 The computer side of a Pocket applet. An applet runs on a handheld; its
-**service** is a Bun program that Pocket Hub starts when the applet opens its
-channel and stops when it is idle. The two exchange requests with replies,
-events, cancellation and credited byte streams; the messages are yours, Hub
-routes them and reads none of their content. The service never learns whether
-the device is on Wi-Fi, USB, UART or Bluetooth.
+**service** is a module Pocket Hub loads into a Bun process of its own when
+the applet opens its channel, and stops when it is idle. The two exchange
+requests with replies, events, cancellation and credited byte streams; the
+messages are yours, Hub routes them and reads none of their content. The
+service never learns whether the device is on Wi-Fi, USB, UART or Bluetooth.
+It asks its host for what it needs: this host gives it a **store**.
 
 This package is the service side of [`docs/SERVICE-PROTOCOL.md`](../../docs/SERVICE-PROTOCOL.md).
-It has no runtime dependencies and runs on Bun without a build step. Its names
-mirror the PocketJS reference service API (`tools/pocket-link/v2/peer.ts`,
-`hub.ts`, `daemon.ts`) with the reference's word *daemon* read as *service*
-and its `LinkError` as `ServiceError`, so a service written for the reference
-Hub ports by changing its imports, those names and adding the `serve` line.
+It has no runtime dependencies and runs on Bun without a build step. Hub links
+its own copy into every package it starts: a service declares no dependency on
+it. The channel's names mirror the PocketJS reference service API
+(`tools/pocket-link/v2/peer.ts`) with its `LinkError` as `ServiceError`.
+
+**A service runs with its owner's rights**: it is a program of the owner's
+account, and what the SDK gives it does not limit what its own code can do.
 
 ## A minimal service
 
 ```ts
-// service.ts
-import { type ServiceFactory, ServiceError, serve } from "@pocketjs/service";
+// service.ts — the manifest's entry. Its default export is the service.
+import { type ServiceFactory, ServiceError } from "@pocketjs/service";
 
-const service: ServiceFactory = ({ log, data }) => ({
+const service: ServiceFactory = (host) => ({
   attach(channel, info) {
-    log(`device ${info.deviceName} opened generation ${info.generation}`);
+    host.log(`device ${info.deviceName} opened generation ${info.generation}`);
     channel.on("echo", (args) => ({ echo: args }));
-    channel.on("file", (args) => {
-      if (typeof args.name !== "string") throw new ServiceError("invalid", "name is a string");
-      return { path: `${data}/${args.name}` };
+    channel.on("remember", async (args) => {
+      if (typeof args.text !== "string") throw new ServiceError("invalid", "text is a string");
+      await host.store.set("note", args.text);
+      return {};
     });
-    channel.onEvent("note", (args) => void channel.emit("note.seen", { text: String(args.text) }));
-    channel.onClose((reason) => log(`closed: ${reason}`));
+    channel.on("recall", async () => ({ text: await host.store.getText("note") }));
+    channel.onClose((reason) => host.log(`closed: ${reason}`));
   },
 });
 
 export default service;
-if (import.meta.main) await serve(service);
 ```
 
 ```json
 // pocket.service.json
-{ "service": 1, "id": "com.example.my-applet", "entry": "service.ts" }
+{ "service": 1, "id": "com.example.my-applet", "entry": "service.ts", "requires": ["store"] }
 ```
 
-`id` is the applet's manifest id; a service serves that applet only. The
-optional `idleSeconds` (default 30) is how long Hub keeps the process with no
-channel open.
+`id` is the applet's manifest id; a service serves that applet only.
+`requires` names the capabilities the service uses (this host provides
+`store`); `store.maxBytes` sizes the store (default 16 MiB); `idleSeconds`
+(default 30) is how long Hub keeps the process with no channel open.
 
 ## Package layout
 
 ```
 pocket.service.json    the manifest (SERVICE-PROTOCOL.md §1)
-service.ts             the entry the manifest names; calls serve()
-package.json, bun.lock optional; Hub runs `bun install --frozen-lockfile` when both are there
+service.ts             the entry the manifest names: its default export is a ServiceFactory
+package.json, bun.lock optional; Hub runs `bun install --frozen-lockfile --ignore-scripts` when both are there
 ```
 
-Hub runs `bun run <entry>` in the package folder with
-`POCKET_SERVICE_SOCKET`, `_TOKEN`, `_ID` and `_DATA`. Standard output and
-error are the service's log, line by line. `context.data` is a folder for the
-service's own files, kept across upgrades.
+Hub runs its bootstrap, `bun --no-install run <sdk>/src/boot.ts ./<entry>`,
+in the package folder with `POCKET_SERVICE_SOCKET`, `_TOKEN` and `_ID` and the
+locale, and nothing else of its environment. The bootstrap imports the entry
+and calls its default export with the host; your code calls nothing to start.
+Standard output and error are the service's log, line by line.
 
 Working examples, each a complete package: [`examples/sample`](examples/sample)
 (the reference `daemon-sample.ts`) and [`examples/link-channel`](examples/link-channel)
@@ -66,17 +71,31 @@ Working examples, each a complete package: [`examples/sample`](examples/sample)
 ## API
 
 ```ts
-serve(service: Service | ServiceFactory): Promise<never>
-runService(service: Service | ServiceFactory, options: RunOptions): ServiceRun   // same, without env and process.exit
-
-type ServiceFactory = (context: ServiceContext) => Service | Promise<Service>
-interface ServiceContext { app: string; data: string; log(line: string): void }
+type ServiceFactory = (host: Host) => Service | Promise<Service>   // the entry's default export
 interface Service {
-  ready?: Promise<void>;                                              // hello waits for it
-  attach(channel: AppletChannel, info: ServiceInfo): void | Promise<void>;
-  stop?(): void | Promise<void>;                                      // service.stop, or the lease ended
+  ready?: Promise<void>;                                            // channels offered meanwhile attach once it resolves
+  attach(channel: AppletChannel, info: ChannelInfo): void | Promise<void>;
+  stop?(): void | Promise<void>;                                    // service.stop, or the lease ended
 }
-interface ServiceInfo { device; deviceName; model; target; app; hash: string; generation: number }
+interface ChannelInfo { device; deviceName; model; target; app; hash: string; generation: number }
+
+interface Host {
+  readonly id: string;              // the applet id
+  log(line: string): void;          // a line of the service's log
+  readonly store: Store;            // SERVICE-PROTOCOL.md §7
+  readonly net: Net;                // not provided by this host: calls fail `not_required`
+  readonly native: Native;          // not provided by this host: `files` throws `not_required`
+}
+interface Store {
+  get(key, { signal }?): Promise<Uint8Array | null>
+  getText(key, { signal }?): Promise<string | null>
+  getJson<T>(key, { signal }?): Promise<T | null>
+  set(key, value: Uint8Array | string | AsyncIterable<Uint8Array>, { signal, bytes }?): Promise<void>   // durable when it resolves
+  setJson(key, value, { signal }?): Promise<void>
+  delete(key, { signal }?): Promise<boolean>
+  list({ prefix, after, limit, signal }?): Promise<{ keys: string[]; more: boolean }>
+  usage({ signal }?): Promise<{ bytes: number; keys: number; maxBytes: number }>
+}
 
 class AppletChannel {
   readonly id, info, app, hash, generation, device, payloadLimit, messageLimit, units, stats
@@ -88,6 +107,7 @@ class AppletChannel {
   state(): { state: "open" | "closed"; reason: string | null }
   onClose(listener: (reason: string) => void): void
   close(reason = "service"): void
+  readonly image: Images; readonly text: Glyphs; readonly media: Media   // not provided by this host: calls fail `not_required`
 }
 interface AppletCall { t; args; cancelled; onCancel(fn); progress(t, args?): boolean; respond(): StreamWriter; body: StreamReader | null }
 interface Call { id; reply: Promise<Json>; cancel(): void; body: StreamWriter | null; response: StreamReader | null }
@@ -100,6 +120,16 @@ A handler's return value is the reply (`{}` for none). Throwing a
 `ServiceError(code, message)` sends that error; any other exception sends
 `internal` and is logged. An applet request whose `t` has no handler is
 answered `unknown_message`.
+
+**The store** keeps keys of 1 to 256 bytes of UTF-8 (no control character;
+a key with a lone surrogate is refused before it is sent) and values of at
+most 4 MiB, under the manifest's `store.maxBytes` for all of them (`quota`).
+A `set` resolves once the value is durable; a reader sees the old value or
+the new one. `list` pages in byte order: pass the last key as `after`.
+Aborting a call's `signal` cancels it: a `set` cancelled before its last byte
+writes nothing and rejects `cancelled`; one whose bytes are all sent completes
+and resolves. A manifest without `store` in `requires` gets `not_required`
+from every call, before anything is sent.
 
 ## Rules that surprise people
 
@@ -160,13 +190,12 @@ request sends CANCEL; its `reply` settles with the REPLY that follows
 Hub stops the service, or `channel.close()`), every pending call ends with
 `ServiceError("closed")`, handlers' `onCancel` listeners run, and `onClose` runs
 once. `service.stop` calls `stop()`, closes every channel with reason `stop`,
-and exits with 0; the process also exits when Hub's control connection
-closes. Hub sends `SIGTERM` 5 s after `service.stop`.
+and exits with 0; the process also exits when Hub's control or host
+connection closes. Hub sends `SIGTERM` 5 s after `service.stop`.
 
 **Errors stay in their request.** A throwing request handler fails that
-request; a throwing event handler, `onProgress` or `onClose` is logged. Under
-`serve`, an unhandled promise rejection is logged and the process keeps
-running. An exception thrown from a timer callback of your own is not caught:
+request; a throwing event handler, `onProgress` or `onClose` is logged. An
+unhandled promise rejection is logged and the process keeps running. An exception thrown from a timer callback of your own is not caught:
 it ends the process, and every device's channel with it.
 
 ## Development
@@ -178,5 +207,6 @@ bunx tsc --noEmit -p . # strict type check of src, tests and examples
 ```
 
 `test/mock-hub.ts` is a frame-level mock of Hub's service socket that plays the
-applet and records every rule of SERVICE-PROTOCOL.md §5 a service's frames
-break; use it to test your own service.
+applet, and with `test/mock-host.ts` the host and its store; it records every
+rule of SERVICE-PROTOCOL.md §5 and §6 a service's frames break. Use it to test
+your own service.

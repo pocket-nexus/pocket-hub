@@ -1,21 +1,22 @@
 // The computer side of the Link Channel demo (`dev.pocket-nexus.link-channel`,
 // PocketJS apps/link-channel/app.tsx), ported from apps/link-channel/daemon.ts
 // to @pocketjs/service and run by Pocket Hub as the package described by
-// pocket.service.json next to this file.
+// pocket.service.json next to this file: Hub loads this module and calls its
+// default export with the host.
 //
 // It answers the applet's script (app.tsx), sends `tick` events while the
 // channel is open, asks the applet one request of its own, and keeps what the
 // applet reported for a test to read. It also holds the other end of the
 // applet's bench (`linkBench` in app.tsx): streams of a given size each way,
-// events each way, and the result lines the applet reports.
+// events each way, and the result lines the applet reports. And it keeps one
+// value in its store (`keep`, `kept`), which outlives the process.
 //
-// As a module of `bun run link2 serve` (the default export) it starts the
-// HTTP origin of the applet's worker (http-fixture.ts) on this computer; the
-// serve sends the worker's requests there with
-// `--resolve link-channel.test=127.0.0.1:9742`.
+// The default export also starts the HTTP origin of the applet's worker
+// (http-fixture.ts) on this computer, for `bun run link2 serve`, which sends
+// the worker's requests there with `--resolve link-channel.test=127.0.0.1:9742`.
 
-import type { AppletChannel, Service } from "@pocketjs/service";
-import { ServiceError, serve } from "@pocketjs/service";
+import type { AppletChannel, Service, ServiceFactory, Store } from "@pocketjs/service";
+import { ServiceError } from "@pocketjs/service";
 import { LINK_CHANNEL_HTTP_HOST, LINK_CHANNEL_HTTP_PORT, fnv, patternBytes, serveHttpFixture } from "./http-fixture.ts";
 
 export const LINK_CHANNEL_APP = "dev.pocket-nexus.link-channel";
@@ -38,8 +39,12 @@ export interface LinkChannelSeen {
   http: string | null;
 }
 
-export function linkChannelService(options: { log?: (line: string) => void } = {}): { service: Service; seen: LinkChannelSeen } {
+/** The key `keep` writes and `kept` reads. */
+export const KEPT_KEY = "kept";
+
+export function linkChannelService(options: { log?: (line: string) => void; store?: Store } = {}): { service: Service; seen: LinkChannelSeen } {
   const log = options.log ?? (() => {});
+  const store = options.store;
   const seen: LinkChannelSeen = { channels: 0, generation: 0, hello: null, note: null, report: null, sum: null, blobHash: 0, http: null };
   const service: Service = {
     attach(channel: AppletChannel, info) {
@@ -79,6 +84,16 @@ export function linkChannelService(options: { log?: (line: string) => void } = {
       });
 
       channel.on("echo", (args) => ({ echo: args.text ?? null }));
+      // The store: a value kept across the process's stops and starts.
+      channel.on("keep", async (args) => {
+        if (store === undefined) throw new ServiceError("unavailable", "no store");
+        await store.setJson(KEPT_KEY, args.value ?? null);
+        return { kept: args.value ?? null };
+      });
+      channel.on("kept", async () => {
+        if (store === undefined) throw new ServiceError("unavailable", "no store");
+        return { value: await store.getJson(KEPT_KEY) };
+      });
       channel.on("blob", async (args, call) => {
         const bytes = blobBytes(Number(args.bytes ?? 0));
         seen.blobHash = fnv(bytes);
@@ -160,9 +175,9 @@ export function linkChannelService(options: { log?: (line: string) => void } = {
   return { service, seen };
 }
 
-/** The module form `bun run link2 serve --daemon <applet id>=apps/link-channel/daemon.ts` loads. */
-export default function linkChannelModule({ log }: { log(line: string): void }): Service {
-  const { service, seen } = linkChannelService({ log });
+/** The service: Hub calls it with the host. */
+const linkChannelModule: ServiceFactory = ({ log, store }) => {
+  const { service, seen } = linkChannelService({ log, store });
   // The worker's HTTP origin, when the port is free: a second serve on this computer finds it taken.
   let fixture: { port: number; stop(): void } | null = null;
   try {
@@ -182,7 +197,6 @@ export default function linkChannelModule({ log }: { log(line: string): void }):
       service.attach(channel, info);
     },
   };
-}
+};
 
-// Pocket Hub runs the package's entry as a program (SERVICE-PROTOCOL.md §2).
-if (import.meta.main) await serve(linkChannelModule);
+export default linkChannelModule;

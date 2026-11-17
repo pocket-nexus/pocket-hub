@@ -1,8 +1,20 @@
-// Starts a service as Hub does (SERVICE-PROTOCOL.md §2): `bun run <entry>` in
-// the package folder with the four variables, standard output and error read
-// line by line.
+// Starts a service as the host does (SERVICE-PROTOCOL.md §2): `bun
+// --no-install run <sdk>/src/boot.ts <entry>` in the package folder with the
+// three variables and the locale and nothing else, standard output and error
+// read line by line.
 
+import { join } from "node:path";
 import type { Subprocess } from "bun";
+
+/** The bootstrap the host runs. */
+export const BOOT = join(import.meta.dir, "..", "src", "boot.ts");
+
+/** `TZ`, `LANG` and `LC_*` of this environment: what the host passes on. */
+export function locale(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(process.env)) if (value !== undefined && (name === "TZ" || name === "LANG" || name.startsWith("LC_"))) out[name] = value;
+  return out;
+}
 
 export interface Child {
   proc: Subprocess<"ignore", "pipe", "pipe">;
@@ -28,9 +40,9 @@ async function pump(stream: ReadableStream<Uint8Array>, into: string[], wake: ()
 }
 
 export function spawnService(entry: string, env: Record<string, string>, cwd?: string): Child {
-  const proc = Bun.spawn([process.execPath, "run", entry], {
+  const proc = Bun.spawn([process.execPath, "--no-install", "run", BOOT, entry], {
     cwd,
-    env: { ...process.env, ...env },
+    env: { ...locale(), ...env },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

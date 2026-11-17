@@ -1,6 +1,7 @@
 // Runs a service in this process against a MockHub.
 
-import { type Service, type ServiceFactory, runService } from "../src/index.ts";
+import type { Service, ServiceFactory } from "../src/index.ts";
+import { runService } from "../src/serve.ts";
 import { MockHub, type MockHubOptions } from "./mock-hub.ts";
 
 export interface InProcess {
@@ -16,8 +17,10 @@ export async function inProcess(service: Service | ServiceFactory, options: Mock
   const hub = await MockHub.start(options);
   const logs: string[] = [];
   const diags: string[] = [];
-  const run = runService(service, { ...hub.runOptions(), log: (line) => logs.push(line), diag: (line) => diags.push(line) });
+  const factory: ServiceFactory = typeof service === "function" ? service : () => service;
+  const run = runService(factory, { ...hub.runOptions(), log: (line: string) => logs.push(line), diag: (line: string) => diags.push(line) });
   if (options.refuse === undefined) await hub.waitControl();
+  if (options.refuse === undefined && options.refuseHost === undefined) await hub.waitHost();
   return {
     hub,
     logs,

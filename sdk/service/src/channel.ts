@@ -44,9 +44,10 @@ import {
   validErrorCode,
 } from "./frame.ts";
 import { type StreamOwner, StreamReader, StreamWriter } from "./streams.ts";
+import { type Glyphs, type Images, type Media, glyphs, images, media } from "./capabilities.ts";
 
-/** What Hub vouches for about a channel (`channel.offer`, SERVICE-PROTOCOL.md §4). */
-export interface ServiceInfo {
+/** What the host vouches for about a channel (`channel.offer`, SERVICE-PROTOCOL.md §4). */
+export interface ChannelInfo {
   /** The device id, authenticated by the link's handshake. */
   device: string;
   /** The device's display name, model and build target. */
@@ -184,6 +185,12 @@ export class AppletChannel {
   /** @internal */ readonly outboundBound = OUTBOUND_BOUND;
   /** Counters a test or a status page reads. */
   readonly stats = { eventsIn: 0, eventsOut: 0, unitsRegranted: 0 };
+  /** A network image in this device's format. Not provided by this host: `render` rejects with `not_required`. */
+  readonly image: Images = images;
+  /** Glyphs this device lacks. Not provided by this host: `atlas` rejects with `not_required`. */
+  readonly text: Glyphs = glyphs;
+  /** A stream this device can play. Not provided by this host: `open` rejects with `not_required`. */
+  readonly media: Media = media;
   private readonly owner: StreamOwner;
 
   /** @internal */
@@ -191,7 +198,7 @@ export class AppletChannel {
     private readonly link: ChannelLink,
     /** The channel's id on this connection (`channel.ready`): CREDIT on it carries event units, `channel.close` travels on it. */
     readonly id: number,
-    readonly info: ServiceInfo,
+    readonly info: ChannelInfo,
     /** The payload limit of the channel connection (`channel.offer`). */
     readonly payloadLimit: number,
     /** LINK_APP_MSG: the largest JSON object of the channel (`channel.ready`). */
