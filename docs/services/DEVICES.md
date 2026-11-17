@@ -73,7 +73,7 @@ system calls.
 | Capability | Hub (macOS) | Omarchy Pocket's host (Linux aarch64) | A future host on a weak device |
 | --- | --- | --- | --- |
 | `net` | yes | yes | yes |
-| `store` | yes | yes; to a third-party portable service only once the device's enclosure is measured (§6) | yes |
+| `store` | yes | yes | yes |
 | `image` | yes | yes | yes |
 | `text` | through the system service; for services later | idem | yes |
 | `media` | yes: H.264, PAL8 or RGB565 for the device at the other end | yes: RGB565 frames over 127.0.0.1, as its services produce today with ffmpeg | as it can |
@@ -143,13 +143,34 @@ user namespaces are allowed; **Landlock and seccomp** where not. Measuring the
 mechanism on each device, the AYN Thor under proot included, is an
 implementation step, not a question.
 
-**Decided on 2026-11-17, for a device with no measured enclosure**: services
-published with the official key run there unenclosed; a third-party portable
-service that requires `store` does not run, and its applet says the device
-does not support it yet (`channel.open` is refused with `capability`,
-`missing: ["store"]`: on that device the host does not provide `store` to
-such a service). This is a stated rule, not a fallback: no third-party code
-runs unenclosed with the owner's data.
+**Decided on 2026-11-17, for a device with no measured enclosure**: only
+services whose release is published with the official key run there, and they
+run unenclosed. **A service whose release is not published with the official
+key does not run at all, whatever it requires**, and its applet says the
+device does not support it yet. This is a stated rule, not a fallback: no
+third-party code runs unenclosed on such a device.
+
+- **The refusal**: `channel.open` answers **`enclosure`**, a refusal of its
+  own (link §7.1 as proposed), on the link and on the local connection alike:
+  "this service host cannot enclose this daemon, and its release is not the
+  official key's". It is not `capability` (nothing the service requires is
+  missing) and not `rejected` (the applet cannot tell its owner why). Retry:
+  not during this applet run; the applet's framework turns it into "This
+  device does not support YouTube yet."
+- **Before that point**: the device's service host is the one that installs
+  releases (`QUESTIONS.md` Q40), so its catalog **offers such an applet,
+  marked** "Not supported on this device yet", and **refuses its install**
+  with the same sentence. It is listed, not hidden, so the owner sees why.
+- **An unrestricted (`native`) third-party service** is unenclosed everywhere,
+  with the owner's consent. Read with the owner's sentence ("third-party ones
+  do not run"), **it does not run on such a device either, consent or not**;
+  this is the coordinator's reading, confirmed as the rule here, with a
+  one-line check in `QUESTIONS.md` Q43.
+- **A development install** is not published with the official key, so under
+  the rule as stated **it does not run on such a device**, refused the same
+  way. That stops applet development on a device whose enclosure is not yet
+  measured, Omarchy Pocket among them until it is; `QUESTIONS.md` Q44 asks
+  whether the owner's own code is meant to be included.
 
 ## 7. Where an applet without a service keeps its state
 

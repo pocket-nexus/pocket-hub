@@ -165,10 +165,11 @@ planned replacement (`QUESTIONS.md` Q22).
 allowed (an empty network namespace, read-only binds of Bun, the package, the
 SDK and the system libraries, the service socket bound in); Landlock and
 seccomp where not; measured on each device as an implementation step. **On a
-device with no measured enclosure** (decided on 2026-11-17): services of the
-official key run unenclosed; a third-party portable service that requires
-`store` does not run, and its applet says the device does not support it yet
-(`DEVICES.md` §6).
+device with no measured enclosure** (decided on 2026-11-17): only services
+published with the official key run, unenclosed; **any other service, portable
+or native, does not run there**, its applet saying the device does not
+support it yet (`channel.open` refusal `enclosure`, `DEVICES.md` §6;
+development installs: `QUESTIONS.md` Q44).
 
 ## 6. The signed release
 

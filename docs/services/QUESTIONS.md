@@ -17,9 +17,11 @@ direction does not fit the code or the specification as it stands.
 - **Consent to an unrestricted service is the owner's own click in Pocket
   Hub's app** (in the shell on Omarchy Pocket); never the command line, a
   remote client or a `pocket-hub:` link (`TRUST.md` §2).
-- **A device with no measured enclosure** runs services of the official key
-  unenclosed and does not run a third-party portable service that requires
-  `store`; measuring each device is an implementation step (`DEVICES.md` §6).
+- **A device with no measured enclosure** runs only services published with
+  the official key, unenclosed; **a service whose release is not the official
+  key's does not run there at all**, whatever it requires (`channel.open`
+  refusal `enclosure`, `DEVICES.md` §6); measuring each device is an
+  implementation step.
 - **`signin` is not a capability.** A release ships a setup guide that a
   coding agent on the host's machine follows with the owner, outside the
   host; six capabilities remain (`SETUP.md`).
@@ -250,7 +252,7 @@ step 9. **Q31.** GitHub signs in by its device flow. **Q32.** Discord's gateway
 stops with its service. **Q33.** Maps' `/locate` by IP geolocation through
 `net`. **Q34.** The SDK examples rewritten without Bun's interfaces.
 **Q35.** `channel.open` refusals `no_service`, `capability` (with `missing`),
-`consent`; an older C client takes each as "not during this applet run".
+`consent`, `enclosure`; an older C client takes each as "not during this applet run".
 **Q36.** A service host on a weak device: chooses its own host when it provides
 every capability a release requires. **Q37.** The role name `companion` in
 the link's fields stays. **Q38.** Owner-facing words for each new control API
@@ -260,3 +262,13 @@ of its service host (and of `system.apps` under Q1). **Q41.** Spotify becomes
 an unrestricted service on Omarchy Pocket. **Q42.** Whether Hub ever installs
 a Tab5's software (`Device.supports` has no `program` today), which decides how
 a Tab5 gets the firmware with channels.
+
+**Q43.** On a device with no measured enclosure, does the rule also stop a
+third-party unrestricted (`native`) service the owner consented to? Read as
+yes (`DEVICES.md` §6); say if the owner meant otherwise.
+
+**Q44.** On such a device, does a development install (the owner's own code)
+run? Under the rule as stated, no. *Recommendation*: let it run unenclosed
+after the owner's click, labelled Development, since no publisher is
+involved; otherwise applets cannot be made on Omarchy Pocket until its
+enclosure is measured.
