@@ -214,10 +214,10 @@ A release is a tag on `main` and the app built from it:
 
 ```sh
 git checkout main && git pull
-app/scripts/package.sh                 # app/dist/Pocket-Hub-<version>-arm64.zip, and its SHA-256
+app/scripts/package.sh                 # app/dist/Pocket-Hub-<version>-arm64.dmg and .zip, and their SHA-256
 git tag -a v<version> -m "Pocket Hub v<version>" && git push origin v<version>
 gh release create v<version> --verify-tag --title "Pocket Hub v<version>" \
-    app/dist/Pocket-Hub-<version>-arm64.zip
+    app/dist/Pocket-Hub-<version>-arm64.dmg app/dist/Pocket-Hub-<version>-arm64.zip
 ```
 
 The version is one number in three places, changed together: `version` of
@@ -225,7 +225,9 @@ The version is one number in three places, changed together: `version` of
 and `MARKETING_VERSION` in the Xcode project. `package.sh` refuses a working
 tree with changes, builds the Release configuration from nothing, and checks
 that every executable in the app is arm64 and that the core and the command
-line report the app's version.
+line report the app's version. It packs the app twice: a disk image (the app
+beside a link to Applications, which is what a person downloads) and a zip
+(the same app, for what unpacks it by itself).
 
 **The app is signed ad hoc**: there is no Developer ID yet, so it is not
 notarized.
