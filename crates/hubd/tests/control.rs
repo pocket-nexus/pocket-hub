@@ -61,10 +61,19 @@ async fn hello_first_and_protocol_errors() {
     // is Pocket Hub 0.2.2's and earlier, before services took their names:
     // one sentence that names both versions.
     let other = Client::connect_raw(&core.socket, None).await.unwrap();
+    // The refusal carries the core's protocol in `data` (a newer client learns it
+    // that way); a refusal for another reason has none.
     let old = rpc(other.call(methods::HELLO, &json!({"protocol": 1, "client": {"kind": "gui", "name": "Pocket Hub", "version": "0.2.2"}})).await.unwrap_err());
-    assert_eq!((old.code, old.message.as_str()), (INVALID_PARAMS, "This Hub speaks protocol 2, not 1."));
-    assert_eq!(rpc(other.call(methods::HELLO, &json!({"protocol": 3, "client": {"kind": "cli", "name": "x", "version": "1"}})).await.unwrap_err()).code, INVALID_PARAMS);
-    assert_eq!(rpc(other.call(methods::HELLO, &json!({"protocol": PROTOCOL, "client": {"kind": "robot", "name": "x", "version": "1"}})).await.unwrap_err()).code, INVALID_PARAMS);
+    assert_eq!((old.code, old.message.as_str(), old.refused_protocol()), (INVALID_PARAMS, "This Hub speaks protocol 2, not 1.", Some(PROTOCOL)));
+    let newer = rpc(other.call(methods::HELLO, &json!({"protocol": 3, "client": {"kind": "cli", "name": "x", "version": "1"}})).await.unwrap_err());
+    assert_eq!((newer.code, newer.data.and_then(|data| data.protocol)), (INVALID_PARAMS, Some(PROTOCOL)));
+    // A refused hello leaves the connection without one: a hello in the
+    // core's own protocol is still taken on it.
+    let hello = other.call(methods::HELLO, &HelloParams { protocol: PROTOCOL, client: info(ClientKind::Cli, "other") }).await.unwrap();
+    assert_eq!(hello["protocol"], PROTOCOL);
+    let other = Client::connect_raw(&core.socket, None).await.unwrap();
+    let robot = rpc(other.call(methods::HELLO, &json!({"protocol": PROTOCOL, "client": {"kind": "robot", "name": "x", "version": "1"}})).await.unwrap_err());
+    assert_eq!((robot.code, robot.data), (INVALID_PARAMS, None));
 
     // The raw parse error answer, read off a socket by hand.
     {
@@ -328,7 +337,7 @@ async fn setup_install_over_ftp_against_the_fake_ftpd() {
     drop(closed);
     let error = rpc(client.call(methods::SETUP_INSTALL, &SetupInstallParams { kind: "3ds".into(), host: "127.0.0.1".into(), port: Some(closed_port), program: None }).await.unwrap_err());
     let data = error.data.clone().unwrap();
-    assert_eq!((data.kind, data.step.as_deref(), data.reason.as_deref()), (ErrorKind::Setup, Some("connecting"), Some("unreachable")));
+    assert_eq!((data.kind.unwrap(), data.step.as_deref(), data.reason.as_deref()), (ErrorKind::Setup, Some("connecting"), Some("unreachable")));
     let _ = Duration::ZERO;
     core.stop().await;
 }
@@ -433,7 +442,7 @@ async fn a_release_tag_for_setup() {
     let other = card(work.path(), "other");
     let error = rpc(client.call(methods::SETUP_CARD, &release_of("v404", &other)).await.unwrap_err());
     let data = error.data.unwrap();
-    assert_eq!((data.kind, data.step.as_deref(), data.reason.as_deref()), (ErrorKind::Setup, Some("downloading"), Some("release_unavailable")));
+    assert_eq!((data.kind.unwrap(), data.step.as_deref(), data.reason.as_deref()), (ErrorKind::Setup, Some("downloading"), Some("release_unavailable")));
     assert_eq!(kind_of(client.call(methods::SETUP_CARD, &release_of("../x", &other)).await.unwrap_err()), ErrorKind::Invalid);
     core.stop().await;
 

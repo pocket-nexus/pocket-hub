@@ -185,7 +185,7 @@ async fn connection(core: Arc<Core>, stream: UnixStream) {
 fn hello(core: &Core, params: Value) -> Result<(ClientInfo, Value), RpcError> {
     let hello: HelloParams = serde_json::from_value(params).map_err(|error| RpcError::invalid_params(format!("hub.hello takes {{protocol, client: {{kind, name, version}}}}: {error}.")))?;
     if hello.protocol != PROTOCOL {
-        return Err(RpcError::invalid_params(format!("This Hub speaks protocol {PROTOCOL}, not {}.", hello.protocol)));
+        return Err(RpcError::other_protocol(PROTOCOL, hello.protocol));
     }
     let result = HelloResult { protocol: PROTOCOL, hub: core.hub_info() };
     Ok((hello.client, serde_json::to_value(result).expect("serializes")))

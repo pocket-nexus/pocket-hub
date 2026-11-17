@@ -132,10 +132,10 @@ async fn the_store_through_the_binary() {
     assert_eq!((plain["surface"].clone(), plain["framework"].clone(), plain["needs"].clone()), (Value::Null, Value::Null, json!([])), "{plain}");
     // An applet the store does not list; a store that does not answer.
     let unlisted = rpc(client.call(methods::STORE_DETAILS, &StoreDetailsParams { app: "io.example.none".into() }).await.unwrap_err());
-    assert_eq!(unlisted.data.unwrap().kind, ErrorKind::NotFound);
+    assert_eq!(unlisted.data.unwrap().kind.unwrap(), ErrorKind::NotFound);
     let unanswered = rpc(client.call(methods::STORE_DETAILS, &StoreDetailsParams { app: rg.id.clone() }).await.unwrap_err());
     let data = unanswered.data.unwrap();
-    assert_eq!((data.kind, data.reason.as_deref()), (ErrorKind::Store, Some("unreachable")));
+    assert_eq!((data.kind.unwrap(), data.reason.as_deref()), (ErrorKind::Store, Some("unreachable")));
     assert!(unanswered.message.contains("io.example.rg") && unanswered.message.contains("404"), "{}", unanswered.message);
 
     // Each app's devices, as the store names them, once Hub has read its
@@ -166,7 +166,7 @@ async fn the_store_through_the_binary() {
     assert_eq!(std::fs::read(&files.package).unwrap().len() as u64, rg.bytes);
     assert_eq!(serde_json::from_slice::<Value>(&std::fs::read(&files.mock).unwrap()).unwrap(), sample);
     let none = rpc(client.call(methods::STORE_SAMPLE, &StoreDetailsParams { app: tool.id.clone() }).await.unwrap_err());
-    assert_eq!(none.data.unwrap().kind, ErrorKind::NotFound);
+    assert_eq!(none.data.unwrap().kind.unwrap(), ErrorKind::NotFound);
     let changed = event(&client, |e| topic(e, "store.changed")).await;
     assert_eq!(changed["fetchedAt"], all.fetched_at);
     // The icons arrive in Hub's cache, then `store.changed` again.
@@ -253,14 +253,14 @@ async fn the_store_through_the_binary() {
     // --- errors ----------------------------------------------------------------
     let forged = rpc(install(&client, &id, &bad.id).await.unwrap_err());
     let data = forged.data.unwrap();
-    assert_eq!((data.kind, data.reason.as_deref()), (ErrorKind::Store, Some("rejected")), "{}", forged.message);
+    assert_eq!((data.kind.unwrap(), data.reason.as_deref()), (ErrorKind::Store, Some("rejected")), "{}", forged.message);
     let broken = rpc(install(&client, &id, &corrupt.id).await.unwrap_err()).data.unwrap();
-    assert_eq!((broken.kind, broken.reason.as_deref()), (ErrorKind::Store, Some("rejected")));
+    assert_eq!((broken.kind.unwrap(), broken.reason.as_deref()), (ErrorKind::Store, Some("rejected")));
     assert!(!home.path().join(format!("cache/store/packages/{}.pocket", corrupt.package)).exists());
     let now: StoreApps = client.call_as(methods::STORE_APPS, &StoreAppsParams::default()).await.unwrap();
     assert!(!app(&now, &corrupt.id).cached && !app(&now, &bad.id).cached);
     let gone = rpc(install(&client, &id, &missing.id).await.unwrap_err()).data.unwrap();
-    assert_eq!((gone.kind, gone.reason.as_deref()), (ErrorKind::Store, Some("unreachable")));
+    assert_eq!((gone.kind.unwrap(), gone.reason.as_deref()), (ErrorKind::Store, Some("unreachable")));
     assert_eq!(kind_of(install(&client, &id, "io.example.nothing").await.unwrap_err()), ErrorKind::NotFound);
     assert_eq!(kind_of(install(&client, &id, &rg.id).await.unwrap_err()), ErrorKind::NotFound);
 
@@ -280,7 +280,7 @@ async fn the_store_through_the_binary() {
     // --- a store that fails, a device that is not linked -----------------------
     store.catalog_status(Some(503));
     let down = rpc(client.call(methods::STORE_APPS, &StoreAppsParams { device: None, refresh: Some(true) }).await.unwrap_err()).data.unwrap();
-    assert_eq!((down.kind, down.reason.as_deref()), (ErrorKind::Store, Some("unreachable")));
+    assert_eq!((down.kind.unwrap(), down.reason.as_deref()), (ErrorKind::Store, Some("unreachable")));
     store.catalog_status(None);
     device.kill().await;
     event(&client, |e| topic(e, "device.changed") && e["device"]["link"].is_null()).await;

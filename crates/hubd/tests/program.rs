@@ -41,7 +41,7 @@ async fn program_of(client: &Client, id: &str) -> ProgramState {
 async fn refusal(client: &Client, params: &InstallProgramParams) -> (ErrorKind, Option<String>, String) {
     let error = rpc(client.call(methods::DEVICES_INSTALL_PROGRAM, params).await.unwrap_err());
     let data = error.data.expect("an operation error");
-    (data.kind, data.reason, error.message)
+    (data.kind.unwrap(), data.reason, error.message)
 }
 
 fn from_path(id: &str, path: &Path) -> InstallProgramParams {
@@ -80,7 +80,7 @@ async fn restart_and_relink(client: &Client, other: &Client, device: &mut RefDev
     assert_eq!(busy.holder.method, "devices.installProgram");
     let refused = rpc(other.call(methods::DEVICES_INSTALL_PROGRAM, &InstallProgramParams { device: id.into(), program: None, launch: None }).await.unwrap_err());
     let data = refused.data.unwrap();
-    assert_eq!((data.kind, data.holder.map(|h| h.method)), (ErrorKind::Busy, Some("devices.installProgram".to_owned())));
+    assert_eq!((data.kind.unwrap(), data.holder.map(|h| h.method)), (ErrorKind::Busy, Some("devices.installProgram".to_owned())));
     device.send(json!({"cmd": "connect"})).await;
     event(client, |e| topic(e, "device.changed") && !e["device"]["link"].is_null() && e["device"]["busy"].is_null()).await;
 }

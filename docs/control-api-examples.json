@@ -1520,16 +1520,26 @@
     "-32602": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 7,
-        "method": "devices.get",
-        "params": {}
+        "id": 1,
+        "method": "hub.hello",
+        "params": {
+          "protocol": 1,
+          "client": {
+            "kind": "gui",
+            "name": "Pocket Hub",
+            "version": "0.0.0-test"
+          }
+        }
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 7,
+        "id": 1,
         "error": {
           "code": -32602,
-          "message": "The parameters of devices.get are not usable: missing field `device`."
+          "message": "This Hub speaks protocol 2, not 1.",
+          "data": {
+            "protocol": 2
+          }
         }
       }
     },

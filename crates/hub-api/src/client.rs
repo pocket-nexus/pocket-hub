@@ -110,8 +110,16 @@ impl Client {
     }
 
     pub async fn connect_traced(socket: &Path, client: ClientInfo, transcript: Option<Transcript>) -> Result<Client, ClientError> {
+        Self::connect_in(socket, client, PROTOCOL, transcript).await
+    }
+
+    /// Connects and says hello in `protocol`. Another protocol than
+    /// [`PROTOCOL`] is for the two frozen methods alone, `hub.hello` and
+    /// `hub.shutdown` (CONTROL-API.md §1, Hello): nothing else is ever called
+    /// in another version's dialect.
+    pub async fn connect_in(socket: &Path, client: ClientInfo, protocol: u32, transcript: Option<Transcript>) -> Result<Client, ClientError> {
         let mut connection = Self::connect_raw(socket, transcript).await?;
-        let hello = connection.call(methods::HELLO, &HelloParams { protocol: PROTOCOL, client }).await?;
+        let hello = connection.call(methods::HELLO, &HelloParams { protocol, client }).await?;
         connection.hello = Some(serde_json::from_value(hello).map_err(|error| ClientError::Decode(error.to_string()))?);
         Ok(connection)
     }

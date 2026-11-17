@@ -62,7 +62,7 @@ impl Out {
         }
         let mut line = format!("pocket-hub: {}", error.message);
         if let Some(data) = &error.data {
-            let mut detail = vec![data.kind.as_str().to_owned()];
+            let mut detail: Vec<String> = data.kind.iter().map(|kind| kind.as_str().to_owned()).collect();
             if let Some(holder) = &data.holder {
                 detail.push(format!("held by {} ({}) running {}", holder.name, holder.kind.as_str(), holder.method));
             }
