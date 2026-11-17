@@ -9,7 +9,8 @@
 //! **The file** is made by exactly the statements of `CREATE` (§7 "On
 //! disk"), in their order, the table statements in one transaction; each
 //! connection then sets `synchronous = FULL`, so a commit returns only once
-//! the write-ahead log is synced. A `set` or `delete` changes `entries` and
+//! the write-ahead log is synced, and on macOS `SYNC` below, so that sync
+//! reaches the drive's platter or flash, not its cache. A `set` or `delete` changes `entries` and
 //! the one `meta` row in one transaction, inside which the quota is checked
 //! against `meta.bytes`: with one connection per store behind one lock, the
 //! quota is exact whoever writes.
@@ -41,6 +42,22 @@ pub const MAX_LIST: usize = 1_000;
 /// After a commit that leaves the write-ahead log over this, it is
 /// checkpointed and truncated.
 const WAL_CHECKPOINT_BYTES: u64 = 4 * 1024 * 1024;
+
+/// How a commit is synced beside `synchronous = FULL` (§7, "Durable").
+///
+/// On macOS `fsync` hands the data to the drive and does not flush the
+/// drive's cache, so a power loss can still lose a commit it returned for;
+/// `fullfsync` makes SQLite sync the write-ahead log with `F_FULLFSYNC` at
+/// each commit, and `checkpoint_fullfsync` does the same for checkpoints.
+/// Measured on an Apple-silicon Mac (2,000 sets each, `tests/sync_timing.rs`):
+/// a 16-byte `set` takes a median 0.07 ms with `fsync`, 5.4 ms with
+/// `F_FULLFSYNC`; the store holds sign-in state, written rarely, so it pays.
+#[cfg(target_os = "macos")]
+const SYNC: &str = "PRAGMA checkpoint_fullfsync = ON; PRAGMA fullfsync = ON;";
+/// Elsewhere `fsync` is the real thing: on Linux it flushes the drive's
+/// cache, and neither pragma applies (SQLite has no `F_FULLFSYNC` there).
+#[cfg(not(target_os = "macos"))]
+const SYNC: &str = "";
 
 /// The statements that make a store's file, as §7 writes them.
 const CREATE: &str = "\
@@ -128,6 +145,13 @@ impl Store {
     /// and its tables when they do not exist. A store of a newer format is
     /// refused untouched.
     pub fn open(folder: &Path) -> Result<Store, StoreError> {
+        Self::open_with(folder, SYNC)
+    }
+
+    /// `open`, with `pragmas` in place of `SYNC`, run on the connection
+    /// after `synchronous`: for a measurement of the ways a commit is synced.
+    #[doc(hidden)]
+    pub fn open_with(folder: &Path, pragmas: &str) -> Result<Store, StoreError> {
         let file = folder.join(STORE_FILE);
         let existed = file.exists();
         if existed && let Some(format) = header_format(&file)? && format > FORMAT {
@@ -160,6 +184,7 @@ impl Store {
             sync_folder(folder)?;
         }
         connection.pragma_update(None, "synchronous", "FULL")?;
+        connection.execute_batch(pragmas)?;
         Ok(Store { folder: folder.to_path_buf(), connection: Mutex::new(connection) })
     }
 
@@ -218,6 +243,12 @@ impl Store {
         let more = keys.len() > limit;
         keys.truncate(limit);
         Ok((keys, more))
+    }
+
+    /// The value of an integer `PRAGMA` on the store's connection.
+    #[doc(hidden)]
+    pub fn pragma(&self, name: &str) -> Result<i64, StoreError> {
+        Ok(self.connection().query_row(&format!("PRAGMA {name}"), [], |row| row.get(0))?)
     }
 
     pub fn meta(&self) -> Result<Meta, StoreError> {

@@ -223,6 +223,13 @@ fn the_file_is_made_as_the_page_writes_it() {
     assert_eq!(pragma("auto_vacuum"), "Integer(2)", "INCREMENTAL");
     assert_eq!(pragma("journal_mode"), "Text(\"wal\")");
     assert_eq!(pragma("user_version"), "Integer(1)");
+    drop(connection);
+    // The sync settings of a connection the store opens (§7, "Durable").
+    let store = Store::open(&folder).unwrap();
+    let full = if cfg!(target_os = "macos") { 1 } else { 0 };
+    assert_eq!((store.pragma("synchronous").unwrap(), store.pragma("fullfsync").unwrap(), store.pragma("checkpoint_fullfsync").unwrap()), (2, full, full));
+    drop(store);
+    let connection = rusqlite::Connection::open(folder.join("store.sqlite")).unwrap();
     let tables: Vec<(String, String)> = connection.prepare("SELECT name, sql FROM sqlite_schema WHERE type = 'table' ORDER BY name").unwrap().query_map([], |row| Ok((row.get(0)?, row.get(1)?))).unwrap().map(Result::unwrap).collect();
     assert_eq!(tables.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>(), ["entries", "meta"]);
     assert!(tables[0].1.contains("key   BLOB PRIMARY KEY NOT NULL") && tables[0].1.ends_with("WITHOUT ROWID"), "{}", tables[0].1);

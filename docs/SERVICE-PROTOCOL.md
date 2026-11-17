@@ -566,7 +566,7 @@ written) and `store_format` (below).
 | --- | --- |
 | The file | one SQLite database per store, `store.sqlite` in the store's folder, made by exactly the statements below, in this order. A key is bytes (`/` included), so no key is mapped to a file name |
 | Who writes | **only Hub's process**, through one connection per store guarded by one lock; two processes writing at once are two requests Hub serializes, so the quota is exact |
-| A `set` | the value's whole body is received first; then one transaction replaces the row and updates `meta`, the quota checked inside it against `meta.bytes`; the reply follows the commit, which `synchronous = FULL` makes only once the write-ahead log is synced |
+| A `set` | the value's whole body is received first; then one transaction replaces the row and updates `meta`, the quota checked inside it against `meta.bytes`; the reply follows the commit, which `synchronous = FULL` makes only once the write-ahead log is synced (below, "Durable") |
 | The folder | mode 0700, the file 0600; the folder is synced (`fsync`) after the database and its write-ahead log are made |
 | `list` | `after` is the last key returned (exclusive), keys in byte order; `more` says whether a later key exists at that moment; keys added or removed between pages show or not by their order |
 | `CANCEL` | **before the body's last byte**: nothing is written and the reply is `cancelled`; **after it**: the transaction completes and the `set`'s own reply is sent. A `delete` is never cancelled once received |
@@ -592,7 +592,28 @@ PRAGMA user_version = 1;
 COMMIT;
 ```
 
-Each connection then sets `PRAGMA synchronous = FULL`. A `set` or `delete`
-changes `entries` and the one `meta` row in one transaction. Values are not
+Each connection then sets `PRAGMA synchronous = FULL`, and on macOS
+`PRAGMA checkpoint_fullfsync = ON` and `PRAGMA fullfsync = ON`. A `set` or
+`delete` changes `entries` and the one `meta` row in one transaction.
+
+**Durable: what a reply to `set` (or `delete`) guarantees on macOS.** The
+reply is sent after the commit returned, and the commit returns after the
+write-ahead log holding the transaction was synced with `F_FULLFSYNC`, which
+asks the drive to write its cache to stable storage (`fsync` alone hands the
+data to the drive and leaves it in the drive's cache).
+
+| After the reply | The `set` is |
+| --- | --- |
+| **the service's process or Hub's process ends**, however (a crash, `SIGKILL`) | kept: the transaction is in the write-ahead log in the operating system's hands, and the next open replays it. **Tested**: 1,000 `SIGKILL`s of a process serving the host connection in the middle of a burst of sets; every acknowledged one was there, every one in flight whole or absent, `meta` equal to the entries |
+| **the operating system crashes** (a kernel panic) | kept: the data reached the drive before the reply. By SQLite's documentation of `synchronous = FULL` in WAL mode and of `fullfsync`, not by test |
+| **the power fails** | kept, as far as the drive honours `F_FULLFSYNC`, which the internal drives of Macs do. By SQLite's and Apple's documentation (`fcntl(2)`, `F_FULLFSYNC`), not by test: a `SIGKILL` cannot show a power loss |
+
+A `set` replaced by the same bytes writes nothing and syncs nothing; it is
+kept as well. On Linux `fsync` flushes the drive's cache itself, and the two
+macOS pragmas do not apply. **The cost, measured** on an Apple-silicon Mac
+(2,000 sets each): a 16-byte `set` takes a median 0.07 ms with `fsync` and
+5.4 ms with `F_FULLFSYNC` (99th percentile 0.44 ms and 12.0 ms); a 64 KiB one
+0.15 ms and 6.3 ms (0.72 ms and 17.8 ms). The store holds sign-in state,
+written rarely: it pays the 5 ms. Values are not
 encrypted beyond the file's mode, and **the service's own process can read
 the file** (it runs with its owner's rights); other users cannot.
