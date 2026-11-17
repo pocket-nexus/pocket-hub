@@ -227,7 +227,11 @@ tree with changes, builds the Release configuration from nothing, and checks
 that every executable in the app is arm64 and that the core and the command
 line report the app's version. It packs the app twice: a disk image (the app
 beside a link to Applications, which is what a person downloads) and a zip
-(the same app, for what unpacks it by itself).
+(the same app, for what unpacks it by itself). Finder lays the disk image's
+window out on the picture `app/Artwork/dmg-background.swift` draws
+(`app/Artwork/DMGBackground.tiff`): the script runs in a logged-in session,
+macOS asks once whether the terminal may control Finder, and no other volume
+named Pocket Hub may be mounted.
 
 **The app is signed ad hoc**: there is no Developer ID yet, so it is not
 notarized.
