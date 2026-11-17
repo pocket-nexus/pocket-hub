@@ -82,6 +82,7 @@
 				0A0000000000000000000009 /* Frameworks */,
 				0A000000000000000000000A /* Resources */,
 				0A000000000000000000000B /* Embed the core and the command line */,
+				0A0000000000000000000018 /* Embed the applet player */,
 			);
 			buildRules = (
 			);
@@ -162,6 +163,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "exec \"$SRCROOT/scripts/embed-core.sh\"\n";
+		};
+		0A0000000000000000000018 /* Embed the applet player */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed the applet player";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "exec \"$SRCROOT/scripts/embed-player.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

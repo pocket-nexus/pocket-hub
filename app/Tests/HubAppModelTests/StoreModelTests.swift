@@ -18,8 +18,9 @@ struct StoreModelTests {
         if case .loaded = store.page { true } else { false }
     }
 
+    /// The applet as the store offers it to the linked console of the demo.
     func app(_ store: StoreModel, _ id: String) -> StoreApp? {
-        store.apps.first { $0.id == id }
+        store.offer(of: id, for: "0123456789abcdef")
     }
 
     @Test func withNoDeviceTheWholeCatalogShowsWithoutActions() async throws {
@@ -27,20 +28,20 @@ struct StoreModelTests {
         defer { Task { await h.tearDown() } }
         let store = h.model.store
         await eventually("loaded") { loaded(store) }
-        #expect(store.context == .noDevice)
-        #expect(store.apps.count == 5, "every applet, whatever its targets")
-        #expect(store.apps.allSatisfy { $0.action == nil })
+        #expect(store.lists.isEmpty)
+        #expect(store.all.count == 5, "every applet, whatever its targets")
+        #expect(store.all.allSatisfy { $0.action == nil })
         #expect(store.known["nexus.pocket.hackernews"]?.title == "Hacker News")
         let request = try #require(await h.core.received.last { $0.method == "store.apps" })
         #expect(request.params == [:])
     }
 
-    @Test func aDevicesPageCarriesItsActions() async throws {
+    @Test func everyDeviceHasItsList() async throws {
         let h = try await Harness(Self.scenario())
         defer { Task { await h.tearDown() } }
         let store = h.model.store
         await eventually("loaded") { loaded(store) }
-        #expect(store.context == .device(id: "0123456789abcdef", knownTarget: true), "the linked device by default")
+        #expect(Set(store.lists.keys) == ["0123456789abcdef", "89abcdef01234567"], "every paired device, linked or not")
         #expect(app(store, "io.example.tabonly") == nil, "no variant for a 3DS")
         #expect(app(store, "nexus.pocket.hackernews")?.action == .install)
         #expect(app(store, "nexus.pocket.weather")?.action == .update, "0.4.0 above the device's 0.3.1")
@@ -48,6 +49,13 @@ struct StoreModelTests {
         let icon = try #require(app(store, "nexus.pocket.notes")?.icon)
         #expect(FileManager.default.fileExists(atPath: icon))
         #expect(store.known.count == 5, "the catalog by id comes from the whole catalog")
+        // The Store page lists the whole catalog, in the store's order,
+        // whatever the device; the device's own list says what it can run.
+        #expect(store.all.map(\.id) == ["nexus.pocket.hackernews", "nexus.pocket.weather", "nexus.pocket.notes", "io.example.pixels", "io.example.tabonly"])
+        #expect(store.list(for: "0123456789abcdef")?.contains { $0.id == "io.example.tabonly" } == false)
+        #expect(store.offer(of: "nexus.pocket.notes", for: "89abcdef01234567")?.action == .install, "each device's own installed state")
+        let asked = await h.core.received.filter { $0.method == "store.apps" }.compactMap { $0.params["device"]?.stringValue }
+        #expect(Set(asked) == ["0123456789abcdef", "89abcdef01234567"])
     }
 
     @Test func installingShowsProgressAndEndsInstalled() async throws {
@@ -120,7 +128,8 @@ struct StoreModelTests {
         let hn = try #require(app(store, "nexus.pocket.hackernews"))
         store.install(hn, on: living)
         await eventually("interrupted") { store.interrupted != nil }
-        #expect(store.interrupted?.deviceId == living && store.interrupted?.appTitle == "Hacker News")
+        #expect(store.interrupted?.deviceId == living && store.interrupted?.appId == "nexus.pocket.hackernews"
+            && store.interrupted?.appTitle == "Hacker News")
         #expect(store.installFailure == nil, "no alert beside the page's own message")
         #expect(store.install(for: hn, on: living) == nil)
         #expect(h.model.lastUnlink[living]?.code == "silence")
@@ -149,7 +158,7 @@ struct StoreModelTests {
         await h.core.setStoreReachable(false)
         store.reload(refresh: true)
         await eventually("failed") { if case .failed = store.page { true } else { false } }
-        #expect(store.apps.isEmpty, "the list on screen is gone once the store fails")
+        #expect(store.lists.isEmpty, "the lists on screen are gone once the store fails")
         if case .failed(let failure) = store.page {
             #expect(failure.title == String(localized: "Pocket Hub can't reach the applet store."))
         }
@@ -198,19 +207,14 @@ struct StoreModelTests {
         let store = h.model.store
         await eventually("loaded") { loaded(store) }
         // Paired, not connected: its target's catalog, with its own installed state.
-        store.choose(device: "89abcdef01234567")
-        await eventually("travel's page") {
-            loaded(store) && store.context == .device(id: "89abcdef01234567", knownTarget: true)
-        }
         #expect(h.model.device("89abcdef01234567")?.isLinked == false)
-        #expect(app(store, "nexus.pocket.notes")?.action == .install)
-        #expect(await h.core.received.last { $0.method == "store.apps" && $0.params["device"] != nil }?.params["device"] == "89abcdef01234567")
+        #expect(store.offer(of: "nexus.pocket.notes", for: "89abcdef01234567")?.action == .install)
         // A device that never linked has no known target: nothing is asked for it.
         await h.core.upsert(MockDevice(id: "fffffffffffffff0"))
         await eventually("listed") { h.model.device("fffffffffffffff0") != nil }
-        store.choose(device: "fffffffffffffff0")
-        await eventually("never linked") { store.context == .device(id: "fffffffffffffff0", knownTarget: false) && loaded(store) }
-        #expect(store.apps.isEmpty)
+        store.reload()
+        await eventually("reloaded") { loaded(store) && !store.isRefreshing }
+        #expect(store.list(for: "fffffffffffffff0") == nil)
         #expect(await !h.core.received.contains { $0.method == "store.apps" && $0.params["device"] == "fffffffffffffff0" })
     }
 

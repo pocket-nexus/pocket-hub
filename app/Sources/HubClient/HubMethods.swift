@@ -157,6 +157,13 @@ extension HubCalling {
         try await call("store.details", params: ["app": .string(app)]).decoded()
     }
 
+    /// The verified package and the sample data the store's player runs an
+    /// applet from, downloaded into Hub's cache when it lacks them. Progress:
+    /// `downloading` for the package. An applet with no sample data is `not_found`.
+    public func storeSample(app: String, progress: (@Sendable (TransferProgress) -> Void)? = nil) async throws -> StoreSample {
+        try await call("store.sample", params: ["app": .string(app)], progress: typed(progress)).decoded()
+    }
+
     /// Downloads (when Hub's cache lacks it), checks and installs an applet on
     /// a device. Progress: `downloading`, then the phases of `devices.push`.
     public func storeInstall(device: String, app: String,

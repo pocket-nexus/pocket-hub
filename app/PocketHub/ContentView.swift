@@ -20,12 +20,6 @@ struct ContentView: View {
                 .toolbar(removing: .sidebarToggle)
         } detail: {
             Detail()
-                // An applet's sheet belongs to the window, not to a device's
-                // page: a link opens it whatever the window shows, with no
-                // device paired too (docs/DEEP-LINKS.md §2).
-                .sheet(item: $state.storeDetails) { app in
-                    StoreAppDetails(app: app) { state.storeDetails = nil }
-                }
         }
         .sheet(isPresented: $state.showingSetup) {
             SetupSheet()
@@ -41,16 +35,19 @@ struct ContentView: View {
             // With the window closed Hub lives in the menu bar only, out of the Dock and the app switcher.
             NSApp.setActivationPolicy(.accessory)
         }
-        .onChange(of: state.model.isLive) { _, live in
-            // The sheet speaks of devices and what they hold: with the core
-            // away it has nothing true to say.
-            if !live { state.storeDetails = nil }
-        }
-        .onChange(of: state.model.devices.map(\.id), initial: true) { _, ids in
-            guard state.model.isLive else { return }
-            if case .device(let id) = state.selection, !ids.contains(id) { state.selection = nil }
-            if state.selection == nil, let first = ids.first { state.selection = .device(first) }
-        }
+        // The window opens on the store once the core answers, and goes back
+        // to it when the device it shows is removed. Both are watched: with
+        // no device paired the list of devices never changes.
+        .onChange(of: state.model.isLive, initial: true) { placeSelection() }
+        .onChange(of: state.model.devices.map(\.id)) { placeSelection() }
+    }
+}
+
+extension ContentView {
+    private func placeSelection() {
+        guard state.model.isLive else { return }
+        if case .device(let id) = state.selection, state.model.device(id) == nil { state.selection = .store }
+        if state.selection == nil { state.selection = .store }
     }
 }
 
@@ -87,6 +84,11 @@ struct Sidebar: View {
         @Bindable var state = state
         let model = state.model
         List(selection: $state.selection) {
+            // The store comes first and is there whatever the devices are:
+            // its catalog is the whole store's, and only its buttons need a
+            // device (StorePage).
+            Label("Store", systemImage: "bag")
+                .tag(SidebarItem.store)
             Section("Devices") {
                 if model.isLive {
                     ForEach(model.devices) { device in
@@ -106,10 +108,8 @@ struct Sidebar: View {
                         .selectionDisabled()
                 }
             }
-            // The store is not a place beside the devices: what it offers
-            // depends on the device and goes onto it, so it is part of each
-            // device's Applets page. Below the devices is only what runs on
-            // this Mac, a developer surface kept out of the owner's way.
+            // Below the devices is only what runs on this Mac, a developer
+            // surface kept out of the owner's way.
             Section("Advanced") {
                 Label("Daemons", systemImage: "gearshape.2")
                     .tag(SidebarItem.daemons)
@@ -168,6 +168,8 @@ struct Detail: View {
             ConnectionStatusView()
         } else {
             switch state.selection {
+            case .store:
+                StorePage()
             case .device(let id):
                 if let device = model.device(id) {
                     DeviceDetailView(device: device)

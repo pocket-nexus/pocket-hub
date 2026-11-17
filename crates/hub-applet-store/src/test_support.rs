@@ -1,6 +1,6 @@
 //! For tests: a fake applet store on loopback that answers the routes Hub
 //! reads (`/v1/apps`, `/v1/packages/<sha256>`, `/v1/icons/<sha256>`,
-//! `/v1/details/<sha256>`) with faults on demand, packages built in the
+//! `/v1/details/<sha256>`, `/v1/mocks/<sha256>`) with faults on demand, packages built in the
 //! test, the real packages kept in `tests/fixtures` with the live store's
 //! details of them, and ed25519 test keys.
 
@@ -238,6 +238,7 @@ impl FakeStore {
             bytes: package.len() as u64,
             signature: String::new(),
             targets: facts.variants.iter().map(|v| v.target.clone()).collect(),
+            mock: None,
         };
         entry.signature = sign(key, &entry);
         let details = serde_json::to_vec(&plain_details(&package)).unwrap();
@@ -272,6 +273,21 @@ impl FakeStore {
             Some(details) => state.files.insert(path, serde_json::to_vec(&details).unwrap()),
             None => state.files.remove(&path),
         };
+    }
+
+    /// Gives a listed app sample data, as the store's reviewer does: the
+    /// file under `/v1/mocks/<sha256>` and its hash in the listing (which the
+    /// publisher's signature does not cover). Returns the entry as listed.
+    pub fn set_sample(&self, entry: &Entry, sample: &Value) -> Entry {
+        let bytes = serde_json::to_vec(sample).unwrap();
+        let mut entry = entry.clone();
+        entry.mock = Some(sha256(&bytes));
+        let mut state = self.state.lock().unwrap();
+        state.files.insert(format!("/v1/mocks/{}", sha256(&bytes)), bytes);
+        if let Some(app) = state.apps.iter_mut().find(|app| app["id"] == entry.id.as_str()) {
+            app["mock"] = json!(entry.mock);
+        }
+        entry
     }
 
     pub fn unlist(&self, id: &str) {
@@ -311,7 +327,7 @@ fn listed(entry: &Entry, key: &SigningKey) -> Value {
     value["created"] = json!(1_793_668_752_374u64);
     value["target"] = json!(entry.targets.first());
     value["profile"] = json!("0".repeat(64));
-    value["mock"] = Value::Null;
+    value["mock"] = json!(entry.mock);
     value
 }
 

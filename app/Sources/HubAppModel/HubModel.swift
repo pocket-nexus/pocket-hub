@@ -35,6 +35,11 @@ public final class HubModel {
     public private(set) var lastUnlink: [String: DeviceUnlinked] = [:]
     /// The latest screenshot of each device, asked for or sent unasked.
     public private(set) var screenshots: [String: ScreenshotResult] = [:]
+    /// Called with each screenshot that arrives, the device's id first:
+    /// asked for (`takeScreenshot`) or sent by the device unasked
+    /// (`device.screenshot`). The app keeps each one where the owner keeps
+    /// screenshots (ScreenshotDestination).
+    @ObservationIgnored public var onScreenshot: (@MainActor (String, ScreenshotResult) -> Void)?
     public private(set) var deviceLogs: [String: LogBuffer<DeviceLogLine>] = [:]
     /// Devices whose log this app has turned on.
     public private(set) var logsOn: Set<String> = []
@@ -227,6 +232,7 @@ public final class HubModel {
             deviceLogs[line.id, default: LogBuffer()].append(line)
         case .deviceScreenshot(let shot):
             screenshots[shot.id] = shot.result
+            onScreenshot?(shot.id, shot.result)
         case .pairingChanged(let requests):
             pairRequests = requests
             activeSetup?.pairRequestsDidChange(requests)
@@ -328,6 +334,7 @@ public final class HubModel {
         defer { takingScreenshot.remove(deviceId) }
         let result = try await client.screenshot(device: deviceId)
         screenshots[deviceId] = result
+        onScreenshot?(deviceId, result)
         return result
     }
 

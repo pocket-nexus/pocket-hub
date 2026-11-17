@@ -21,7 +21,7 @@ pub const OFFICIAL_KEY: &str = "tF8Q_hSXiYfxDdlQrpJfleDcKmkZPtQ20G_SNjtOquQ";
 pub const RESERVED_ID_PREFIX: &str = "dev.pocket-nexus.";
 
 /// One app at its newest listed version. Members Hub does not use
-/// (`profile`, `target`, `mock`, `created`) are not kept.
+/// (`profile`, `target`, `created`) are not kept.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub id: String,
@@ -45,6 +45,12 @@ pub struct Entry {
     pub signature: String,
     /// The target of every variant: the devices it runs on.
     pub targets: Vec<String>,
+    /// SHA-256 of the version's sample data (`/v1/mocks/<sha256>`), which the
+    /// store's player runs it on; absent when it has none. The store's
+    /// reviewer adds it (`/v1/admin/mock`): the publisher's signature does
+    /// not cover it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mock: Option<String>,
 }
 
 fn is_sha256(text: &str) -> bool {
@@ -58,7 +64,7 @@ impl Entry {
         if self.id.is_empty() {
             return Err("an app without an id".into());
         }
-        if !is_sha256(&self.package) || !is_sha256(&self.icon) {
+        if !is_sha256(&self.package) || !is_sha256(&self.icon) || self.mock.as_deref().is_some_and(|mock| !is_sha256(mock)) {
             return Err(format!("{}: a file is not named by a SHA-256", self.id));
         }
         if self.bytes == 0 {

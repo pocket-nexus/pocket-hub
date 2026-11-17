@@ -175,6 +175,7 @@ pub async fn dispatch(core: &Arc<Core>, client: &Client, id: &Value, method: &st
 
         methods::STORE_APPS => store_apps(core, params(method, value)?).await,
         methods::STORE_DETAILS => store_details(core, params(method, value)?).await,
+        methods::STORE_SAMPLE => store_sample(core, params(method, value)?, &progress).await,
         methods::STORE_INSTALL => store_install(core, client, method, params(method, value)?, &progress).await,
         other => Err(RpcError::method_not_found(other)),
     }
@@ -527,6 +528,8 @@ async fn store_apps(core: &Arc<Core>, p: StoreAppsParams) -> Result<Value, RpcEr
                 version: entry.version.clone(),
                 official: entry.official(&core.applets.config().official_key),
                 targets: entry.targets.clone(),
+                devices: core.applets.held_details(entry).map(|details| details.devices.iter().map(|device| DeviceName { target: device.target.clone(), name: device.name.clone() }).collect()),
+                sample: entry.mock.is_some(),
                 bytes: entry.bytes,
                 icon: core.applets.icon_path(entry).map(|path| path.display().to_string()),
                 cached: core.applets.ready(&entry.package).is_some(),
@@ -558,6 +561,30 @@ async fn store_details(core: &Arc<Core>, p: StoreDetailsParams) -> Result<Value,
         framework: details.framework.clone(),
         api: details.api,
     })
+}
+
+/// `store.sample`: the verified package and the sample data the store's
+/// player runs the applet from, downloaded when Hub's cache lacks them. No
+/// device is involved, so no mutex is taken.
+async fn store_sample(core: &Arc<Core>, p: StoreDetailsParams, progress: &Progress<'_>) -> Result<Value, RpcError> {
+    let catalog = core.applets.apps(false).await.map_err(store_error)?;
+    let entry = catalog
+        .app(&p.app)
+        .filter(|entry| entry.mock.is_some())
+        .ok_or_else(|| RpcError::op(ErrorKind::NotFound, format!("The applet store has no sample data for {}.", p.app)))?;
+    let mut last: Option<(u64, Instant)> = None;
+    core.applets
+        .package(entry, |done, total| {
+            let due = last.is_none_or(|(shown, at)| shown != done && (done == total || at.elapsed() >= Duration::from_millis(50)));
+            if due {
+                progress.send(TransferProgress { phase: "downloading".into(), done, total });
+                last = Some((done, Instant::now()));
+            }
+        })
+        .await
+        .map_err(store_error)?;
+    let mock = core.applets.sample(entry).await.map_err(store_error)?.ok_or_else(|| internal(format!("The sample data of {} is not named by the catalog.", entry.id)))?;
+    ok(StoreSample { package: core.applets.package_path(&entry.package).display().to_string(), mock: mock.display().to_string() })
 }
 
 /// `store.install`: the applet's package from the cache, or downloaded and

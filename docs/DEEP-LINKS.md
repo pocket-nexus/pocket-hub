@@ -44,27 +44,26 @@ running, and then (a window that is already open stays as it is):
    does not list is asked for once more with `refresh`: the applet may have
    been published since Hub last fetched. An id that is still not there is
    said so, and nothing else happens.
-2. **It chooses a device**, among the paired devices whose target the applet
-   has a variant for: one that is linked before one that is not, and the one
-   whose page is open before another. The window goes to that device's
-   Applets page.
-3. **It opens the applet's sheet**: what the applet is, and the one action
-   that fits the device: Install, Update when the device holds an older
-   version, Open when it holds this one. With several devices that can run
-   the applet, the sheet chooses between them. With no device paired, or
-   none that can run it, the sheet says so in place of the action. **For a
-   device that takes no applet from the computer** (an M5Stack Tab5: its
-   `supports` has no `push`, `docs/CONTROL-API.md` §2) the sheet has no
-   Install and no Update, and says where that device installs the applet:
-   its own store page.
+2. **It opens the applet's page in the Store**: the window goes to the Store
+   page, with that applet's page over its list: what the applet is, Try It on
+   its sample data, and its Install.
+3. **The device is chosen when installing**, among the paired devices whose
+   target the applet has a variant for: Install acts on the one there is, or
+   is a menu of them, each with what fits it: Install, Update when the device
+   holds an older version, Open when it holds this one. With no device
+   paired, or none that can run it, the page says so in place of Install.
+   **For a device that takes no applet from the computer** (an M5Stack Tab5:
+   its `supports` has no `push`, `docs/CONTROL-API.md` §2) there is no
+   Install and no Update, and the page says where that device installs the
+   applet: its own store page.
 
 **A link shows; it never installs.** Any page can carry a link, and a browser
 can be told to stop asking before it follows one, so what a link does by
-itself is bounded by what is safe to happen unasked: a window and a sheet.
-Installing is the owner's click in that sheet, on the device the sheet names.
-It is not the Return key's either: a link can bring the sheet up while the
-owner is typing somewhere else, so Install is never the sheet's default
-button.
+itself is bounded by what is safe to happen unasked: a window and a page.
+Installing is the owner's click on that page, on the device they choose there.
+It is not the Return key's either: a link can bring the page up while the
+owner is typing somewhere else, so Install is never the page's default
+button. Try It starts only on the owner's click too.
 
 A link carries an id and nothing else. Hub takes the applet's title, its
 package and where to fetch it from its own catalog, never from the link, and
@@ -89,9 +88,9 @@ visitor: once Hub is installed, the same link opens it.
 | | |
 | --- | --- |
 | The grammar | `app/Sources/HubAppModel/DeepLink.swift` |
-| The catalog lookup and the choice of a device | `app/Sources/HubAppModel/StoreModel.swift` |
+| The catalog lookup, and the devices that can run an applet | `app/Sources/HubAppModel/StoreModel.swift` |
 | Receiving a link, and following it | `AppDelegate` and `AppState` in `app/PocketHub/AppState.swift` |
-| The sheet | `StoreAppDetails` in `app/PocketHub/StoreSection.swift` |
+| The applet's page | `StoreAppPage` in `app/PocketHub/StoreAppPage.swift` |
 | The website's side | `store/site/src/hub.ts` in [pocket-nexus/applets](https://github.com/pocket-nexus/applets) |
 | Where a computer without Hub gets it | `site/`, served at `https://hub.pocket.nexus/` |
 

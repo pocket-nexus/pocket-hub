@@ -206,18 +206,20 @@ struct DecodingTests {
         let catalog = try decode(StoreCatalog.self, """
         {"apps":[
           {"id":"nexus.pocket.hackernews","title":"Hacker News","summary":"Top stories.","author":"pocket-nexus","version":"1.1.0",
-           "official":true,"targets":["3ds","3ds-dev"],"bytes":96512,"icon":"/tmp/i.png","cached":true,
+           "official":true,"targets":["3ds","3ds-dev"],"devices":[{"target":"3ds-dev","name":"Nintendo 3DS"}],"sample":true,
+           "bytes":96512,"icon":"/tmp/i.png","cached":true,
            "services":[],"hosts":["hacker-news.firebaseio.com"],"installed":{"version":"1.0.0","hash":"0011223344556677"},"update":true},
           {"id":"io.example.pixels","title":"Pixels","summary":"Draw.","author":"someone","version":"0.2.0","official":false,
-           "targets":["3ds"],"bytes":48000,"icon":null,"cached":false,"services":["x"],"hosts":[],"installed":null,"update":false},
+           "targets":["3ds"],"devices":null,"sample":false,"bytes":48000,"icon":null,"cached":false,"services":["x"],"hosts":[],"installed":null,"update":false},
           {"id":"io.example.all","title":"All","summary":"No device asked.","author":"someone","version":"1.0.0","official":false,
-           "targets":["tab5-home"],"bytes":1,"icon":null,"cached":true,"services":[],"hosts":[]}],
+           "targets":["tab5-home"],"devices":null,"sample":false,"bytes":1,"icon":null,"cached":true,"services":[],"hosts":[]}],
          "fetchedAt":1794398383966}
         """)
         #expect(catalog.fetchedAt == 1_794_398_383_966)
         let (hn, pixels, all) = (catalog.apps[0], catalog.apps[1], catalog.apps[2])
         #expect(hn.installed == .copy(.init(version: "1.0.0", hash: "0011223344556677")) && hn.update == true)
         #expect(hn.action == .update && hn.icon == "/tmp/i.png" && hn.bytes == 96512)
+        #expect(hn.devices == [.init(target: "3ds-dev", name: "Nintendo 3DS")] && hn.sample && pixels.devices == nil && !pixels.sample)
         #expect(pixels.installed == StoreApp.DeviceCopy.none && pixels.action == .install && pixels.icon == nil && !pixels.cached)
         #expect(all.installed == .notAsked && all.update == nil && all.action == nil, "absent without a device")
         let installedSame = StoreApp(id: "a", title: "A", summary: "", author: "", version: "1.0.0", official: true, targets: [],

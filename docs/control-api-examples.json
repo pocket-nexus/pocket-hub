@@ -4,7 +4,7 @@
     "daemons.install": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 38,
+        "id": 39,
         "method": "daemons.install",
         "params": {
           "path": "/path/to/pocket-hub/sdk/daemon/examples/link-channel"
@@ -12,7 +12,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 38,
+        "id": 39,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "version": "0.1.0",
@@ -31,7 +31,7 @@
           "params": {
             "stage": "installing",
             "message": "Installing the daemon package /path/to/pocket-hub/sdk/daemon/examples/link-channel.",
-            "id": 38
+            "id": 39
           }
         }
       ]
@@ -39,13 +39,13 @@
     "daemons.list": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 40,
+        "id": 41,
         "method": "daemons.list",
         "params": {}
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 40,
+        "id": 41,
         "result": {
           "daemons": [
             {
@@ -65,7 +65,7 @@
     "daemons.logs": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 39,
+        "id": 40,
         "method": "daemons.logs",
         "params": {
           "id": "dev.pocket-nexus.link-channel",
@@ -74,7 +74,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 39,
+        "id": 40,
         "result": {
           "lines": [
             {
@@ -89,7 +89,7 @@
     "daemons.remove": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 63,
+        "id": 64,
         "method": "daemons.remove",
         "params": {
           "id": "dev.pocket-nexus.link-channel"
@@ -97,14 +97,14 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 63,
+        "id": 64,
         "result": {}
       }
     },
     "daemons.restart": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 42,
+        "id": 43,
         "method": "daemons.restart",
         "params": {
           "id": "dev.pocket-nexus.link-channel"
@@ -112,7 +112,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 42,
+        "id": 43,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "version": "0.1.0",
@@ -132,7 +132,7 @@
     "daemons.runtime": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 37,
+        "id": 38,
         "method": "daemons.runtime",
         "params": {
           "install": null
@@ -140,7 +140,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 37,
+        "id": 38,
         "result": {
           "version": "1.4.4",
           "installed": true,
@@ -151,7 +151,7 @@
     "daemons.start": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 41,
+        "id": 42,
         "method": "daemons.start",
         "params": {
           "id": "dev.pocket-nexus.link-channel"
@@ -159,7 +159,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 41,
+        "id": 42,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "version": "0.1.0",
@@ -179,7 +179,7 @@
     "daemons.stop": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 43,
+        "id": 44,
         "method": "daemons.stop",
         "params": {
           "id": "dev.pocket-nexus.link-channel"
@@ -187,7 +187,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 43,
+        "id": 44,
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "version": "0.1.0",
@@ -674,13 +674,13 @@
     "hub.shutdown": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 68,
+        "id": 69,
         "method": "hub.shutdown",
         "params": {}
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 68,
+        "id": 69,
         "result": {}
       }
     },
@@ -729,7 +729,7 @@
     "pairing.answer": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 51,
+        "id": 52,
         "method": "pairing.answer",
         "params": {
           "device": "*",
@@ -738,7 +738,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 51,
+        "id": 52,
         "result": {
           "id": "00000000000000a5",
           "kind": "tab5",
@@ -767,7 +767,7 @@
     "pairing.decline": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 49,
+        "id": 50,
         "method": "pairing.decline",
         "params": {
           "device": "00000000000000a5"
@@ -775,20 +775,20 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 49,
+        "id": 50,
         "result": {}
       }
     },
     "pairing.list": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 45,
+        "id": 46,
         "method": "pairing.list",
         "params": {}
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 45,
+        "id": 46,
         "result": {
           "requests": [
             {
@@ -1041,6 +1041,17 @@
                 "3ds-dev",
                 "tab5-home"
               ],
+              "devices": [
+                {
+                  "target": "tab5-home",
+                  "name": "M5Stack Tab5"
+                },
+                {
+                  "target": "3ds-dev",
+                  "name": "Nintendo 3DS"
+                }
+              ],
+              "sample": true,
               "bytes": 131576,
               "icon": "/tmp/hub-home/cache/store/icons/b7f6f602630cda7c93b6187a77cdfd5736c2061801cacc6153272716c61ba879.png",
               "cached": true,
@@ -1066,6 +1077,13 @@
               "targets": [
                 "3ds-dev"
               ],
+              "devices": [
+                {
+                  "target": "3ds-dev",
+                  "name": "Nintendo 3DS"
+                }
+              ],
+              "sample": false,
               "bytes": 440,
               "icon": null,
               "cached": false,
@@ -1212,6 +1230,36 @@
           }
         }
       ]
+    },
+    "store.sample": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 35,
+        "method": "store.sample",
+        "params": {
+          "app": "dev.pocket-nexus.notes"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 35,
+        "result": {
+          "package": "/tmp/hub-home/cache/store/packages/a5907024ea6d26b469a4c53cd143de29a7aab1193fa08ae682cee56b8393eda6.pocket",
+          "mock": "/tmp/hub-home/cache/store/mocks/4d6ae994461adc202dd3a837065474d2b821e0c95fe5b1b118a4d55419d26fdb.json"
+        }
+      },
+      "progress": [
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "phase": "downloading",
+            "done": 131576,
+            "total": 131576,
+            "id": 35
+          }
+        }
+      ]
     }
   },
   "notifications": {
@@ -1219,7 +1267,7 @@
       "jsonrpc": "2.0",
       "method": "cancel",
       "params": {
-        "id": 36
+        "id": 37
       }
     }
   },
@@ -1515,7 +1563,7 @@
     "cancelled": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 36,
+        "id": 37,
         "method": "devices.push",
         "params": {
           "device": "0123456789abcdef",
@@ -1524,7 +1572,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 36,
+        "id": 37,
         "error": {
           "code": 1,
           "message": "The call was cancelled.",
@@ -1537,7 +1585,7 @@
     "daemon": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 66,
+        "id": 67,
         "method": "daemons.start",
         "params": {
           "id": "dev.test.broken"
@@ -1545,7 +1593,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 66,
+        "id": 67,
         "error": {
           "code": 1,
           "message": "The daemon did not start: the process exited before its daemon.hello (exited with code 3).",
@@ -1647,7 +1695,7 @@
     "pairing": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 47,
+        "id": 48,
         "method": "pairing.answer",
         "params": {
           "device": "*",
@@ -1656,7 +1704,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 47,
+        "id": 48,
         "error": {
           "code": 1,
           "message": "The code is not the one the device shows. Nothing was stored.",
@@ -1722,7 +1770,7 @@
     "store": {
       "request": {
         "jsonrpc": "2.0",
-        "id": 35,
+        "id": 36,
         "method": "store.install",
         "params": {
           "device": "0123456789abcdef",
@@ -1731,7 +1779,7 @@
       },
       "response": {
         "jsonrpc": "2.0",
-        "id": 35,
+        "id": 36,
         "error": {
           "code": 1,
           "message": "The package of io.example.forged 1.0.0 is rejected: the publisher's signature of io.example.forged 1.0.0 does not verify.",

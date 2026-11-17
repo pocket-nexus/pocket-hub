@@ -24,10 +24,16 @@
 //!   row is offered once its package is verified in the cache.
 //! - **An app's details** are `GET /v1/details/<sha256>` of the package the
 //!   held catalog names: the store reads them out of the package, and Hub
-//!   reads no manifest of its own. They are asked for when a caller wants
-//!   them and kept in memory while the catalog they were asked under is
-//!   held: the store's reading of a package grows (a new device gets its
-//!   name), so they are not kept for good as a package is.
+//!   reads no manifest of its own. They are kept in memory and read again
+//!   after each catalog fetch, one app at a time (`fetch_details`): the
+//!   store's reading of a package grows (a new device gets its name), so
+//!   they are not kept for good as a package is. A read that fails drops
+//!   what was held, so nothing older stands in for them; a caller asks for
+//!   those Hub does not hold.
+//! - **An app's sample data** (`/v1/mocks/<sha256>`, the JSON the store's
+//!   player answers an applet's requests from) is content-addressed like an
+//!   icon: `<cache>/mocks/<sha256>.json`, downloaded when a caller wants it
+//!   and checked against the SHA-256 the catalog names.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -52,6 +58,8 @@ pub const MAX_AGE: Duration = Duration::from_secs(10 * 60);
 pub const CATALOG_MAX_BYTES: usize = 8 * 1024 * 1024;
 /// The store takes icons of at most 128 KiB (`ICON_MAX`).
 pub const ICON_MAX_BYTES: usize = 128 * 1024;
+/// Sample data over this is not the store's: the largest today is 3 MB.
+pub const SAMPLE_MAX_BYTES: usize = 32 * 1024 * 1024;
 
 /// How the client is set up.
 #[derive(Clone)]
@@ -158,12 +166,13 @@ struct State {
     /// not download them again; an install does.
     rejected: HashMap<String, String>,
     inflight: HashMap<String, watch::Receiver<Fetch>>,
-    /// Apps' details by their package's SHA-256, asked for under the held
-    /// catalog; another catalog drops them.
+    /// Apps' details by their package's SHA-256, read again after each
+    /// catalog fetch (`fetch_details`).
     details: HashMap<String, Arc<Details>>,
     prefetching: bool,
     prefetch_again: bool,
     fetching_icons: bool,
+    fetching_details: bool,
     refreshing: bool,
 }
 
@@ -174,6 +183,9 @@ pub struct AppletStore {
     state: Mutex<State>,
     /// One catalog fetch at a time.
     fetch_lock: tokio::sync::Mutex<()>,
+    /// One request for details at a time: a caller that waited finds what
+    /// the background's request kept (`fetch_details`) instead of asking again.
+    details_lock: tokio::sync::Mutex<()>,
     /// Catalog fetches completed: a caller that waited for the lock knows
     /// whether one ended meanwhile.
     fetches: std::sync::atomic::AtomicU64,
@@ -256,6 +268,7 @@ impl AppletStore {
             http,
             state: Mutex::new(State { catalog: held.map(Arc::new), ..State::default() }),
             fetch_lock: tokio::sync::Mutex::new(()),
+            details_lock: tokio::sync::Mutex::new(()),
             fetches: std::sync::atomic::AtomicU64::new(0),
             events: broadcast::channel(64).0,
         });
@@ -375,7 +388,6 @@ impl AppletStore {
             let mut state = self.state.lock().unwrap();
             let changed = state.catalog.as_ref().is_none_or(|held| held.apps != catalog.apps);
             state.catalog = Some(catalog.clone());
-            state.details.clear();
             changed
         };
         if changed {
@@ -384,6 +396,8 @@ impl AppletStore {
         self.prune(&catalog);
         let this = self.clone();
         tokio::spawn(async move { this.fetch_icons().await });
+        let this = self.clone();
+        tokio::spawn(async move { this.fetch_details().await });
         self.prefetch((self.config.wanted_targets)());
     }
 
@@ -391,6 +405,10 @@ impl AppletStore {
 
     pub fn package_path(&self, sha256: &str) -> PathBuf {
         self.config.cache.join("packages").join(format!("{sha256}.pocket"))
+    }
+
+    pub fn sample_file(&self, sha256: &str) -> PathBuf {
+        self.config.cache.join("mocks").join(format!("{sha256}.json"))
     }
 
     pub fn icon_file(&self, sha256: &str) -> PathBuf {
@@ -620,14 +638,23 @@ impl AppletStore {
     // --- details ---------------------------------------------------------------
 
     /// The details of the entry's package (`/v1/details/<sha256>`): the ones
-    /// kept since the held catalog was fetched, else asked for now. A store
-    /// that does not answer them, or not with a package's details, is
-    /// `Unreachable`; nothing older stands in for them.
+    /// Hub holds, else asked for now and kept. A store that does not answer
+    /// them, or not with a package's details, is `Unreachable`.
     pub async fn details(&self, entry: &Entry) -> Result<Arc<Details>, StoreError> {
-        if let Some(kept) = self.state.lock().unwrap().details.get(&entry.package) {
-            return Ok(kept.clone());
+        if let Some(kept) = self.held_details(entry) {
+            return Ok(kept);
         }
-        let asked_under = self.held();
+        let _one = self.details_lock.lock().await;
+        if let Some(kept) = self.held_details(entry) {
+            return Ok(kept);
+        }
+        let details = Arc::new(self.read_details(entry).await?);
+        self.state.lock().unwrap().details.insert(entry.package.clone(), details.clone());
+        Ok(details)
+    }
+
+    /// The store's answer at `/v1/details/<sha256>`.
+    async fn read_details(&self, entry: &Entry) -> Result<Details, StoreError> {
         let url = format!("{}/v1/details/{}", self.config.base_url, entry.package);
         let unreachable = |why: String| StoreError::Unreachable(format!("The details of {} could not be read from the applet store at {}: {why}.", entry.id, self.config.base_url));
         let work = async {
@@ -645,14 +672,95 @@ impl AppletStore {
             Ok(body)
         };
         let body = tokio::time::timeout(self.config.request_timeout, work).await.map_err(|_| unreachable(format!("no answer within {} s", self.config.request_timeout.as_secs())))??;
-        let details = Arc::new(details::parse(&body).map_err(unreachable)?);
-        // Kept only under the catalog they were asked under: one fetched
-        // meanwhile has dropped the others, and these may be older than it.
-        let mut state = self.state.lock().unwrap();
-        if state.catalog.as_ref().map(Arc::as_ptr) == asked_under.as_ref().map(Arc::as_ptr) {
-            state.details.insert(entry.package.clone(), details.clone());
+        details::parse(&body).map_err(unreachable)
+    }
+
+    /// The details of the entry's package when Hub holds them, without asking.
+    pub fn held_details(&self, entry: &Entry) -> Option<Arc<Details>> {
+        self.state.lock().unwrap().details.get(&entry.package).cloned()
+    }
+
+    /// Reads the details of every app of the held catalog again, one at a
+    /// time, and forgets those of packages it no longer names. A read that
+    /// fails drops what was held. `Catalog` follows when what Hub holds
+    /// changed: what `store.apps` answers (each app's devices) changed with it.
+    async fn fetch_details(self: Arc<Self>) {
+        {
+            let mut state = self.state.lock().unwrap();
+            if state.fetching_details {
+                return;
+            }
+            state.fetching_details = true;
         }
-        Ok(details)
+        let catalog = self.held();
+        let mut changed = false;
+        if let Some(catalog) = &catalog {
+            let named: HashSet<&str> = catalog.apps.iter().map(|app| app.package.as_str()).collect();
+            let mut state = self.state.lock().unwrap();
+            let before = state.details.len();
+            state.details.retain(|sha, _| named.contains(sha.as_str()));
+            changed |= state.details.len() != before;
+        }
+        for entry in catalog.iter().flat_map(|c| c.apps.iter()) {
+            let _one = self.details_lock.lock().await;
+            let read = self.read_details(entry).await;
+            let mut state = self.state.lock().unwrap();
+            match read {
+                Ok(details) => {
+                    let new = state.details.get(&entry.package).is_none_or(|held| **held != details);
+                    if new {
+                        state.details.insert(entry.package.clone(), Arc::new(details));
+                    }
+                    changed |= new;
+                }
+                Err(error) => {
+                    tracing::warn!(id = %entry.id, %error, "an applet's details are not held");
+                    changed |= state.details.remove(&entry.package).is_some();
+                }
+            }
+        }
+        self.state.lock().unwrap().fetching_details = false;
+        if changed && let Some(catalog) = catalog {
+            self.emit(StoreEvent::Catalog { fetched_at: catalog.fetched_at });
+        }
+    }
+
+    // --- sample data -------------------------------------------------------------
+
+    /// The entry's sample data, checked against the SHA-256 the catalog names:
+    /// from the cache, else downloaded. None when the version has none.
+    pub async fn sample(&self, entry: &Entry) -> Result<Option<PathBuf>, StoreError> {
+        let Some(sha) = entry.mock.as_deref() else { return Ok(None) };
+        let path = self.sample_file(sha);
+        if let Ok(bytes) = std::fs::read(&path) {
+            if sha256_hex(&bytes) == sha {
+                return Ok(Some(path));
+            }
+            tracing::warn!(id = %entry.id, "cached sample data does not match its SHA-256; it is downloaded again");
+            let _ = std::fs::remove_file(&path);
+        }
+        let url = format!("{}/v1/mocks/{sha}", self.config.base_url);
+        let unreachable = |why: String| StoreError::Unreachable(format!("The sample data of {} could not be downloaded from {}: {why}.", entry.id, self.config.base_url));
+        let work = async {
+            let mut response = self.http.get(&url).send().await.map_err(|error| unreachable(error_text(&error)))?;
+            if response.status() != reqwest::StatusCode::OK {
+                return Err(unreachable(format!("the store answered {}", response.status())));
+            }
+            let mut body = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(|error| unreachable(error_text(&error)))? {
+                body.extend_from_slice(&chunk);
+                if body.len() > SAMPLE_MAX_BYTES {
+                    return Err(unreachable("it is longer than 32 MiB, which is not the store's".into()));
+                }
+            }
+            Ok(body)
+        };
+        let body = tokio::time::timeout(self.config.request_timeout, work).await.map_err(|_| unreachable(format!("no answer within {} s", self.config.request_timeout.as_secs())))??;
+        if sha256_hex(&body) != sha {
+            return Err(StoreError::Rejected(format!("The sample data of {} {} is rejected: its bytes do not match the SHA-256 the catalog names.", entry.id, entry.version)));
+        }
+        write_atomic(&path, &body).map_err(|error| StoreError::Local(format!("The sample data of {} could not be written to the cache: {error}.", entry.id)))?;
+        Ok(Some(path))
     }
 
     // --- icons -----------------------------------------------------------------
@@ -708,13 +816,14 @@ impl AppletStore {
         write_atomic(&self.icon_file(&entry.icon), &body).map_err(|error| error.to_string())
     }
 
-    /// Removes the cached packages and icons no app of the catalog names: the
+    /// Removes the cached packages, icons and sample data no app of the catalog names: the
     /// store lists only newest versions, so these are never asked for again.
     fn prune(&self, catalog: &Catalog) {
         let packages: HashSet<String> = catalog.apps.iter().map(|app| format!("{}.pocket", app.package)).collect();
         let icons: HashSet<String> = catalog.apps.iter().map(|app| format!("{}.png", app.icon)).collect();
+        let samples: HashSet<String> = catalog.apps.iter().filter_map(|app| app.mock.as_ref()).map(|sha| format!("{sha}.json")).collect();
         let inflight: HashSet<String> = self.state.lock().unwrap().inflight.keys().map(|sha| format!("{sha}.pocket")).collect();
-        for (dir, keep) in [(self.config.cache.join("packages"), &packages), (self.config.cache.join("icons"), &icons)] {
+        for (dir, keep) in [(self.config.cache.join("packages"), &packages), (self.config.cache.join("icons"), &icons), (self.config.cache.join("mocks"), &samples)] {
             let Ok(entries) = std::fs::read_dir(&dir) else { continue };
             for item in entries.flatten() {
                 let name = item.file_name().to_string_lossy().into_owned();

@@ -6,13 +6,16 @@ import SwiftUI
 
 /// Where the window is: the sidebar selection and the sheets.
 enum SidebarItem: Hashable {
+    /// The applet store: the whole catalog, whatever devices are paired.
+    case store
     case device(String)
     case daemons
 }
 
-/// The sections of a device's page.
+/// The sections of a device's page. A screenshot has no section: it is
+/// kept where the owner keeps screenshots (AppState.keep).
 enum DeviceTab: Hashable {
-    case applets, screenshot, log, details
+    case applets, log, details
 }
 
 /// State shared by the window, the menu bar item and the app delegate.
@@ -43,9 +46,17 @@ final class AppState {
     /// menu command).
     var importingApplet = false
     var confirmingRemoveDevice = false
-    /// The store applet whose sheet is open: from a row's Details, or from a
-    /// link (docs/DEEP-LINKS.md §2).
-    var storeDetails: StoreApp?
+    /// The Store page's navigation: the ids of the applets whose pages are
+    /// open over its list, the last one shown. A row opens one, so do an
+    /// installed applet's Details and a link (docs/DEEP-LINKS.md §2).
+    var storePath: [String] = []
+    /// The device the Store page lists applets for, by the store's name for
+    /// it; nil lists every applet.
+    var storeFilter: String?
+    #if DEBUG
+    /// Counts the debug command `store try`: an applet page's Try It.
+    var debugTries = 0
+    #endif
     /// Counts the links followed, so one still waiting for the core gives way
     /// to a newer one.
     private var linksFollowed = 0
@@ -64,6 +75,7 @@ final class AppState {
         // POCKET_HUB_NO_LAUNCH=1 keeps the app from starting a core (useful with a mock started by hand).
         let launch = ProcessInfo.processInfo.environment["POCKET_HUB_NO_LAUNCH"] != "1"
         model = HubModel(clientName: "Pocket Hub", version: version, launchCore: launch)
+        model.onScreenshot = { [weak self] deviceId, shot in self?.keep(shot, of: deviceId) }
         model.start()
         Task { await self.watchPairRequests() }
         #if DEBUG
@@ -115,7 +127,6 @@ final class AppState {
                 withObservationTracking {
                     _ = model.pairRequests
                     _ = showingSetup
-                    _ = storeDetails
                 } onChange: { continuation.resume() }
             }
         }
@@ -125,9 +136,8 @@ final class AppState {
         func key(_ request: PairRequest) -> String { "\(request.device) \(request.since)" }
         let waiting = model.pairRequests
         presentedRequests.formIntersection(waiting.map(key))
-        // A sheet that is open handles requests itself (SetupFlowModel), and
-        // an applet's sheet is not covered by another.
-        guard !showingSetup, storeDetails == nil, let request = waiting.first(where: { !presentedRequests.contains(key($0)) }) else { return }
+        // A sheet that is open handles requests itself (SetupFlowModel).
+        guard !showingSetup, let request = waiting.first(where: { !presentedRequests.contains(key($0)) }) else { return }
         presentedRequests.insert(key(request))
         startPairing(request)
     }
@@ -171,52 +181,49 @@ final class AppState {
         }
     }
 
-    /// Says what a link could not show. The sheet an earlier link opened
-    /// closes first: the window's alert would wait behind it until the owner
-    /// closed it (measured), and the newer link is the one being answered.
+    /// Says what a link could not show.
     private func reportLink(_ failure: UserFacingError) {
-        storeDetails = nil
         presentedError = failure
     }
 
-    /// Opens the store's sheet of an applet, on a device that can run it when
-    /// there is one.
+    /// Opens an applet's page in the Store, over its list: from a link, or
+    /// from an installed applet's Details. The device is chosen when
+    /// installing, on that page.
     func show(storeApp app: StoreApp) {
-        showDevice(for: app)
-        storeDetails = app
+        selection = .store
+        storePath = [app.id]
         showWindow()
     }
 
-    /// Puts the window on the Applets page of the device that fits `app` best
-    /// (StoreModel.device(for:preferring:)), where the store's list says what
-    /// that device holds of it. With no device that can run it, the window
-    /// stays where it is.
-    func showDevice(for app: StoreApp) {
-        guard let device = model.store.device(for: app, preferring: selectedDeviceID) else { return }
-        show(app, on: device.id)
-    }
-
-    /// The same, for a device the owner chose in the sheet.
-    func show(_ app: StoreApp, on deviceId: String) {
-        selection = .device(deviceId)
-        deviceTab = .applets
-        model.store.choose(device: deviceId)
-    }
-
-    /// Takes a screenshot from anywhere (menu bar, keyboard), copies it and shows it.
-    func takeScreenshot(of deviceId: String, reveal: Bool) {
+    /// Takes a screenshot from anywhere (toolbar, menu bar, keyboard). It is
+    /// kept as every screenshot is (`keep`).
+    func takeScreenshot(of deviceId: String) {
         Task {
             do {
-                let shot = try await model.takeScreenshot(of: deviceId)
-                await ScreenshotFile.copyToPasteboard(path: shot.path)
-                if reveal {
-                    deviceTab = .screenshot
-                    show(device: deviceId)
-                }
+                try await model.takeScreenshot(of: deviceId)
             } catch {
                 let device = model.device(deviceId)
                 presentedError = UserFacingError(error, deviceName: device?.displayName, kind: device?.kind ?? DeviceKind(rawValue: ""))
                 if presentedError != nil { showWindow() }
+            }
+        }
+    }
+
+    /// Keeps a screenshot that arrived, asked for or sent by the device: a
+    /// copy in the folder where this Mac keeps its own screenshots
+    /// (ScreenshotDestination), as Simulator keeps a simulated device's, and
+    /// the image on the clipboard. No page shows it.
+    private func keep(_ shot: ScreenshotResult, of deviceId: String) {
+        let name = model.device(deviceId)?.displayName ?? deviceId
+        let folder = ScreenshotDestination.folder()
+        Task {
+            await ScreenshotFile.copyToPasteboard(path: shot.path)
+            do {
+                try await ScreenshotFile.copy(path: shot.path, into: folder, device: name)
+            } catch {
+                presentedError = .screenshotNotSaved(folder: FileManager.default.displayName(atPath: folder.path),
+                                                     detail: error.localizedDescription)
+                showWindow()
             }
         }
     }

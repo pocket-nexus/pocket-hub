@@ -155,9 +155,17 @@ struct HubModelTests {
         let h = try await Harness(scenario)
         defer { Task { await h.tearDown() } }
         let living = "0123456789abcdef"
+        // Every screenshot reaches the app, asked for or sent unasked: the
+        // app keeps each where the owner keeps screenshots.
+        var arrived: [(String, ScreenshotResult)] = []
+        h.model.onScreenshot = { arrived.append(($0, $1)) }
         let shot = try await h.model.takeScreenshot(of: living)
         #expect(h.model.screenshots[living] == shot)
         #expect(FileManager.default.fileExists(atPath: shot.path))
+        #expect(arrived.count == 1 && arrived.first?.0 == living && arrived.first?.1 == shot)
+        await h.core.emit("device.screenshot", ["id": .string(living), "path": "/tmp/x.png", "width": 400, "height": 480, "frame": 9])
+        await eventually("unasked screenshot") { arrived.count == 2 }
+        #expect(arrived.last?.1.frame == 9)
 
         try await h.model.setLogs(true, for: living)
         #expect(h.model.logsOn.contains(living))

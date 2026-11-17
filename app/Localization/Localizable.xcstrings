@@ -65,22 +65,6 @@
         }
       }
     },
-    "%@ hasn't connected yet" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ hasn't connected yet"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 还没有连接过"
-          }
-        }
-      }
-    },
     "%@ hasn't connected yet, so Pocket Hub can't tell whether it runs this applet." : {
       "localizations" : {
         "en" : {
@@ -305,6 +289,16 @@
         }
       }
     },
+    "%@ — Busy" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 忙碌中"
+          }
+        }
+      }
+    },
     "%@ — Connected" : {
       "localizations" : {
         "en" : {
@@ -333,6 +327,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ — 已连接 · 有可用更新"
+          }
+        }
+      }
+    },
+    "%@ — Install It on the Device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 请在设备上安装"
+          }
+        }
+      }
+    },
+    "%@ — Loading…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 正在载入…"
+          }
+        }
+      }
+    },
+    "%@ — Not Connected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 未连接"
           }
         }
       }
@@ -517,6 +541,16 @@
         }
       }
     },
+    "Add a device to Pocket Hub to install applets on it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先在 Pocket Hub 中添加一台设备，才能把小程序安装到设备上。"
+          }
+        }
+      }
+    },
     "Add a device to Pocket Hub to install this applet on it." : {
       "localizations" : {
         "en" : {
@@ -597,18 +631,12 @@
         }
       }
     },
-    "All Installed" : {
+    "All" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "All Installed"
-          }
-        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已全部安装"
+            "value" : "全部"
           }
         }
       }
@@ -767,22 +795,6 @@
         }
       }
     },
-    "Available in the Store" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Available in the Store"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "商店中可安装"
-          }
-        }
-      }
-    },
     "Available when Pocket Hub runs from its app bundle." : {
       "localizations" : {
         "en" : {
@@ -875,22 +887,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "取消"
-          }
-        }
-      }
-    },
-    "Capture both screens of the console as they are now." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Capture both screens of the console as they are now."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "截取主机两块屏幕当前的画面。"
           }
         }
       }
@@ -1067,6 +1063,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请选择 SD 卡本身（包含 3ds 文件夹的那一个）。"
+          }
+        }
+      }
+    },
+    "Choose the device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择设备"
           }
         }
       }
@@ -1307,22 +1313,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "继续"
-          }
-        }
-      }
-    },
-    "Copy" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copy"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拷贝"
           }
         }
       }
@@ -1679,22 +1669,6 @@
         }
       }
     },
-    "Everything the store offers for this device is on it." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Everything the store offers for this device is on it."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "商店为这台设备提供的小程序都已安装。"
-          }
-        }
-      }
-    },
     "Exit ftpd and open Pocket Shell on the 3DS. If it doesn't connect within a minute, run the setup again." : {
       "localizations" : {
         "en" : {
@@ -2005,6 +1979,16 @@
         }
       }
     },
+    "Install on %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装到 %@"
+          }
+        }
+      }
+    },
     "Install one from the store on the device itself." : {
       "localizations" : {
         "en" : {
@@ -2033,6 +2017,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装版本 %@"
+          }
+        }
+      }
+    },
+    "Install version %@ on %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install version %1$@ on %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %2$@ 上安装版本 %1$@"
           }
         }
       }
@@ -2815,22 +2815,6 @@
         }
       }
     },
-    "No Screenshot Yet" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No Screenshot Yet"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "还没有截图"
-          }
-        }
-      }
-    },
     "No devices connected" : {
       "localizations" : {
         "en" : {
@@ -3039,6 +3023,16 @@
         }
       }
     },
+    "On sample data: it reaches no device and no account." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用样例数据运行：不会连接任何设备或账号。"
+          }
+        }
+      }
+    },
     "On the Tab5, open **Settings**, then **Mac**, and choose **Pair a Computer…**" : {
       "localizations" : {
         "en" : {
@@ -3083,22 +3077,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在你的 3DS 上退出 ftpd。"
-          }
-        }
-      }
-    },
-    "Once it connects, the store shows the applets it can run." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Once it connects, the store shows the applets it can run."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "连接后，商店会显示它能运行的小程序。"
           }
         }
       }
@@ -3243,6 +3221,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在设备上打开 Pocket Shell 即可连接。"
+          }
+        }
+      }
+    },
+    "Open on %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 上打开"
           }
         }
       }
@@ -3643,6 +3631,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pocket Hub 将已配对的设备、守护进程和截图保存在这里。设置 POCKET_HUB_HOME 可使用其他文件夹。"
+          }
+        }
+      }
+    },
+    "Pocket Hub saves screenshots in %@, where this Mac saves its own. Check that the folder exists and that Pocket Hub may write to it. The screenshot is on the clipboard." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub 把截图存储在“%@”，即这台 Mac 存储截图的位置。请检查该文件夹是否存在，以及 Pocket Hub 能否写入。截图已拷贝到剪贴板。"
           }
         }
       }
@@ -4063,18 +4061,12 @@
         }
       }
     },
-    "Save…" : {
+    "Save a screenshot of both screens to %@" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save…"
-          }
-        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "存储…"
+            "value" : "将两个屏幕的截图存储到“%@”"
           }
         }
       }
@@ -4085,38 +4077,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "屏幕"
-          }
-        }
-      }
-    },
-    "Screenshot" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Screenshot"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "截图"
-          }
-        }
-      }
-    },
-    "Screenshot of %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Screenshot of %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 的截图"
           }
         }
       }
@@ -4313,6 +4273,16 @@
         }
       }
     },
+    "Show %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看 %@"
+          }
+        }
+      }
+    },
     "Show Log" : {
       "localizations" : {
         "en" : {
@@ -4373,6 +4343,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Pocket Hub 中显示"
+          }
+        }
+      }
+    },
+    "Show the applets for one device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只显示适用于某台设备的小程序"
           }
         }
       }
@@ -4601,6 +4581,16 @@
         }
       }
     },
+    "Store" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "商店"
+          }
+        }
+      }
+    },
     "System Language" : {
       "localizations" : {
         "en" : {
@@ -4617,22 +4607,6 @@
         }
       }
     },
-    "Take Another" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Take Another"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "再截一张"
-          }
-        }
-      }
-    },
     "Take Screenshot" : {
       "localizations" : {
         "en" : {
@@ -4645,22 +4619,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "截图"
-          }
-        }
-      }
-    },
-    "Take a screenshot of both screens" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Take a screenshot of both screens"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "截取两块屏幕的画面"
           }
         }
       }
@@ -4761,6 +4719,16 @@
         }
       }
     },
+    "The applet stopped." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小程序已停止。"
+          }
+        }
+      }
+    },
     "The code on the device" : {
       "localizations" : {
         "en" : {
@@ -4793,18 +4761,18 @@
         }
       }
     },
-    "The connection to %@ ended while installing %@. When it reconnects, this list shows whether %@ was installed." : {
+    "The connection to %@ ended while installing %@. When it reconnects, this page shows whether %@ was installed." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The connection to %@ ended while installing %@. When it reconnects, this list shows whether %@ was installed."
+            "value" : "The connection to %1$@ ended while installing %2$@. When it reconnects, this page shows whether %3$@ was installed."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装 %2$@ 时与 %1$@ 的连接断开了。它重新连接后，这个列表会显示 %3$@ 是否已安装。"
+            "value" : "安装 %2$@ 时与 %1$@ 的连接断开了。它重新连接后，这个页面会显示 %3$@ 是否已安装。"
           }
         }
       }
@@ -5065,6 +5033,16 @@
         }
       }
     },
+    "The device's Back button" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备的返回键"
+          }
+        }
+      }
+    },
     "The download didn't finish." : {
       "localizations" : {
         "en" : {
@@ -5177,6 +5155,16 @@
         }
       }
     },
+    "The screenshot couldn't be saved." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法存储截图。"
+          }
+        }
+      }
+    },
     "The setup didn't finish." : {
       "localizations" : {
         "en" : {
@@ -5209,18 +5197,22 @@
         }
       }
     },
-    "The store offers nothing for this device yet." : {
+    "The store offers nothing for %@ yet." : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The store offers nothing for this device yet."
-          }
-        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "商店暂时没有适用于这台设备的小程序。"
+            "value" : "商店暂时没有适用于 %@ 的小程序。"
+          }
+        }
+      }
+    },
+    "The store offers nothing yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "商店里暂时没有小程序。"
           }
         }
       }
@@ -5445,6 +5437,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重试"
+          }
+        }
+      }
+    },
+    "Try It" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "试玩"
           }
         }
       }
@@ -5865,6 +5867,16 @@
         }
       }
     },
+    "Update on %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 上更新"
+          }
+        }
+      }
+    },
     "Update on the device" : {
       "localizations" : {
         "en" : {
@@ -6185,22 +6197,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设备具备时它会使用的功能"
-          }
-        }
-      }
-    },
-    "What this applet reaches, and where it runs" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What this applet reaches, and where it runs"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这个小程序会连接哪里、能在哪些设备上运行"
           }
         }
       }

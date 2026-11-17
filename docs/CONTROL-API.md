@@ -175,6 +175,8 @@ is the same object in a Device's `busy` and in the error `busy`.
 | `title`, `summary`, `author`, `version` | string | as published |
 | `official` | boolean | published with the store's official key |
 | `targets` | array | the device targets the package has a variant for (`3ds-dev`, …) |
+| `devices` | array or null | the devices the package was built for, in the store's order: `{target, name}` as `StoreDetails` names them. Null until Hub holds the details of this version: it reads every app's after each catalog fetch, and `store.changed` follows when they change |
+| `sample` | boolean | the store has sample data for this version: the store's player runs it on that data (`store.sample`) |
 | `bytes` | integer | the package's size |
 | `icon` | string or null | absolute path of the applet's icon (a PNG) in Hub's cache; null until Hub has fetched it |
 | `cached` | boolean | Hub holds the verified package. A device's own store page lists an applet only once this is true |
@@ -334,7 +336,8 @@ one offer on the computer and on the device.
 | Method | Params | Result | Mutex |
 | --- | --- | --- | --- |
 | `store.apps` | `{device?, refresh?}` | `{apps: [StoreApp], fetchedAt}`. With `device`: the applets that have a variant for that device's target, each with `installed` and `update`; a device that has never linked has no known target and is offered none. Hub answers from the catalog it holds and fetches it again when it is older than 10 minutes or `refresh` is true. **When that fetch fails the answer is the error `store`, not the older catalog** | |
-| `store.details` | `{app}` | `StoreDetails` of the applet's newest listed version. Hub asks the store for the details of the package its catalog names (fetched again past 10 minutes, as for `store.apps`) and keeps them while it holds that catalog. An applet the catalog does not list is `not_found`; a store that does not answer them is the error `store` | |
+| `store.details` | `{app}` | `StoreDetails` of the applet's newest listed version. Hub asks the store for the details of the package its catalog names (fetched again past 10 minutes, as for `store.apps`), keeps them, and reads them again after each catalog fetch; a read that fails drops them. An applet the catalog does not list is `not_found`; a store that does not answer them is the error `store` | |
+| `store.sample` | `{app}` | `{package, mock}`: absolute paths in Hub's cache of the applet's verified package (every variant) and of its sample data, a JSON document checked against the SHA-256 the catalog names. What the store's player needs to run the applet on a computer, on that data alone (pocket-nexus/applets `store/play/player.ts`). Hub downloads what its cache lacks. Progress: `{phase, done, total}`, `phase` being `downloading` for the package. An applet the catalog does not list, or with no sample data (`sample` false), is `not_found`. The store's reviewer adds sample data: the publisher's signature does not cover it | |
 | `store.install` | `{device, app}` | as `devices.push`. Hub downloads the applet's package when its cache lacks it, checks it, and installs it on the device; an applet with no variant for the device's target is `not_found`. Progress: `{phase, done, total}`, `phase` being `downloading` (once, with `done` equal to `total`, when the package was cached) and then those of `devices.push`. The device is held from the start, the download included, with the method `store.install` | yes |
 
 **Hub fetches the packages of its paired devices' targets ahead of need**, one

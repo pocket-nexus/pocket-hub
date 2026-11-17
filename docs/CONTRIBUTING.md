@@ -55,8 +55,18 @@ own.
 **The applet store's website opens the app on an applet.** Each applet's page
 at [applets.pocket.nexus](https://applets.pocket.nexus) has a button that is
 a `pocket-hub://store/app/<id>` link (`docs/DEEP-LINKS.md`): the app comes to
-the front on that applet, on a device that can run it, and the owner installs
-it from there. A link only shows; it never installs by itself.
+the front on that applet's page in its Store, and the owner chooses a device
+and installs it from there. A link only shows; it never installs by itself.
+
+**An applet's page tries the applet on the Mac**, on the store's player: the
+one the store's website runs (pocket-nexus/applets `store/play`, built into
+`store/site/public/play`), pinned here as the submodule `vendor/applets` and
+copied into the app by `app/scripts/embed-player.sh`. It runs the package's
+Omarchy Pocket variant on PocketJS's core in WebAssembly in a sandboxed web
+view and answers every request from the version's sample data
+(`store.sample`), so nothing reaches a device or an account. A change to the
+player lands in pocket-nexus/applets first and this repository moves its
+pin.
 
 **A daemon is the computer side of one applet**: a Bun process Hub starts when
 a device opens that applet's channel and stops when it is idle. Applet and

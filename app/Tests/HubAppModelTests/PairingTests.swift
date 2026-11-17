@@ -174,10 +174,9 @@ struct PairingTests {
         #expect(tab5.deletesApplets && tab5.isOnHomeScreen)
 
         // The store lists what its own store page offers: the applets of its target.
-        h.model.store.choose(device: tab5.id)
         h.model.store.reload()
-        await eventually("the store's list") { if case .loaded = h.model.store.page { true } else { false } }
-        #expect(Set(h.model.store.apps.map(\.id)) == ["nexus.pocket.hackernews", "nexus.pocket.notes", "io.example.tabonly"])
+        await eventually("the store's list") { h.model.store.list(for: tab5.id) != nil }
+        #expect(Set(h.model.store.list(for: tab5.id)?.map(\.id) ?? []) == ["nexus.pocket.hackernews", "nexus.pocket.notes", "io.example.tabonly"])
 
         // What Hub refuses for its family is said as that, not as a lost link.
         do {

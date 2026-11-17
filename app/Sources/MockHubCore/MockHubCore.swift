@@ -610,6 +610,20 @@ public actor MockHubCore {
                 throw MockError.operation("not_found", "The applet store lists no \(appId).", [:])
             }
             return app.detailsJSON
+        case "store.sample":
+            guard scenario.storeReachable else { throw storeUnreachable() }
+            guard let appId = params["app"]?.stringValue else { throw MockError.invalidParams("app") }
+            guard let app = scenario.store.first(where: { $0.id == appId && $0.sample }) else {
+                throw MockError.operation("not_found", "The applet store has no sample data for \(appId).", [:])
+            }
+            await progress(["phase": "downloading", "done": .number(Double(app.bytes)), "total": .number(Double(app.bytes))])
+            // The mock has no real package: the player says it cannot run this one.
+            let folder = home.appending(path: "cache/store/samples")
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let package = folder.appending(path: "\(app.id).pocket"), mock = folder.appending(path: "\(app.id).json")
+            try? Data("not a package".utf8).write(to: package)
+            try? Data(#"{"mock":1,"routes":[]}"#.utf8).write(to: mock)
+            return ["package": .string(package.path), "mock": .string(mock.path)]
         case "store.install":
             try supporting("push", params)
             let device = try linked(params)

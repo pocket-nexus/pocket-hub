@@ -565,6 +565,11 @@ pub struct StoreApp {
     pub official: bool,
     /// The device targets the package has a variant for.
     pub targets: Vec<String>,
+    /// The devices the package was built for, as the store names them;
+    /// null until Hub holds the details of this version.
+    pub devices: Option<Vec<DeviceName>>,
+    /// The store has sample data for this version (`store.sample`).
+    pub sample: bool,
     /// The package's size.
     pub bytes: u64,
     /// The icon's absolute path in Hub's cache; null until Hub has fetched it.
@@ -613,6 +618,22 @@ pub struct StoreApps {
     pub apps: Vec<StoreApp>,
     /// Epoch milliseconds of the catalog's fetch.
     pub fetched_at: i64,
+}
+
+/// A device as the store names it: the target its build names and its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeviceName {
+    pub target: String,
+    pub name: String,
+}
+
+/// What `store.sample` answers: the files the store's player runs an applet from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreSample {
+    /// The verified package, every variant.
+    pub package: String,
+    /// The sample data, a JSON document.
+    pub mock: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
