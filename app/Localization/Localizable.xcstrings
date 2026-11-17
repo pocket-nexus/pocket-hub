@@ -305,22 +305,6 @@
         }
       }
     },
-    "%@ to %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ to %2$@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ 至 %2$@"
-          }
-        }
-      }
-    },
     "%@ — Connected" : {
       "localizations" : {
         "en" : {
@@ -469,16 +453,6 @@
         }
       }
     },
-    "2D physics" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "2D 物理效果"
-          }
-        }
-      }
-    },
     "A 3DS running ftpd" : {
       "localizations" : {
         "en" : {
@@ -491,16 +465,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行 ftpd 的 3DS"
-          }
-        }
-      }
-    },
-    "A touch screen of its own" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "独立的触摸屏"
           }
         }
       }
@@ -803,16 +767,6 @@
         }
       }
     },
-    "Audio and video streams" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "音频和视频流"
-          }
-        }
-      }
-    },
     "Available in the Store" : {
       "localizations" : {
         "en" : {
@@ -937,16 +891,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "截取主机两块屏幕当前的画面。"
-          }
-        }
-      }
-    },
-    "Characters it doesn't include, from the device's fonts" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用设备的字体显示它未自带的字符"
           }
         }
       }
@@ -1815,16 +1759,6 @@
         }
       }
     },
-    "Files of its own" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "它自己的文件"
-          }
-        }
-      }
-    },
     "Finishing up…" : {
       "localizations" : {
         "en" : {
@@ -2163,16 +2097,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在安装…"
-          }
-        }
-      }
-    },
-    "Internet requests, made by the device for it" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "由设备代为发起的网络请求"
           }
         }
       }
@@ -4549,16 +4473,6 @@
         }
       }
     },
-    "Sound it makes itself" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "它自己生成的声音"
-          }
-        }
-      }
-    },
     "Start" : {
       "localizations" : {
         "en" : {
@@ -4751,16 +4665,6 @@
         }
       }
     },
-    "Text drawn with its own built-in characters" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用自带的字形显示文字"
-          }
-        }
-      }
-    },
     "That address doesn't look right." : {
       "localizations" : {
         "en" : {
@@ -4853,16 +4757,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "3DS 的地址"
-          }
-        }
-      }
-    },
-    "The camera" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "摄像头"
           }
         }
       }
@@ -5171,26 +5065,6 @@
         }
       }
     },
-    "The device's buttons" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设备的按键"
-          }
-        }
-      }
-    },
-    "The device's coding agent can operate it" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设备上的编程助手可以操作它"
-          }
-        }
-      }
-    },
     "The download didn't finish." : {
       "localizations" : {
         "en" : {
@@ -5235,16 +5109,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "上次设置可能没有完成。如果设备无法连接，请重新设置。"
-          }
-        }
-      }
-    },
-    "The left stick" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "左摇杆"
           }
         }
       }
@@ -5569,36 +5433,6 @@
         }
       }
     },
-    "Touch" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "触摸"
-          }
-        }
-      }
-    },
-    "Touch on that screen" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在该屏幕上触摸"
-          }
-        }
-      }
-    },
-    "Touch, %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "触摸，%@"
-          }
-        }
-      }
-    },
     "Try Again" : {
       "localizations" : {
         "en" : {
@@ -5915,16 +5749,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "改为输入地址"
-          }
-        }
-      }
-    },
-    "Typing on a keyboard" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "键盘输入"
           }
         }
       }

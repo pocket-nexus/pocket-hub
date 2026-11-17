@@ -263,26 +263,31 @@ extension StoreApp {
 }
 
 /// What a capability an applet declares lets it do (PocketJS
-/// `contracts/spec/applet.ts`), in the owner's words, for the ids of
-/// `StoreDetails.needs` and `uses`. nil for an id this app has no words for:
-/// a UI shows the id itself. The ids come out of a publisher's package, so
-/// the list is the app's, not the package's.
+/// `contracts/spec/applet.ts`), for the ids of `StoreDetails.needs` and
+/// `uses`. nil for an id this app has no words for: a UI shows the id
+/// itself. The ids come out of a publisher's package, so the list is the
+/// app's, not the package's.
+///
+/// An applet's compatibility (these and `screenText`) is said in English in
+/// every language of the app, as the owner chose: these are the applet
+/// platform's terms, and the store's website says them in English too. So
+/// they are plain strings, not keys of the String Catalog.
 public func capabilityText(_ id: String) -> String? {
     switch id {
-    case "text.glyphs.baked": String(localized: "Text drawn with its own built-in characters")
-    case "text.glyphs.runtime": String(localized: "Characters it doesn't include, from the device's fonts")
-    case "input.buttons": String(localized: "The device's buttons")
-    case "input.analog.left": String(localized: "The left stick")
-    case "input.text": String(localized: "Typing on a keyboard")
-    case "display.auxiliary": String(localized: "A touch screen of its own")
-    case "input.touch.auxiliary": String(localized: "Touch on that screen")
-    case "net.http": String(localized: "Internet requests, made by the device for it")
-    case "ui.physics": String(localized: "2D physics")
-    case "audio.pcm": String(localized: "Sound it makes itself")
-    case "media.playback": String(localized: "Audio and video streams")
-    case "data.fs": String(localized: "Files of its own")
-    case "system.agent": String(localized: "The device's coding agent can operate it")
-    default: id.hasPrefix("camera.") ? String(localized: "The camera") : nil
+    case "text.glyphs.baked": "Text drawn with its own built-in characters"
+    case "text.glyphs.runtime": "Characters it doesn't include, from the device's fonts"
+    case "input.buttons": "The device's buttons"
+    case "input.analog.left": "The left stick"
+    case "input.text": "Typing on a keyboard"
+    case "display.auxiliary": "A touch screen of its own"
+    case "input.touch.auxiliary": "Touch on that screen"
+    case "net.http": "Internet requests, made by the device for it"
+    case "ui.physics": "2D physics"
+    case "audio.pcm": "Sound it makes itself"
+    case "media.playback": "Audio and video streams"
+    case "data.fs": "Files of its own"
+    case "system.agent": "The device's coding agent can operate it"
+    default: id.hasPrefix("camera.") ? "The camera" : nil
     }
 }
 
@@ -297,18 +302,18 @@ extension StoreDetails {
     }
 
     /// The surface it lays itself out for, in a line: "Touch, 320 × 240 to
-    /// 640 × 720". nil when the package names none, or names the device's
-    /// own screen with no sizes, which says nothing.
+    /// 640 × 720", in English in every language as `capabilityText` is. nil
+    /// when the package names none, or names the device's own screen with
+    /// no sizes, which says nothing.
     public var screenText: String? {
         guard let surface else { return nil }
         let size = surface.size.flatMap { size -> String? in
             guard size.min.count == 2, size.max.count == 2 else { return nil }
-            let (least, most) = ("\(size.min[0]) × \(size.min[1])", "\(size.max[0]) × \(size.max[1])")
-            return String(localized: "\(least) to \(most)")
+            return "\(size.min[0]) × \(size.min[1]) to \(size.max[0]) × \(size.max[1])"
         }
         switch (surface.touch, size) {
-        case (true, let size?): return String(localized: "Touch, \(size)")
-        case (true, nil): return String(localized: "Touch")
+        case (true, let size?): return "Touch, \(size)"
+        case (true, nil): return "Touch"
         case (false, let size?): return size
         case (false, nil): return nil
         }

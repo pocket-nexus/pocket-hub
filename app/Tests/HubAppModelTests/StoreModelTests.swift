@@ -229,7 +229,7 @@ struct StoreModelTests {
         // and `3ds-dev` are both a 3DS).
         #expect(details.deviceNames == ["Omarchy Pocket", "M5Stack Tab5", "Nintendo 3DS"])
         #expect(details.needs.compactMap(capabilityText).count == details.needs.count, "words for every capability the store names today")
-        #expect(details.screenText == String(localized: "Touch, \(String(localized: "\("320 × 240") to \("640 × 720")"))"))
+        #expect(details.screenText == "Touch, 320 × 240 to 640 × 720", "English in every language")
         #expect(capabilityText("io.example.new") == nil, "an id the app has no words for is shown as itself")
 
         // A store that does not answer: the store's failure, in plain words.
@@ -248,8 +248,8 @@ struct StoreModelTests {
         let sized = StoreDetails.Surface.Size(min: [320, 240], max: [640, 720])
         #expect(screen(nil) == nil)
         #expect(screen(.init(touch: false)) == nil, "the device's own screen, no sizes")
-        #expect(screen(.init(touch: true)) == String(localized: "Touch"))
-        #expect(screen(.init(touch: false, size: sized)) == String(localized: "\("320 × 240") to \("640 × 720")"))
-        #expect(screen(.init(touch: true, size: .init(min: [320], max: [640, 720]))) == String(localized: "Touch"), "a size that is not [w, h]")
+        #expect(screen(.init(touch: true)) == "Touch")
+        #expect(screen(.init(touch: false, size: sized)) == "320 × 240 to 640 × 720")
+        #expect(screen(.init(touch: true, size: .init(min: [320], max: [640, 720]))) == "Touch", "a size that is not [w, h]")
     }
 }
