@@ -2,7 +2,7 @@
 //!
 //! **Events and answers are ordered** (§1): every event a client may see is
 //! made and handed to the broadcast under `publication`, and the answers
-//! that read the same state (`devices.list`, `devices.get`, `daemons.list`)
+//! that read the same state (`devices.list`, `devices.get`, `services.list`)
 //! are made under it too. A client's writer sends every event already in its
 //! queue before it sends an answer, so an answer reflects every event written
 //! before it, and an event written after an answer is as new as the answer or
@@ -20,7 +20,7 @@ use pocket_hub_api::types::{self as api, Event};
 use pocket_hub_api::{methods, paths};
 use pocket_hub_applet_store::{AppletStore, LinkCatalog, LinkConfig, StoreConfig, StoreEvent};
 use pocket_hub_core::{Endpoint, EndpointConfig, HubEvent, TcpCarrier, Timing};
-use pocket_hub_daemons::{DaemonEvent, DaemonStatus, LogLine, Supervisor};
+use pocket_hub_services::{ServiceEvent, ServiceStatus, LogLine, Supervisor};
 use pocket_hub_setup::{DeviceFamily, ReleaseFetcher, ShellSource};
 use pocket_hub_store::Store;
 use serde_json::json;
@@ -28,7 +28,7 @@ use tokio::net::UnixListener;
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 
-use crate::host::DaemonHost;
+use crate::host::ServiceHost;
 use crate::program::Releases;
 use crate::{Options, StartError, VERSION, map, sdk, server};
 
@@ -117,12 +117,12 @@ impl Core {
         })?;
 
         let store = Arc::new(Store::open_named(home.join("store"), options.name.as_deref()).map_err(|error| StartError::Other(format!("Pocket Hub cannot open its store: {error}.")))?);
-        let sdk = sdk::materialize(&home).map_err(|error| StartError::Other(format!("Pocket Hub cannot write the daemon SDK into its home: {error}.")))?;
-        let mut config = pocket_hub_daemons::Config::new(&home, home.join("daemon.sock"));
+        let sdk = sdk::materialize(&home).map_err(|error| StartError::Other(format!("Pocket Hub cannot write the service SDK into its home: {error}.")))?;
+        let mut config = pocket_hub_services::Config::new(&home, home.join("service.sock"));
         config.bun_path = options.bun.clone();
         config.sdk = Some(sdk);
-        config.timings.idle_override = options.daemon_idle;
-        let supervisor = Arc::new(Supervisor::new(config).await.map_err(|error| StartError::Other(format!("Pocket Hub cannot start its daemon supervisor: {error}.")))?);
+        config.timings.idle_override = options.service_idle;
+        let supervisor = Arc::new(Supervisor::new(config).await.map_err(|error| StartError::Other(format!("Pocket Hub cannot start its service supervisor: {error}.")))?);
 
         let endpoint_config = EndpointConfig { timing: Timing {
                 mutex_wait: options.mutex_wait,
@@ -151,7 +151,7 @@ impl Core {
         let endpoint = Endpoint::builder(store.clone())
             .config(endpoint_config)
             .listener(Box::new(carrier))
-            .channel_host(Arc::new(DaemonHost(supervisor.clone())))
+            .channel_host(Arc::new(ServiceHost(supervisor.clone())))
             .device_requests(Arc::new(net))
             .device_requests(Arc::new(link_catalog.clone()))
             .start();
@@ -165,8 +165,8 @@ impl Core {
         let store_events = applets.subscribe();
         let link_port = endpoint.ports().iter().find_map(|(_, port)| *port).unwrap_or(wanted);
         let hub_events = endpoint.subscribe();
-        let daemon_events = supervisor.subscribe();
-        let daemon_logs = supervisor.subscribe_logs();
+        let service_events = supervisor.subscribe();
+        let service_logs = supervisor.subscribe_logs();
 
         let listener = UnixListener::bind(&socket).map_err(|error| StartError::Other(format!("Pocket Hub cannot listen on {}: {error}.", socket.display())))?;
         fs::set_permissions(&socket, fs::Permissions::from_mode(0o600)).map_err(home_error)?;
@@ -195,7 +195,7 @@ impl Core {
             tasks: Mutex::new(Vec::new()),
             _home_lock: home_lock,
         });
-        let pump = tokio::spawn(pump(core.clone(), hub_events, daemon_events, daemon_logs));
+        let pump = tokio::spawn(pump(core.clone(), hub_events, service_events, service_logs));
         let accept = tokio::spawn(server::accept_loop(core.clone(), listener));
         let offer = core.link_catalog.start();
         let store_pump = tokio::spawn(store_pump(core.clone(), store_events));
@@ -208,7 +208,7 @@ impl Core {
         api::HubInfo { id: self.store.hub_id(), name: self.store.hub_name(), version: VERSION.to_owned() }
     }
 
-    /// The Bun version daemons run on: the configured Bun's own, else the pinned one.
+    /// The Bun version services run on: the configured Bun's own, else the pinned one.
     pub fn bun_version(&self) -> String {
         self.bun_override_version.clone().unwrap_or_else(|| self.supervisor.runtime().version().to_owned())
     }
@@ -316,26 +316,26 @@ impl Core {
         }
     }
 
-    pub fn daemon(&self, id: &str) -> Option<api::Daemon> {
+    pub fn service(&self, id: &str) -> Option<api::Service> {
         let status = self.supervisor.status(id)?;
-        Some(map::daemon(&status, self.supervisor.registry().get(id).as_ref()))
+        Some(map::service(&status, self.supervisor.registry().get(id).as_ref()))
     }
 
-    pub fn daemons(&self) -> Vec<api::Daemon> {
-        self.supervisor.statuses().iter().map(|status| map::daemon(status, self.supervisor.registry().get(&status.id).as_ref())).collect()
+    pub fn services(&self) -> Vec<api::Service> {
+        self.supervisor.statuses().iter().map(|status| map::service(status, self.supervisor.registry().get(&status.id).as_ref())).collect()
     }
 
-    /// `daemon.changed` with the daemon as it is now (`fallback` when it is
+    /// `service.changed` with the service as it is now (`fallback` when it is
     /// no longer known, as after a removal with its process still ending).
-    fn publish_daemon(&self, id: &str, fallback: Option<&DaemonStatus>) {
+    fn publish_service(&self, id: &str, fallback: Option<&ServiceStatus>) {
         let _guard = self.publication();
-        let daemon = self.daemon(id).or_else(|| fallback.map(|status| map::daemon(status, None)));
-        if let Some(daemon) = daemon {
-            self.publish(&Event::DaemonChanged { daemon });
+        let service = self.service(id).or_else(|| fallback.map(|status| map::service(status, None)));
+        if let Some(service) = service {
+            self.publish(&Event::ServiceChanged { service });
         }
     }
 
-    /// Every device, the pairing requests and every daemon again, after
+    /// Every device, the pairing requests and every service again, after
     /// events were lost to a full queue.
     pub fn resync(&self) {
         let _guard = self.publication();
@@ -343,8 +343,8 @@ impl Core {
             self.publish(&Event::DeviceChanged { device: Box::new(device) });
         }
         self.publish(&Event::PairingChanged { requests: self.pair_requests() });
-        for daemon in self.daemons() {
-            self.publish(&Event::DaemonChanged { daemon });
+        for service in self.services() {
+            self.publish(&Event::ServiceChanged { service });
         }
     }
 
@@ -441,7 +441,7 @@ impl Core {
         let _ = rx.wait_for(|stop| *stop).await;
     }
 
-    /// The links close with `going_away`, the daemons stop, then the socket
+    /// The links close with `going_away`, the services stop, then the socket
     /// goes. Runs once.
     pub async fn shutdown(&self) {
         if self.shutting_down.swap(true, Ordering::SeqCst) {
@@ -484,7 +484,7 @@ async fn futures_any(probes: impl Iterator<Item = impl std::future::Future<Outpu
 
 /// `<bun> --version`, for a Bun Hub did not download.
 fn reported_version(bun: &Path) -> Option<String> {
-    use pocket_hub_daemons::child::InheritNothing;
+    use pocket_hub_services::child::InheritNothing;
     let output = std::process::Command::new(bun).arg("--version").stdin(std::process::Stdio::null()).inherit_nothing().output().ok()?;
     let text = String::from_utf8(output.stdout).ok()?;
     (output.status.success() && !text.trim().is_empty()).then(|| text.trim().to_owned())
@@ -506,7 +506,7 @@ fn prune_cache(dir: &Path, keep: usize) {
 async fn pump(
     core: Arc<Core>,
     mut hub: broadcast::Receiver<HubEvent>,
-    mut daemons: broadcast::Receiver<DaemonEvent>,
+    mut services: broadcast::Receiver<ServiceEvent>,
     mut logs: broadcast::Receiver<LogLine>,
 ) {
     use broadcast::error::RecvError;
@@ -517,16 +517,16 @@ async fn pump(
                 Err(RecvError::Lagged(_)) => core.resync(),
                 Err(RecvError::Closed) => return,
             },
-            event = daemons.recv() => match event {
-                Ok(DaemonEvent::State(status)) => core.publish_daemon(&status.id.clone(), Some(&status)),
-                Ok(DaemonEvent::Installed(daemon)) => core.publish_daemon(&daemon.id, None),
-                Ok(DaemonEvent::Removed { id }) => core.publish(&Event::DaemonRemoved { id }),
+            event = services.recv() => match event {
+                Ok(ServiceEvent::State(status)) => core.publish_service(&status.id.clone(), Some(&status)),
+                Ok(ServiceEvent::Installed(service)) => core.publish_service(&service.id, None),
+                Ok(ServiceEvent::Removed { id }) => core.publish(&Event::ServiceRemoved { id }),
                 Err(RecvError::Lagged(_)) => core.resync(),
                 Err(RecvError::Closed) => return,
             },
             line = logs.recv() => match line {
-                Ok(line) => core.publish(&Event::DaemonLog { id: line.app.clone(), at: line.at, stream: map::log_stream(line.stream).to_owned(), text: line.text }),
-                Err(RecvError::Lagged(missed)) => tracing::warn!(missed, "daemon log lines were dropped from the control API"),
+                Ok(line) => core.publish(&Event::ServiceLog { id: line.app.clone(), at: line.at, stream: map::log_stream(line.stream).to_owned(), text: line.text }),
+                Err(RecvError::Lagged(missed)) => tracing::warn!(missed, "service log lines were dropped from the control API"),
                 Err(RecvError::Closed) => return,
             },
         }

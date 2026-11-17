@@ -891,18 +891,18 @@
         }
       }
     },
-    "Check its output in Advanced › Daemons, then try again." : {
+    "Check its output in Advanced › Services, then try again." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Check its output in Advanced › Daemons, then try again."
+            "value" : "Check its output in Advanced › Services, then try again."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请在“高级 › 守护进程”中查看它的输出，然后重试。"
+            "value" : "请在“高级 › 服务”中查看它的输出，然后重试。"
           }
         }
       }
@@ -1365,34 +1365,34 @@
         }
       }
     },
-    "Daemons" : {
+    "Services" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Daemons"
+            "value" : "Services"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "守护进程"
+            "value" : "服务"
           }
         }
       }
     },
-    "Daemons Unavailable" : {
+    "Services Unavailable" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Daemons Unavailable"
+            "value" : "Services Unavailable"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "守护进程不可用"
+            "value" : "服务不可用"
           }
         }
       }
@@ -1931,18 +1931,18 @@
         }
       }
     },
-    "Install Daemon…" : {
+    "Install Service…" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Install Daemon…"
+            "value" : "Install Service…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装守护进程…"
+            "value" : "安装服务…"
           }
         }
       }
@@ -1963,18 +1963,18 @@
         }
       }
     },
-    "Install a daemon from a folder or a .tar.gz file" : {
+    "Install a service from a folder or a .tar.gz file" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Install a daemon from a folder or a .tar.gz file"
+            "value" : "Install a service from a folder or a .tar.gz file"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从文件夹或 .tar.gz 文件安装守护进程"
+            "value" : "从文件夹或 .tar.gz 文件安装服务"
           }
         }
       }
@@ -2229,18 +2229,18 @@
         }
       }
     },
-    "Its applet keeps working on the device but can no longer reach this Mac. Remove keeps the daemon's own data for a later install." : {
+    "Its applet keeps working on the device but can no longer reach this Mac. Remove keeps the service's own data for a later install." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Its applet keeps working on the device but can no longer reach this Mac. Remove keeps the daemon's own data for a later install."
+            "value" : "Its applet keeps working on the device but can no longer reach this Mac. Remove keeps the service's own data for a later install."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "对应的小程序在设备上仍可使用，但无法再连接这台 Mac。“移除”会保留守护进程自己的数据，供以后再次安装。"
+            "value" : "对应的小程序在设备上仍可使用，但无法再连接这台 Mac。“移除”会保留服务自己的数据，供以后再次安装。"
           }
         }
       }
@@ -2735,34 +2735,34 @@
         }
       }
     },
-    "No Daemon Selected" : {
+    "No Service Selected" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No Daemon Selected"
+            "value" : "No Service Selected"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未选择守护进程"
+            "value" : "未选择服务"
           }
         }
       }
     },
-    "No Daemons" : {
+    "No Services" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No Daemons"
+            "value" : "No Services"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有守护进程"
+            "value" : "没有服务"
           }
         }
       }
@@ -2895,18 +2895,18 @@
         }
       }
     },
-    "Not installed. Daemons need it to run." : {
+    "Not installed. Services need it to run." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Not installed. Daemons need it to run."
+            "value" : "Not installed. Services need it to run."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未安装。守护进程需要它才能运行。"
+            "value" : "未安装。服务需要它才能运行。"
           }
         }
       }
@@ -3507,18 +3507,18 @@
         }
       }
     },
-    "Pocket Hub couldn't list its daemons." : {
+    "Pocket Hub couldn't list its services." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pocket Hub couldn't list its daemons."
+            "value" : "Pocket Hub couldn't list its services."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pocket Hub 无法列出守护进程。"
+            "value" : "Pocket Hub 无法列出服务。"
           }
         }
       }
@@ -3619,18 +3619,18 @@
         }
       }
     },
-    "Pocket Hub keeps its paired devices, daemons and screenshots here. Set POCKET_HUB_HOME to use another folder." : {
+    "Pocket Hub keeps its paired devices, services and screenshots here. Set POCKET_HUB_HOME to use another folder." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pocket Hub keeps its paired devices, daemons and screenshots here. Set POCKET_HUB_HOME to use another folder."
+            "value" : "Pocket Hub keeps its paired devices, services and screenshots here. Set POCKET_HUB_HOME to use another folder."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pocket Hub 将已配对的设备、守护进程和截图保存在这里。设置 POCKET_HUB_HOME 可使用其他文件夹。"
+            "value" : "Pocket Hub 将已配对的设备、服务和截图保存在这里。设置 POCKET_HUB_HOME 可使用其他文件夹。"
           }
         }
       }
@@ -4357,18 +4357,18 @@
         }
       }
     },
-    "Show the selected daemon's output" : {
+    "Show the selected service's output" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Show the selected daemon's output"
+            "value" : "Show the selected service's output"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "显示所选守护进程的输出"
+            "value" : "显示所选服务的输出"
           }
         }
       }
@@ -4809,18 +4809,18 @@
         }
       }
     },
-    "The daemon couldn't be installed, started or stopped." : {
+    "The service couldn't be installed, started or stopped." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The daemon couldn't be installed, started or stopped."
+            "value" : "The service couldn't be installed, started or stopped."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法安装、启动或停止这个守护进程。"
+            "value" : "无法安装、启动或停止这个服务。"
           }
         }
       }
@@ -5313,18 +5313,18 @@
         }
       }
     },
-    "This daemon hasn't written anything yet." : {
+    "This service hasn't written anything yet." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This daemon hasn't written anything yet."
+            "value" : "This service hasn't written anything yet."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个守护进程还没有输出任何内容。"
+            "value" : "这个服务还没有输出任何内容。"
           }
         }
       }

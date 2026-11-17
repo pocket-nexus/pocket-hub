@@ -123,17 +123,17 @@ struct LogList<Line: Sendable & Hashable, Row: View>: View {
     }
 }
 
-/// A daemon's output: the tail from `daemons.logs`, then `daemon.log` lines.
-struct DaemonLogView: View {
-    let daemon: Daemon
+/// A service's output: the tail from `services.logs`, then `service.log` lines.
+struct ServiceLogView: View {
+    let service: Service
     @Environment(AppState.self) private var state
 
     var body: some View {
-        let entries = state.model.daemonLogs[daemon.id]?.entries ?? []
+        let entries = state.model.serviceLogs[service.id]?.entries ?? []
         Group {
             if entries.isEmpty {
                 ContentUnavailableView("No Output", systemImage: "text.alignleft",
-                                       description: Text("This daemon hasn't written anything yet."))
+                                       description: Text("This service hasn't written anything yet."))
             } else {
                 LogList(entries: entries) { entry in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -145,8 +145,8 @@ struct DaemonLogView: View {
                 }
             }
         }
-        .task(id: daemon.id) {
-            do { try await state.model.loadDaemonLog(daemon.id) } catch {
+        .task(id: service.id) {
+            do { try await state.model.loadServiceLog(service.id) } catch {
                 state.presentedError = UserFacingError(error)
             }
         }

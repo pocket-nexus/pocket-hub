@@ -1,0 +1,7 @@
+{
+  "service": 1,
+  "id": "dev.pocket-nexus.link-channel",
+  "version": "0.1.0",
+  "entry": "service.ts",
+  "idleSeconds": 30
+}

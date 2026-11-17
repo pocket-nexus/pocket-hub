@@ -134,7 +134,7 @@ extension DeviceUnlinked {
     }
 }
 
-extension DaemonState {
+extension ServiceState {
     public var displayName: String {
         switch self {
         case .stopped: String(localized: "Stopped")
@@ -218,8 +218,8 @@ extension ProgramUpdate.Stage {
     }
 }
 
-/// The stage of a daemon install, in the owner's words.
-public func daemonInstallStageText(_ stage: String) -> String {
+/// The stage of a service install, in the owner's words.
+public func serviceInstallStageText(_ stage: String) -> String {
     switch stage {
     case "runtime": String(localized: "Downloading Bun…")
     case "installing": String(localized: "Installing…")

@@ -141,15 +141,15 @@ fn local_time(ms: i64) -> String {
     format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec)
 }
 
-pub fn status(hub: &HubStatus, devices: &DeviceList, daemons: &DaemonList) -> Result<String, Failure> {
+pub fn status(hub: &HubStatus, devices: &DeviceList, services: &ServiceList) -> Result<String, Failure> {
     let carriers: Vec<String> = hub.carriers.iter().map(|c| match c.port {
         Some(port) => format!("{} port {port}", c.kind),
         None => c.kind.clone(),
     }).collect();
     let linked = devices.devices.iter().filter(|d| d.link.is_some()).count();
-    let running = daemons.daemons.iter().filter(|d| d.state == DaemonState::Running).count();
+    let running = services.services.iter().filter(|d| d.state == ServiceState::Running).count();
     Ok(format!(
-        "Pocket Hub \"{}\" ({}) {}\nHome:     {}\nStarted:  {}\nLink:     {}\nBun:      {} ({})\nDevices:  {} paired, {} linked\nDaemons:  {} installed, {} running",
+        "Pocket Hub \"{}\" ({}) {}\nHome:     {}\nStarted:  {}\nLink:     {}\nBun:      {} ({})\nDevices:  {} paired, {} linked\nServices:  {} installed, {} running",
         hub.name,
         hub.id,
         hub.version,
@@ -160,7 +160,7 @@ pub fn status(hub: &HubStatus, devices: &DeviceList, daemons: &DaemonList) -> Re
         if hub.bun.installed { "installed" } else { "not installed" },
         devices.devices.len(),
         linked,
-        daemons.daemons.len(),
+        services.services.len(),
         running,
     ))
 }
@@ -343,15 +343,15 @@ pub fn store_details(details: &StoreDetails) -> String {
     lines.join("\n")
 }
 
-pub fn daemons(daemons: &[Daemon]) -> String {
-    if daemons.is_empty() {
-        return "No daemon is installed.".into();
+pub fn services(services: &[Service]) -> String {
+    if services.is_empty() {
+        return "No service is installed.".into();
     }
-    let rows = daemons
+    let rows = services
         .iter()
         .map(|d| {
             let state = match (&d.state, &d.error) {
-                (DaemonState::Failed, Some(error)) => format!("failed: {error}"),
+                (ServiceState::Failed, Some(error)) => format!("failed: {error}"),
                 (state, _) => serde_json::to_value(state).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default(),
             };
             vec![d.id.clone(), d.version.clone(), state, d.pid.map(|p| p.to_string()).unwrap_or_else(|| "-".into()), d.channels.to_string()]
@@ -408,16 +408,16 @@ pub fn event_line(event: &Value) -> String {
             Ok(requests) => format!("pairing: {} ask(s) to be paired", requests.iter().map(|r| format!("{} {} ({})", r.device, r.name, r.address)).collect::<Vec<_>>().join(", ")),
             Err(_) => format!("pairing.changed {}", event["requests"]),
         },
-        "daemon.changed" => match serde_json::from_value::<Daemon>(event["daemon"].clone()) {
-            Ok(daemon) => {
-                let pid = daemon.pid.map(|pid| format!(" pid {pid}")).unwrap_or_default();
-                let state = serde_json::to_value(daemon.state).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
-                format!("daemon {} {}: {state}{pid}, {} channel(s)", daemon.id, daemon.version, daemon.channels)
+        "service.changed" => match serde_json::from_value::<Service>(event["service"].clone()) {
+            Ok(service) => {
+                let pid = service.pid.map(|pid| format!(" pid {pid}")).unwrap_or_default();
+                let state = serde_json::to_value(service.state).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
+                format!("service {} {}: {state}{pid}, {} channel(s)", service.id, service.version, service.channels)
             }
-            Err(_) => format!("daemon.changed {}", event["daemon"]),
+            Err(_) => format!("service.changed {}", event["service"]),
         },
-        "daemon.removed" => format!("daemon {} removed", text("id")),
-        "daemon.log" => format!("{} {} {}: {}", local_time(event["at"].as_i64().unwrap_or(0)), text("id"), text("stream"), text("text")),
+        "service.removed" => format!("service {} removed", text("id")),
+        "service.log" => format!("{} {} {}: {}", local_time(event["at"].as_i64().unwrap_or(0)), text("id"), text("stream"), text("text")),
         "hub.changed" => format!("hub renamed \"{}\"", event["hub"]["name"].as_str().unwrap_or("")),
         other => format!("{other} {event}"),
     }

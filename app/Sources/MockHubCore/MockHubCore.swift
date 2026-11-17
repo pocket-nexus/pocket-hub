@@ -2,7 +2,7 @@ import Foundation
 import HubClient
 
 /// An implementation of the control API (docs/CONTROL-API.md) on a Unix
-/// socket, with scriptable devices, daemons, progress sequences and failures.
+/// socket, with scriptable devices, services, progress sequences and failures.
 ///
 /// It exists so the client and the app can be tested and developed before the
 /// real `pocket-hubd` runs, and so failures that a real device rarely
@@ -56,7 +56,7 @@ public actor MockHubCore {
     private var logsOn: Set<String> = []
     private var discoverCalls = 0
     private var storeFetchedAt = MockClock.now()
-    /// Daemons removed with `purge: true`, for assertions.
+    /// Services removed with `purge: true`, for assertions.
     public private(set) var purged: Set<String> = []
     private var frame = 4096
 
@@ -308,10 +308,10 @@ public actor MockHubCore {
                             "text": .string(text), "frame": .number(Double(frame))])
     }
 
-    public func emitDaemonLog(_ id: String, stream: String = "stdout", text: String) {
+    public func emitServiceLog(_ id: String, stream: String = "stdout", text: String) {
         let line: JSONValue = ["at": .number(Double(MockClock.now())), "stream": .string(stream), "text": .string(text)]
-        if let index = scenario.daemons.firstIndex(where: { $0.id == id }) { scenario.daemons[index].log.append(line) }
-        emit("daemon.log", ["id": .string(id), "at": line["at"]!, "stream": .string(stream), "text": .string(text)])
+        if let index = scenario.services.firstIndex(where: { $0.id == id }) { scenario.services[index].log.append(line) }
+        emit("service.log", ["id": .string(id), "at": line["at"]!, "stream": .string(stream), "text": .string(text)])
     }
 
     /// Sends an event with arbitrary members to every subscribed session.
@@ -437,10 +437,10 @@ public actor MockHubCore {
     private func perform(_ method: String, params: JSONValue, session id: Int, progress: Progress) async throws -> JSONValue {
         switch method {
         case "hub.hello":
-            guard params["protocol"]?.intValue == 1 else {
-                throw MockError.operation("invalid", "This Hub speaks protocol 1.", [:])
+            guard params["protocol"]?.intValue == 2 else {
+                throw MockError.operation("invalid", "This Hub speaks protocol 2.", [:])
             }
-            return ["protocol": 1, "hub": hubIdentity]
+            return ["protocol": 2, "hub": hubIdentity]
         case "hub.status":
             return [
                 "id": .string(scenario.hubId), "name": .string(scenario.hubName), "version": .string(scenario.hubVersion),
@@ -669,45 +669,45 @@ public actor MockHubCore {
             installStoreApp(device.id, app)
             emit("store.changed", ["fetchedAt": .number(Double(storeFetchedAt))])
             return result
-        case "daemons.list":
-            return ["daemons": .array(scenario.daemons.map(\.json))]
-        case "daemons.install":
+        case "services.list":
+            return ["services": .array(scenario.services.map(\.json))]
+        case "services.install":
             guard let path = params["path"]?.stringValue else { throw MockError.invalidParams("path") }
             var isFolder: ObjCBool = false
             guard FileManager.default.fileExists(atPath: path, isDirectory: &isFolder),
                   isFolder.boolValue || path.hasSuffix(".tar.gz")
             else {
-                throw MockError.operation("invalid", "This is not a daemon package.", [:])
+                throw MockError.operation("invalid", "This is not a service package.", [:])
             }
             let stages = scenario.bunInstalled ? ["installing"] : ["runtime", "installing"]
             for stage in stages {
-                let message = stage == "runtime" ? "Downloading Bun for the daemon." : "Installing the daemon package \(path)."
+                let message = stage == "runtime" ? "Downloading Bun for the service." : "Installing the service package \(path)."
                 await progress(["stage": .string(stage), "message": .string(message)])
                 try await Task.sleep(for: .milliseconds(150))
             }
             scenario.bunInstalled = true
             var name = URL(fileURLWithPath: path).lastPathComponent
             if name.hasSuffix(".tar.gz") { name.removeLast(7) }
-            var daemon = MockDaemon(id: name, version: "1.0.0")
-            daemon.since = MockClock.now()
-            scenario.daemons.removeAll { $0.id == daemon.id }
-            scenario.daemons.append(daemon)
-            emit("daemon.changed", ["daemon": daemon.json])
-            return daemon.json
-        case "daemons.remove":
-            let daemon = try resolveDaemon(params)
-            if params["purge"]?.boolValue == true { purged.insert(daemon.id) }
-            scenario.daemons.removeAll { $0.id == daemon.id }
-            emit("daemon.removed", ["id": .string(daemon.id)])
+            var service = MockService(id: name, version: "1.0.0")
+            service.since = MockClock.now()
+            scenario.services.removeAll { $0.id == service.id }
+            scenario.services.append(service)
+            emit("service.changed", ["service": service.json])
+            return service.json
+        case "services.remove":
+            let service = try resolveService(params)
+            if params["purge"]?.boolValue == true { purged.insert(service.id) }
+            scenario.services.removeAll { $0.id == service.id }
+            emit("service.removed", ["id": .string(service.id)])
             return [:]
-        case "daemons.start", "daemons.stop", "daemons.restart":
-            let daemon = try resolveDaemon(params)
-            return try await changeDaemon(daemon.id, action: String(method.dropFirst("daemons.".count)))
-        case "daemons.logs":
-            let daemon = try resolveDaemon(params)
+        case "services.start", "services.stop", "services.restart":
+            let service = try resolveService(params)
+            return try await changeService(service.id, action: String(method.dropFirst("services.".count)))
+        case "services.logs":
+            let service = try resolveService(params)
             let tail = params["tail"]?.intValue ?? 200
-            return ["lines": .array(Array(daemon.log.suffix(tail)))]
-        case "daemons.runtime":
+            return ["lines": .array(Array(service.log.suffix(tail)))]
+        case "services.runtime":
             if params["install"]?.boolValue == true, !scenario.bunInstalled {
                 let total = 60_000_000
                 for step in 1...5 {
@@ -761,12 +761,12 @@ public actor MockHubCore {
         return device
     }
 
-    private func resolveDaemon(_ params: JSONValue) throws -> MockDaemon {
+    private func resolveService(_ params: JSONValue) throws -> MockService {
         guard let id = params["id"]?.stringValue else { throw MockError.invalidParams("id") }
-        guard let daemon = scenario.daemons.first(where: { $0.id == id }) else {
-            throw MockError.operation("not_found", "No such daemon.", [:])
+        guard let service = scenario.services.first(where: { $0.id == id }) else {
+            throw MockError.operation("not_found", "No such service.", [:])
         }
-        return daemon
+        return service
     }
 
     /// Runs `body` holding the device mutex: `busy` with the holder `{kind, name, method}` while held.
@@ -1028,11 +1028,11 @@ public actor MockHubCore {
         ]
     }
 
-    private func changeDaemon(_ id: String, action: String) async throws -> JSONValue {
-        func set(_ change: (inout MockDaemon) -> Void) {
-            guard let index = scenario.daemons.firstIndex(where: { $0.id == id }) else { return }
-            change(&scenario.daemons[index])
-            emit("daemon.changed", ["daemon": scenario.daemons[index].json])
+    private func changeService(_ id: String, action: String) async throws -> JSONValue {
+        func set(_ change: (inout MockService) -> Void) {
+            guard let index = scenario.services.firstIndex(where: { $0.id == id }) else { return }
+            change(&scenario.services[index])
+            emit("service.changed", ["service": scenario.services[index].json])
         }
         if action == "stop" || action == "restart" {
             set { $0.state = "stopping"; $0.since = MockClock.now() }
@@ -1046,9 +1046,9 @@ public actor MockHubCore {
             set { $0.state = "starting"; $0.since = MockClock.now(); $0.error = nil }
             try await Task.sleep(for: .milliseconds(150))
             set { $0.state = "running"; $0.since = MockClock.now(); $0.pid = Int.random(in: 20_000...60_000) }
-            emitDaemonLog(id, text: "\(id) started")
+            emitServiceLog(id, text: "\(id) started")
         }
-        return scenario.daemons.first { $0.id == id }?.json ?? .null
+        return scenario.services.first { $0.id == id }?.json ?? .null
     }
 
     private func shutdownNow() {

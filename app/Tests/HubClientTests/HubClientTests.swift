@@ -57,7 +57,7 @@ struct HubClientTests {
         #expect(snapshot.hello.hub.name == "Studio Mac")
         #expect(snapshot.status.carriers.first?.port == 8628)
         #expect(snapshot.devices.map(\.id).sorted() == ["0123456789abcdef", "89abcdef01234567"])
-        #expect(snapshot.daemons?.count == 2)
+        #expect(snapshot.services?.count == 2)
         #expect(snapshot.bun?.installed == true)
         let methods = await core.received.map(\.method)
         #expect(Array(methods.prefix(4)) == ["hub.hello", "hub.subscribe", "hub.status", "devices.list"])
@@ -248,9 +248,30 @@ struct HubClientTests {
         await client.start()
         let peer = await server.nextPeer()
         let hello = try await peer.next()
-        peer.write(#"{"jsonrpc":"2.0","id":\#(hello["id"]!.intValue!),"result":{"protocol":2,"hub":{"id":"h","name":"n","version":"9"}}}"# + "\n")
+        peer.write(#"{"jsonrpc":"2.0","id":\#(hello["id"]!.intValue!),"result":{"protocol":3,"hub":{"id":"h","name":"n","version":"9"}}}"# + "\n")
         await eventually("incompatible") {
-            await log.states.contains(where: { if case .unreachable(.incompatible(hubProtocol: 2), _) = $0 { true } else { false } })
+            await log.states.contains(where: { if case .unreachable(.incompatible(hubProtocol: 3), _) = $0 { true } else { false } })
+        }
+        await client.stop()
+    }
+
+    /// A resident core of Pocket Hub 0.2.2 or earlier speaks protocol 1 and
+    /// refuses this client's hello with `-32602` and its sentence, word for
+    /// word.
+    @Test func aCoreThatRefusesTheHelloIsAnotherProtocol() async throws {
+        let home = try temporaryHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let server = try RawServer(home: home)
+        defer { server.stop() }
+        let client = makeClient(home: home)
+        let log = UpdateLog(client)
+        await client.start()
+        let peer = await server.nextPeer()
+        let hello = try await peer.next()
+        #expect(hello["params"]?["protocol"] == 2)
+        peer.write(#"{"jsonrpc":"2.0","id":\#(hello["id"]!.intValue!),"error":{"code":-32602,"message":"This Hub speaks protocol 1, not 2."}}"# + "\n")
+        await eventually("incompatible") {
+            await log.states.contains(where: { if case .unreachable(.incompatible(hubProtocol: nil), _) = $0 { true } else { false } })
         }
         await client.stop()
     }

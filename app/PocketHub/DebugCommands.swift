@@ -11,7 +11,7 @@ import SwiftUI
 /// Space, another app in front). Each command calls the same model method as
 /// the button it stands for; results show in the window and in the snapshots.
 ///
-///   select store | daemons | device <id>     tab applets | log | details
+///   select store | services | device <id>     tab applets | log | details
 ///   store refresh | details <app> | back | filter <device name…> | filter all
 ///   store install <app> <device id> | cancel <app> <device id> | try   (an applet's page: Install's menu, Try It)
 ///   screenshot | logs on | logs off | open <app id> | delete <app id> | home | update | update-dismiss
@@ -69,7 +69,7 @@ enum DebugCommands {
                 window.setContentSize(NSSize(width: width, height: height))
             }
         case ["select", "store"]: state.selection = .store
-        case ["select", "daemons"]: state.selection = .daemons
+        case ["select", "services"]: state.selection = .services
         case let w where w.count == 3 && w[0] == "select" && w[1] == "device": state.selection = .device(w[2])
         case ["tab", "applets"]: state.deviceTab = .applets
         case ["tab", "log"]: state.deviceTab = .log

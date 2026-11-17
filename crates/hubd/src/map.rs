@@ -1,12 +1,12 @@
 //! The contract's shapes made from the internal types of `hub-core`,
-//! `hub-daemons` and `hub-setup`. Those types are not the contract: each
+//! `hub-services` and `hub-setup`. Those types are not the contract: each
 //! mapping here is written out, so a change on either side is a compile
 //! error or a visible line, never a silent change of the API.
 
 use pocket_hub_api::types as api;
 use pocket_hub_api::{ErrorKind, RpcError};
 use pocket_hub_core::{DeviceSnapshot, OpError, Operation, PairError, family};
-use pocket_hub_daemons::{DaemonState, DaemonStatus, InstalledDaemon, LogLine, LogStream};
+use pocket_hub_services::{ServiceState, ServiceStatus, InstalledService, LogLine, LogStream};
 use pocket_hub_setup::{InstallReport, InstallTarget, PairingOutcome, ProgramAction, Progress, Stage};
 
 // ---------------------------------------------------------------------------
@@ -350,37 +350,37 @@ fn setup_error(report: &InstallReport, target: &InstallTarget) -> RpcError {
 }
 
 // ---------------------------------------------------------------------------
-// Daemons
+// Services
 // ---------------------------------------------------------------------------
 
-/// `DaemonStatus` → `Daemon` (§2).
+/// `ServiceStatus` → `Service` (§2).
 ///
-/// | contract | hub-daemons |
+/// | contract | hub-services |
 /// | --- | --- |
 /// | `version` | the installed version, else the running process's |
 /// | `state` | `state` (same five names) |
-/// | `since` | `since`; for a daemon that has not changed state since Hub started, its install time |
+/// | `since` | `since`; for a service that has not changed state since Hub started, its install time |
 /// | `lastExit.signal` | the signal number's name (`SIGTERM`) |
 /// | `error` | `last_error` while `failed`, else null |
 ///
 /// `running_version`, `started_at`, `restarts`, `crashes` and `retry_at`
 /// have no place in the contract.
-pub fn daemon(status: &DaemonStatus, installed: Option<&InstalledDaemon>) -> api::Daemon {
-    api::Daemon {
+pub fn service(status: &ServiceStatus, installed: Option<&InstalledService>) -> api::Service {
+    api::Service {
         id: status.id.clone(),
-        version: status.version.clone().or_else(|| installed.map(|daemon| daemon.version.clone())).or_else(|| status.running_version.clone()).unwrap_or_default(),
+        version: status.version.clone().or_else(|| installed.map(|service| service.version.clone())).or_else(|| status.running_version.clone()).unwrap_or_default(),
         state: match status.state {
-            DaemonState::Stopped => api::DaemonState::Stopped,
-            DaemonState::Starting => api::DaemonState::Starting,
-            DaemonState::Running => api::DaemonState::Running,
-            DaemonState::Stopping => api::DaemonState::Stopping,
-            DaemonState::Failed => api::DaemonState::Failed,
+            ServiceState::Stopped => api::ServiceState::Stopped,
+            ServiceState::Starting => api::ServiceState::Starting,
+            ServiceState::Running => api::ServiceState::Running,
+            ServiceState::Stopping => api::ServiceState::Stopping,
+            ServiceState::Failed => api::ServiceState::Failed,
         },
         pid: status.pid,
-        since: status.since.or_else(|| installed.map(|daemon| daemon.installed_at)),
+        since: status.since.or_else(|| installed.map(|service| service.installed_at)),
         channels: status.channels as u32,
         last_exit: status.last_exit.as_ref().map(|exit| api::LastExit { code: exit.code, signal: exit.signal.map(signal_name), at: exit.at }),
-        error: if status.state == DaemonState::Failed { status.last_error.clone() } else { None },
+        error: if status.state == ServiceState::Failed { status.last_error.clone() } else { None },
     }
 }
 
@@ -392,8 +392,8 @@ pub fn log_stream(stream: LogStream) -> &'static str {
     }
 }
 
-pub fn daemon_log_line(line: &LogLine) -> api::DaemonLogLine {
-    api::DaemonLogLine { at: line.at, stream: log_stream(line.stream).to_owned(), text: line.text.clone() }
+pub fn service_log_line(line: &LogLine) -> api::ServiceLogLine {
+    api::ServiceLogLine { at: line.at, stream: log_stream(line.stream).to_owned(), text: line.text.clone() }
 }
 
 /// A signal's name, `SIG<number>` for one this table does not hold.

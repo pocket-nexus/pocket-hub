@@ -111,8 +111,8 @@ struct Sidebar: View {
             // Below the devices is only what runs on this Mac, a developer
             // surface kept out of the owner's way.
             Section("Advanced") {
-                Label("Daemons", systemImage: "gearshape.2")
-                    .tag(SidebarItem.daemons)
+                Label("Services", systemImage: "gearshape.2")
+                    .tag(SidebarItem.services)
             }
         }
         .listStyle(.sidebar)
@@ -178,8 +178,8 @@ struct Detail: View {
                     ContentUnavailableView("Device Not Found", systemImage: "questionmark.circle",
                                            description: Text("It may have been removed."))
                 }
-            case .daemons:
-                DaemonsView()
+            case .services:
+                ServicesView()
             case nil:
                 if model.devices.isEmpty {
                     ContentUnavailableView {

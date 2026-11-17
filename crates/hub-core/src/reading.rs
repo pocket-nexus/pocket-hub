@@ -38,7 +38,7 @@ pub fn system_rule(t: &str) -> Option<Rule> {
 pub trait Holdings {
     /// An open request an `APP` frame started, in either direction, with no `REPLY` yet.
     fn channel_request(&self, id: u32) -> bool;
-    /// An open request Hub sent (system or forwarded for a daemon) with no `REPLY` yet.
+    /// An open request Hub sent (system or forwarded for a service) with no `REPLY` yet.
     fn own_request(&self, id: u32) -> bool;
     /// A channel open on the connection.
     fn channel(&self, id: u32) -> bool;

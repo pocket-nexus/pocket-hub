@@ -129,26 +129,26 @@ struct DecodingTests {
         #expect(device.duplicateId)
     }
 
-    @Test func daemons() throws {
-        let running = try decode(Daemon.self, """
+    @Test func services() throws {
+        let running = try decode(Service.self, """
         {"id":"nexus.pocket.weather","version":"0.3.1","state":"running","pid":48211,"since":1762876800000,
          "channels":1,"lastExit":null,"error":null}
         """)
         #expect(running.state == .running && running.pid == 48211 && running.lastExit == nil)
-        let failed = try decode(Daemon.self, """
+        let failed = try decode(Service.self, """
         {"id":"nexus.pocket.notes","version":"1.2.0","state":"failed","pid":null,"since":null,"channels":0,
          "lastExit":{"code":1,"signal":null,"at":1762876800000},"error":"exited with code 1"}
         """)
         #expect(failed.state == .failed && failed.pid == nil && failed.since == nil)
-        #expect(failed.lastExit == DaemonExit(code: 1, signal: nil, at: 1_762_876_800_000))
+        #expect(failed.lastExit == ServiceExit(code: 1, signal: nil, at: 1_762_876_800_000))
         #expect(failed.error == "exited with code 1")
-        let named = try decode(DaemonExit.self, #"{"code":null,"signal":"SIGKILL","at":1}"#)
+        let named = try decode(ServiceExit.self, #"{"code":null,"signal":"SIGKILL","at":1}"#)
         #expect(named.signal == "SIGKILL" && named.code == nil)
     }
 
     @Test func hubObjects() throws {
-        let hello = try decode(HelloResult.self, #"{"protocol":1,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}"#)
-        #expect(hello.protocol == 1 && hello.hub.name == "Studio Mac")
+        let hello = try decode(HelloResult.self, #"{"protocol":2,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}"#)
+        #expect(hello.protocol == 2 && hello.hub.name == "Studio Mac")
         let status = try decode(HubStatus.self, """
         {"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0","home":"/Users/x/Library/Application Support/Pocket Hub",
          "startedAt":1762876800000,"carriers":[{"kind":"tcp","port":8628},{"kind":"usb"}],"bun":{"version":null,"installed":false}}
@@ -191,12 +191,12 @@ struct DecodingTests {
         #expect(kept.program.version == nil && kept.program.runtime == nil)
     }
 
-    @Test func daemonResults() throws {
-        let logs = try decode(DaemonLogsResult.self, #"{"lines":[{"at":1,"stream":"stderr","text":"boom"}]}"#)
-        #expect(logs.lines == [DaemonLogLine(at: 1, stream: "stderr", text: "boom")])
+    @Test func serviceResults() throws {
+        let logs = try decode(ServiceLogsResult.self, #"{"lines":[{"at":1,"stream":"stderr","text":"boom"}]}"#)
+        #expect(logs.lines == [ServiceLogLine(at: 1, stream: "stderr", text: "boom")])
         let bun = try decode(BunRuntime.self, #"{"version":null,"installed":false,"path":null}"#)
         #expect(bun == BunRuntime(version: nil, installed: false, path: nil))
-        let install = try decode(DaemonInstallProgress.self, #"{"stage":"unpacking","message":"Unpacking"}"#)
+        let install = try decode(ServiceInstallProgress.self, #"{"stage":"unpacking","message":"Unpacking"}"#)
         #expect(install.stage == "unpacking")
         let bytes = try decode(ByteProgress.self, #"{"done":5,"total":10}"#)
         #expect(bytes.fraction == 0.5)
@@ -285,13 +285,13 @@ struct DecodingTests {
             Issue.record("device.screenshot"); return
         }
         #expect(shot.result == ScreenshotResult(path: "/p.png", width: 400, height: 480, frame: 9))
-        guard case .daemonChanged(let daemon) = try event(#"{"topic":"daemon.changed","daemon":{"id":"d","version":"1","state":"starting","pid":null,"since":5,"channels":0,"lastExit":null,"error":null}}"#) else {
-            Issue.record("daemon.changed"); return
+        guard case .serviceChanged(let service) = try event(#"{"topic":"service.changed","service":{"id":"d","version":"1","state":"starting","pid":null,"since":5,"channels":0,"lastExit":null,"error":null}}"#) else {
+            Issue.record("service.changed"); return
         }
-        #expect(daemon.state == .starting)
-        #expect(try event(#"{"topic":"daemon.removed","id":"d"}"#) == .daemonRemoved(id: "d"))
-        #expect(try event(#"{"topic":"daemon.log","id":"d","at":7,"stream":"stdout","text":"ok"}"#)
-            == .daemonLog(id: "d", line: DaemonLogLine(at: 7, stream: "stdout", text: "ok")))
+        #expect(service.state == .starting)
+        #expect(try event(#"{"topic":"service.removed","id":"d"}"#) == .serviceRemoved(id: "d"))
+        #expect(try event(#"{"topic":"service.log","id":"d","at":7,"stream":"stdout","text":"ok"}"#)
+            == .serviceLog(id: "d", line: ServiceLogLine(at: 7, stream: "stdout", text: "ok")))
         #expect(try event(#"{"topic":"hub.changed","hub":{"id":"h","name":"New","version":"0.1.0"}}"#)
             == .hubChanged(HubIdentity(id: "h", name: "New", version: "0.1.0")))
         guard case .unknown(let topic, _) = try event(#"{"topic":"agent.something","x":1}"#) else {
@@ -309,7 +309,7 @@ struct DecodingTests {
     @Test func errorsMapToKinds() throws {
         let kinds: [(String, HubOperationError.Kind)] = [
             ("not_found", .notFound), ("not_linked", .notLinked), ("busy", .busy), ("link", .link),
-            ("cancelled", .cancelled), ("setup", .setup), ("invalid", .invalid), ("daemon", .daemon), ("release", .release), ("internal", .internal),
+            ("cancelled", .cancelled), ("setup", .setup), ("invalid", .invalid), ("service", .service), ("release", .release), ("internal", .internal),
             ("brand_new", .other("brand_new")),
         ]
         for (raw, kind) in kinds {
@@ -332,8 +332,8 @@ struct DecodingTests {
             let release = try error(#"{"code":1,"message":"No release.","data":{"kind":"release","reason":"\#(reason)"}}"#)
             if case .operation(let e) = release { #expect(e.kind == .release && e.reason == reason) } else { Issue.record("release") }
         }
-        let daemon = try error(#"{"code":1,"message":"Bun is missing.","data":{"kind":"daemon","id":"dev.x"}}"#)
-        if case .operation(let e) = daemon { #expect(e.kind == .daemon && e.daemonId == "dev.x") }
+        let service = try error(#"{"code":1,"message":"Bun is missing.","data":{"kind":"service","id":"dev.x"}}"#)
+        if case .operation(let e) = service { #expect(e.kind == .service && e.serviceId == "dev.x") }
         #expect(try error(#"{"code":-32601,"message":"No method."}"#) == .rpc(code: -32601, message: "No method."))
         #expect(try error(#"{"code":1,"message":"No data."}"#).kind == .internal)
         #expect(try error(#"{"code":1,"message":"c","data":{"kind":"cancelled"}}"#).isCancelled)

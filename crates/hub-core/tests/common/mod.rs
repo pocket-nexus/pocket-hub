@@ -1,7 +1,7 @@
 //! What the integration tests share: a Hub on loopback with a temporary
 //! store, the reference device under Bun driven by JSON lines, a raw device
 //! written with the codec for the cases the reference never produces, and a
-//! fake daemon host.
+//! fake service host.
 #![allow(dead_code)]
 
 use std::collections::VecDeque;
@@ -320,11 +320,11 @@ impl Raw {
 }
 
 // ---------------------------------------------------------------------------
-// A fake daemon host
+// A fake service host
 // ---------------------------------------------------------------------------
 
-/// The daemon's end of one channel connection, in the local dialect.
-pub struct Daemon {
+/// The service's end of one channel connection, in the local dialect.
+pub struct Service {
     pub offer: ChannelOffer,
     reader: ReadHalf<DuplexStream>,
     writer: WriteHalf<DuplexStream>,
@@ -336,19 +336,19 @@ pub struct Daemon {
     pub stop: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
-impl Daemon {
+impl Service {
     /// Reads `channel.ready`, which the relay writes first.
-    async fn attach(offer: ChannelOffer, stream: DuplexStream, stop: tokio::sync::oneshot::Sender<()>) -> Daemon {
+    async fn attach(offer: ChannelOffer, stream: DuplexStream, stop: tokio::sync::oneshot::Sender<()>) -> Service {
         let (reader, writer) = tokio::io::split(stream);
         let limit = offer.payload_limit;
-        let mut daemon = Daemon { offer, reader, writer, decoder: FrameDecoder::local(limit), channel: 0, message_limit: 0, next_id: 1, stop: Some(stop) };
-        let ready = daemon.frame().await.expect("channel.ready");
+        let mut service = Service { offer, reader, writer, decoder: FrameDecoder::local(limit), channel: 0, message_limit: 0, next_id: 1, stop: Some(stop) };
+        let ready = service.frame().await.expect("channel.ready");
         assert_eq!(ready.ty, FrameType::Handshake);
         let object = frame::parse_json(&ready).object.unwrap();
         assert_eq!(object["t"], "channel.ready");
-        daemon.channel = object["channel"].as_u64().unwrap() as u32;
-        daemon.message_limit = object["messageLimit"].as_u64().unwrap();
-        daemon
+        service.channel = object["channel"].as_u64().unwrap() as u32;
+        service.message_limit = object["messageLimit"].as_u64().unwrap();
+        service
     }
 
     pub async fn frame(&mut self) -> Option<Frame> {
@@ -363,7 +363,7 @@ impl Daemon {
                 Ok(Some(Decoded::Frame(frame))) => return Some(frame),
                 Ok(Some(Decoded::Skipped)) => continue,
                 Ok(None) => {}
-                Err(close) => panic!("hub sent the daemon a bad frame: {close}"),
+                Err(close) => panic!("hub sent the service a bad frame: {close}"),
             }
             let n = tokio::time::timeout_at(deadline, self.reader.read(&mut buffer)).await.ok()?.ok()?;
             if n == 0 {
@@ -405,30 +405,30 @@ impl Daemon {
         self.send(FrameType::Credit, 0, id, &amount.to_le_bytes()).await;
     }
 
-    /// The next id of the daemon's own counter (Hub's range).
+    /// The next id of the service's own counter (Hub's range).
     pub fn take_id(&mut self) -> u32 {
         let id = self.next_id | 0x8000_0000;
         self.next_id += 1;
         id
     }
 
-    /// The daemon closes its socket.
+    /// The service closes its socket.
     pub async fn hang_up(mut self) {
         let _ = self.writer.shutdown().await;
     }
 }
 
 pub enum HostNotice {
-    Attached(Box<Daemon>),
+    Attached(Box<Service>),
     /// An open's future was dropped before it finished (a cancelled open).
     Dropped(String),
-    /// A `slow.daemon` open reached the host and waits.
+    /// A `slow.service` open reached the host and waits.
     Opening(String),
 }
 
-/// A daemon host that answers by applet id: `no.daemon`, `busy.daemon`,
-/// `rejected.app`, `slow.daemon` (never answers), and any other id attaches a
-/// daemon whose end the test gets on `notices`.
+/// A service host that answers by applet id: `no.service`, `busy.service`,
+/// `rejected.app`, `slow.service` (never answers), and any other id attaches a
+/// service whose end the test gets on `notices`.
 pub struct FakeHost {
     notices: mpsc::UnboundedSender<HostNotice>,
 }
@@ -454,10 +454,10 @@ impl ChannelHost for FakeHost {
         let notices = self.notices.clone();
         Box::pin(async move {
             match offer.app.as_str() {
-                "no.daemon" => return Err(ChannelOpenError::NoDaemon),
-                "busy.daemon" => return Err(ChannelOpenError::Busy("the daemon did not start".into())),
+                "no.service" => return Err(ChannelOpenError::NoService),
+                "busy.service" => return Err(ChannelOpenError::Busy("the service did not start".into())),
                 "rejected.app" => return Err(ChannelOpenError::Rejected("policy".into())),
-                "slow.daemon" => {
+                "slow.service" => {
                     let _ = notices.send(HostNotice::Opening(offer.app.clone()));
                     let mut notice = DropNotice(Some((notices.clone(), offer.app.clone())));
                     std::future::pending::<()>().await;
@@ -466,14 +466,14 @@ impl ChannelHost for FakeHost {
                 }
                 _ => {}
             }
-            let (hub_side, daemon_side) = tokio::io::duplex(4 * 1024 * 1024);
+            let (hub_side, service_side) = tokio::io::duplex(4 * 1024 * 1024);
             let (reader, writer) = tokio::io::split(hub_side);
             let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
             tokio::spawn(async move {
-                let daemon = Daemon::attach(offer, daemon_side, stop_tx).await;
-                let _ = notices.send(HostNotice::Attached(Box::new(daemon)));
+                let service = Service::attach(offer, service_side, stop_tx).await;
+                let _ = notices.send(HostNotice::Attached(Box::new(service)));
             });
-            // Resolves on the test's signal; a daemon end dropped without one never stops.
+            // Resolves on the test's signal; a service end dropped without one never stops.
             let stop: BoxFuture<'static, ()> = Box::pin(async move {
                 if stop_rx.await.is_err() {
                     std::future::pending::<()>().await;
@@ -484,10 +484,10 @@ impl ChannelHost for FakeHost {
     }
 }
 
-pub async fn next_daemon(notices: &mut mpsc::UnboundedReceiver<HostNotice>) -> Daemon {
+pub async fn next_service(notices: &mut mpsc::UnboundedReceiver<HostNotice>) -> Service {
     loop {
-        match tokio::time::timeout(WAIT, notices.recv()).await.expect("a daemon attaches in time").expect("notices") {
-            HostNotice::Attached(daemon) => return *daemon,
+        match tokio::time::timeout(WAIT, notices.recv()).await.expect("a service attaches in time").expect("notices") {
+            HostNotice::Attached(service) => return *service,
             HostNotice::Dropped(_) | HostNotice::Opening(_) => continue,
         }
     }

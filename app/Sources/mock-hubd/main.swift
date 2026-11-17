@@ -8,7 +8,7 @@
 // owner's real core. It reads commands on standard input, one per line:
 //
 //   link <id> [carrier]        unlink <id> [code]        forget <id>
-//   log <id> <text>            daemon-log <id> <text>    fail <method> <kind> [message]
+//   log <id> <text>            service-log <id> <text>    fail <method> <kind> [message]
 //   candidates <address> ...   drop                      quit
 //   store-link-loss <app> ...  (the link ends under these applets' installs)
 //   release <version>|none     (the newest release of the devices' program, learned at their next link)
@@ -115,7 +115,7 @@ Task {
         case "unlink" where rest.count >= 1: await core.unlink(rest[0], code: rest.count > 1 ? rest[1] : "going_away")
         case "forget" where rest.count == 1: await core.remove(rest[0])
         case "log" where rest.count >= 2: await core.emitDeviceLog(rest[0], text: rest.dropFirst().joined(separator: " "))
-        case "daemon-log" where rest.count >= 2: await core.emitDaemonLog(rest[0], text: rest.dropFirst().joined(separator: " "))
+        case "service-log" where rest.count >= 2: await core.emitServiceLog(rest[0], text: rest.dropFirst().joined(separator: " "))
         case "fail" where rest.count >= 2:
             await core.failNext(rest[0], with: .init(kind: rest[1], message: rest.count > 2 ? rest.dropFirst(2).joined(separator: " ") : "Injected failure."))
         case "candidates": await core.setCandidates(rest.map { SetupCandidate(address: $0, port: 5000, banner: "220 Hello!", ftpd: true) })

@@ -2,11 +2,11 @@ import Foundation
 import HubClient
 import Observation
 
-/// The app's view of Hub: connection state, the paired devices, the daemons,
+/// The app's view of Hub: connection state, the paired devices, the services,
 /// logs and screenshots, and the actions a UI offers. Main-actor state fed by
 /// `HubClient`'s updates; every call to Hub runs off the main actor.
 ///
-/// While the core is unreachable, `isLive` is false and the device and daemon
+/// While the core is unreachable, `isLive` is false and the device and service
 /// lists are emptied: a UI never shows a link or a state it cannot vouch for.
 @MainActor
 @Observable
@@ -28,8 +28,8 @@ public final class HubModel {
     /// The devices that ask to be paired by the code they show and wait for
     /// it, oldest first (CONTROL-API.md §3 Pairing).
     public private(set) var pairRequests: [PairRequest] = []
-    /// nil while unknown (not connected, or `daemons.list` failed).
-    public private(set) var daemons: [Daemon]?
+    /// nil while unknown (not connected, or `services.list` failed).
+    public private(set) var services: [Service]?
     public private(set) var bun: BunRuntime?
     /// The last way each device's link ended, until it links again.
     public private(set) var lastUnlink: [String: DeviceUnlinked] = [:]
@@ -43,7 +43,7 @@ public final class HubModel {
     public private(set) var deviceLogs: [String: LogBuffer<DeviceLogLine>] = [:]
     /// Devices whose log this app has turned on.
     public private(set) var logsOn: Set<String> = []
-    public private(set) var daemonLogs: [String: LogBuffer<DaemonLogLine>] = [:]
+    public private(set) var serviceLogs: [String: LogBuffer<ServiceLogLine>] = [:]
     /// Push progress per device (0...1, nil fraction while unknown).
     public private(set) var pushes: [String: PushActivity] = [:]
     public private(set) var takingScreenshot: Set<String> = []
@@ -51,7 +51,7 @@ public final class HubModel {
     public private(set) var launching: [String: String] = [:]
     /// The applet being deleted per device.
     public private(set) var removing: [String: String] = [:]
-    public private(set) var daemonInstall: DaemonInstallActivity?
+    public private(set) var serviceInstall: ServiceInstallActivity?
     public private(set) var bunInstallProgress: Double??
     /// Software updates per device, from the click until it is dismissed.
     public internal(set) var programUpdates: [String: ProgramUpdate] = [:]
@@ -66,7 +66,7 @@ public final class HubModel {
         public var phase: String?
     }
 
-    public struct DaemonInstallActivity: Equatable, Sendable {
+    public struct ServiceInstallActivity: Equatable, Sendable {
         public var source: String
         /// `runtime` while Hub downloads Bun for it, then `installing`; empty before the first progress.
         public var stage: String
@@ -130,7 +130,7 @@ public final class HubModel {
 
     /// Ends the app's session. Without `shutdownCore` (the default way to quit)
     /// Hub keeps running and devices stay connected; with it Hub itself is
-    /// asked to shut down (links close, daemons stop) and the call returns
+    /// asked to shut down (links close, services stop) and the call returns
     /// once the core is gone or the bound has passed.
     public func quit(shutdownCore: Bool) async {
         if shutdownCore {
@@ -175,7 +175,7 @@ public final class HubModel {
             status = snapshot.status
             devices = Self.sorted(snapshot.devices)
             pairRequests = snapshot.pairRequests
-            daemons = snapshot.daemons.map(Self.sorted)
+            services = snapshot.services.map(Self.sorted)
             bun = snapshot.bun
             let known = Set(snapshot.devices.map(\.id))
             screenshots = screenshots.filter { known.contains($0.key) }
@@ -236,19 +236,19 @@ public final class HubModel {
         case .pairingChanged(let requests):
             pairRequests = requests
             activeSetup?.pairRequestsDidChange(requests)
-        case .daemonChanged(let daemon):
-            var list = daemons ?? []
-            if let index = list.firstIndex(where: { $0.id == daemon.id }) {
-                list[index] = daemon
+        case .serviceChanged(let service):
+            var list = services ?? []
+            if let index = list.firstIndex(where: { $0.id == service.id }) {
+                list[index] = service
             } else {
-                list.append(daemon)
+                list.append(service)
             }
-            daemons = Self.sorted(list)
-        case .daemonRemoved(let id):
-            daemons?.removeAll { $0.id == id }
-            daemonLogs[id] = nil
-        case .daemonLog(let id, let line):
-            daemonLogs[id, default: LogBuffer(capacity: 1000)].append(line)
+            services = Self.sorted(list)
+        case .serviceRemoved(let id):
+            services?.removeAll { $0.id == id }
+            serviceLogs[id] = nil
+        case .serviceLog(let id, let line):
+            serviceLogs[id, default: LogBuffer(capacity: 1000)].append(line)
         case .storeChanged:
             store.catalogDidChange()
         case .hubChanged(let identity):
@@ -260,17 +260,17 @@ public final class HubModel {
     }
 
     /// Forgets everything that described the live state of Hub. Logs and
-    /// screenshots are history and stay; links, applets and daemons do not.
+    /// screenshots are history and stay; links, applets and services do not.
     private func dropLiveState() {
         store.dropLiveState()
         devices = []
         pairRequests = []
-        daemons = nil
+        services = nil
         bun = nil
         pushes = [:]
         takingScreenshot = []
         launching = [:]
-        daemonInstall = nil
+        serviceInstall = nil
         bunInstallProgress = nil
         dropProgramUpdates()
     }
@@ -287,8 +287,8 @@ public final class HubModel {
         }
     }
 
-    static func sorted(_ daemons: [Daemon]) -> [Daemon] {
-        daemons.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
+    static func sorted(_ services: [Service]) -> [Service] {
+        services.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
     }
 
     // MARK: - Device actions
@@ -361,35 +361,35 @@ public final class HubModel {
         status?.name = applied
     }
 
-    // MARK: - Daemon actions
+    // MARK: - Service actions
 
-    public func perform(_ action: DaemonAction, daemon id: String) async throws {
-        let daemon = try await client.daemon(action, id: id)
-        apply(.daemonChanged(daemon))
+    public func perform(_ action: ServiceAction, service id: String) async throws {
+        let service = try await client.service(action, id: id)
+        apply(.serviceChanged(service))
     }
 
-    /// Removes a daemon; with `purge` its data folder goes too.
-    public func removeDaemon(_ id: String, purge: Bool = false) async throws {
-        try await client.removeDaemon(id: id, purge: purge)
+    /// Removes a service; with `purge` its data folder goes too.
+    public func removeService(_ id: String, purge: Bool = false) async throws {
+        try await client.removeService(id: id, purge: purge)
     }
 
-    public func installDaemon(from source: URL) async throws {
-        daemonInstall = DaemonInstallActivity(source: source.lastPathComponent, stage: "")
-        defer { daemonInstall = nil }
-        let daemon = try await client.installDaemon(path: source.path(percentEncoded: false)) { [weak self] progress in
+    public func installService(from source: URL) async throws {
+        serviceInstall = ServiceInstallActivity(source: source.lastPathComponent, stage: "")
+        defer { serviceInstall = nil }
+        let service = try await client.installService(path: source.path(percentEncoded: false)) { [weak self] progress in
             Task { @MainActor in
-                guard let self, self.daemonInstall != nil else { return }
-                self.daemonInstall?.stage = progress.stage
+                guard let self, self.serviceInstall != nil else { return }
+                self.serviceInstall?.stage = progress.stage
             }
         }
-        apply(.daemonChanged(daemon))
+        apply(.serviceChanged(service))
     }
 
-    public func loadDaemonLog(_ id: String) async throws {
-        let lines = try await client.daemonLogs(id: id)
-        var buffer = LogBuffer<DaemonLogLine>(capacity: 1000)
+    public func loadServiceLog(_ id: String) async throws {
+        let lines = try await client.serviceLogs(id: id)
+        var buffer = LogBuffer<ServiceLogLine>(capacity: 1000)
         buffer.replace(with: lines)
-        daemonLogs[id] = buffer
+        serviceLogs[id] = buffer
     }
 
     public func refreshBun() async throws {

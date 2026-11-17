@@ -2,7 +2,7 @@
 //!
 //! Pocket Link is defined over a carrier: one reliable, ordered, two-way byte
 //! stream between one device and Hub. Everything from the preamble on is the
-//! same bytes on every carrier, so the endpoint, the applets and the daemons
+//! same bytes on every carrier, so the endpoint, the applets and the services
 //! never learn which one a device is on. A carrier adapter supplies the
 //! stream and the largest frame it offers; TCP over Wi-Fi is the one adapter
 //! of phase one, and USB, UART and Bluetooth adapters produce the same

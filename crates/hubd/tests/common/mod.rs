@@ -27,7 +27,7 @@ pub fn temp_home() -> tempfile::TempDir {
 pub fn bun() -> PathBuf {
     let output = std::process::Command::new("which").arg("bun").output().expect("which");
     let path = String::from_utf8(output.stdout).unwrap().trim().to_owned();
-    assert!(!path.is_empty(), "the tests run the reference device and the daemons on the system's bun");
+    assert!(!path.is_empty(), "the tests run the reference device and the services on the system's bun");
     PathBuf::from(path)
 }
 
@@ -55,7 +55,7 @@ pub fn test_options(home: &Path) -> Options {
     options.beacons = false;
     options.bun = Some(bun());
     options.mutex_wait = Duration::from_millis(400);
-    options.daemon_idle = Some(Duration::from_secs(1));
+    options.service_idle = Some(Duration::from_secs(1));
     options
 }
 
@@ -178,9 +178,9 @@ pub fn link_dir(card: &Path) -> PathBuf {
     card.join("pocketjs/link")
 }
 
-/// The link-channel example daemon package of the SDK.
+/// The link-channel example service package of the SDK.
 pub fn link_channel_package() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sdk/daemon/examples/link-channel").canonicalize().unwrap()
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sdk/service/examples/link-channel").canonicalize().unwrap()
 }
 
 pub fn alive(pid: u32) -> bool {

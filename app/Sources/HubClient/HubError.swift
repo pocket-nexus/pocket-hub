@@ -11,7 +11,7 @@ public struct HubOperationError: Error, Sendable, Equatable {
         case cancelled
         case setup
         case invalid
-        case daemon
+        case service
         /// The release of a device's program could not be used.
         case release
         case store
@@ -30,7 +30,7 @@ public struct HubOperationError: Error, Sendable, Equatable {
             case "cancelled": self = .cancelled
             case "setup": self = .setup
             case "invalid": self = .invalid
-            case "daemon": self = .daemon
+            case "service": self = .service
             case "release": self = .release
             case "store": self = .store
             case "pairing": self = .pairing
@@ -48,7 +48,7 @@ public struct HubOperationError: Error, Sendable, Equatable {
             case .cancelled: "cancelled"
             case .setup: "setup"
             case .invalid: "invalid"
-            case .daemon: "daemon"
+            case .service: "service"
             case .release: "release"
             case .store: "store"
             case .pairing: "pairing"
@@ -77,18 +77,18 @@ public struct HubOperationError: Error, Sendable, Equatable {
     /// `setup`: the failing step in the setup's own words, for a log.
     public var detail: String?
     /// `setup`: the device a key was stored for when its readback did not return
-    /// (then `confirmed` is false); `daemon`: the daemon's id.
+    /// (then `confirmed` is false); `service`: the service's id.
     public var device: String?
     /// `setup`: false when a key was stored and its final readback did not return.
     public var confirmed: Bool?
-    /// `daemon`: the daemon concerned.
-    public var daemonId: String?
+    /// `service`: the service concerned.
+    public var serviceId: String?
     /// The whole `error.data`, for members this client does not model.
     public var data: JSONValue?
 
     public init(kind: Kind, message: String, holder: MutexHolder? = nil, linkCode: String? = nil,
                 phase: String? = nil, step: String? = nil, reason: String? = nil, detail: String? = nil,
-                device: String? = nil, confirmed: Bool? = nil, daemonId: String? = nil, data: JSONValue? = nil)
+                device: String? = nil, confirmed: Bool? = nil, serviceId: String? = nil, data: JSONValue? = nil)
     {
         self.kind = kind
         self.message = message
@@ -100,7 +100,7 @@ public struct HubOperationError: Error, Sendable, Equatable {
         self.detail = detail
         self.device = device
         self.confirmed = confirmed
-        self.daemonId = daemonId
+        self.serviceId = serviceId
         self.data = data
     }
 }
@@ -119,8 +119,9 @@ public enum HubError: Error, Sendable, Equatable {
     case disconnected
     /// Hub answered something this client cannot read.
     case invalidResponse(String)
-    /// Hub speaks another protocol version.
-    case incompatibleProtocol(hub: Int, client: Int)
+    /// Hub speaks another protocol version: `hub` is the version it answered
+    /// with, nil when it refused this client's hello instead.
+    case incompatibleProtocol(hub: Int?, client: Int)
 
     /// The operation error's kind, when this is one.
     public var kind: HubOperationError.Kind? {
@@ -152,7 +153,7 @@ public enum HubError: Error, Sendable, Equatable {
             detail: data?["detail"]?.stringValue,
             device: data?["device"]?.stringValue,
             confirmed: data?["confirmed"]?.boolValue,
-            daemonId: kind == .daemon ? data?["id"]?.stringValue : nil,
+            serviceId: kind == .service ? data?["id"]?.stringValue : nil,
             data: data))
     }
 }

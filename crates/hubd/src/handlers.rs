@@ -10,7 +10,7 @@ use pocket_hub_api::types::*;
 use pocket_hub_api::{ErrorKind, RpcError, methods};
 use pocket_hub_applet_store::{StoreError, is_update};
 use pocket_hub_core::{DeviceHandle, LaunchTarget, OpError, Operation, family};
-use pocket_hub_daemons::{InstallError, StartError};
+use pocket_hub_services::{InstallError, StartError};
 use pocket_hub_setup::{DeviceFamily, DiscoverOptions, FTPD_PORT, InstallOptions, InstallTarget, InstalledProgram, InstalledPrograms, ReleaseError, ReleaseFetcher, ShellSource};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -131,47 +131,47 @@ pub async fn dispatch(core: &Arc<Core>, client: &Client, id: &Value, method: &st
             ok(Empty {})
         }
 
-        methods::DAEMONS_LIST => {
+        methods::SERVICES_LIST => {
             let _guard = core.publication();
-            ok(DaemonList { daemons: core.daemons() })
+            ok(ServiceList { services: core.services() })
         }
-        methods::DAEMONS_INSTALL => daemon_install(core, params(method, value)?, &progress).await,
-        methods::DAEMONS_REMOVE => {
-            let p: DaemonRemoveParams = params(method, value)?;
-            let removed = core.supervisor.remove(&p.id, p.purge.unwrap_or(false)).await.map_err(|error| daemon_error(&p.id, format!("The daemon could not be removed: {error}.")))?;
+        methods::SERVICES_INSTALL => service_install(core, params(method, value)?, &progress).await,
+        methods::SERVICES_REMOVE => {
+            let p: ServiceRemoveParams = params(method, value)?;
+            let removed = core.supervisor.remove(&p.id, p.purge.unwrap_or(false)).await.map_err(|error| service_error(&p.id, format!("The service could not be removed: {error}.")))?;
             if !removed {
-                return Err(no_daemon(&p.id));
+                return Err(no_service(&p.id));
             }
             ok(Empty {})
         }
-        methods::DAEMONS_START => {
-            let p: DaemonIdParams = params(method, value)?;
+        methods::SERVICES_START => {
+            let p: ServiceIdParams = params(method, value)?;
             core.supervisor.start(&p.id).await.map_err(|error| start_error(&p.id, error))?;
-            daemon_now(core, &p.id)
+            service_now(core, &p.id)
         }
-        methods::DAEMONS_STOP => {
-            let p: DaemonIdParams = params(method, value)?;
+        methods::SERVICES_STOP => {
+            let p: ServiceIdParams = params(method, value)?;
             installed(core, &p.id)?;
             core.supervisor.stop(&p.id).await;
-            daemon_now(core, &p.id)
+            service_now(core, &p.id)
         }
-        methods::DAEMONS_RESTART => {
-            let p: DaemonIdParams = params(method, value)?;
+        methods::SERVICES_RESTART => {
+            let p: ServiceIdParams = params(method, value)?;
             installed(core, &p.id)?;
             core.supervisor.restart(&p.id).await.map_err(|error| start_error(&p.id, error))?;
-            daemon_now(core, &p.id)
+            service_now(core, &p.id)
         }
-        methods::DAEMONS_LOGS => {
-            let p: DaemonLogsParams = params(method, value)?;
+        methods::SERVICES_LOGS => {
+            let p: ServiceLogsParams = params(method, value)?;
             let lines = core.supervisor.logs(&p.id, None);
             if lines.is_empty() && core.supervisor.status(&p.id).is_none() {
-                return Err(no_daemon(&p.id));
+                return Err(no_service(&p.id));
             }
             let tail = p.tail.unwrap_or(200);
-            let lines = lines[lines.len().saturating_sub(tail)..].iter().map(map::daemon_log_line).collect();
-            ok(DaemonLogs { lines })
+            let lines = lines[lines.len().saturating_sub(tail)..].iter().map(map::service_log_line).collect();
+            ok(ServiceLogs { lines })
         }
-        methods::DAEMONS_RUNTIME => runtime(core, params(method, value)?, &progress).await,
+        methods::SERVICES_RUNTIME => runtime(core, params(method, value)?, &progress).await,
 
         methods::STORE_APPS => store_apps(core, params(method, value)?).await,
         methods::STORE_DETAILS => store_details(core, params(method, value)?).await,
@@ -772,36 +772,36 @@ async fn pair_answer(core: &Arc<Core>, p: PairAnswerParams) -> Result<Value, Rpc
 }
 
 // ---------------------------------------------------------------------------
-// Daemons
+// Services
 // ---------------------------------------------------------------------------
 
-fn no_daemon(id: &str) -> RpcError {
-    RpcError::op(ErrorKind::NotFound, format!("No daemon {id} is installed."))
+fn no_service(id: &str) -> RpcError {
+    RpcError::op(ErrorKind::NotFound, format!("No service {id} is installed."))
 }
 
 fn installed(core: &Core, id: &str) -> Result<(), RpcError> {
-    core.supervisor.status(id).map(|_| ()).ok_or_else(|| no_daemon(id))
+    core.supervisor.status(id).map(|_| ()).ok_or_else(|| no_service(id))
 }
 
-fn daemon_now(core: &Core, id: &str) -> Result<Value, RpcError> {
-    ok(core.daemon(id).ok_or_else(|| no_daemon(id))?)
+fn service_now(core: &Core, id: &str) -> Result<Value, RpcError> {
+    ok(core.service(id).ok_or_else(|| no_service(id))?)
 }
 
-/// The error `daemon` for `id`.
-fn daemon_error(id: &str, message: impl Into<String>) -> RpcError {
+/// The error `service` for `id`.
+fn service_error(id: &str, message: impl Into<String>) -> RpcError {
     let id = id.to_owned();
-    RpcError::op(ErrorKind::Daemon, message).with(|data| data.id = Some(id))
+    RpcError::op(ErrorKind::Service, message).with(|data| data.id = Some(id))
 }
 
 fn start_error(id: &str, error: StartError) -> RpcError {
     match error {
-        StartError::NotInstalled(id) => no_daemon(&id),
-        StartError::Failed(why) => daemon_error(id, map::sentence(&format!("the daemon did not start: {why}"))),
+        StartError::NotInstalled(id) => no_service(&id),
+        StartError::Failed(why) => service_error(id, map::sentence(&format!("the service did not start: {why}"))),
     }
 }
 
 /// Downloads Bun when it is missing, with `{done, total}` going to `each`.
-async fn ensure_bun(core: &Core, mut each: impl FnMut(pocket_hub_daemons::Progress)) -> Result<PathBuf, RpcError> {
+async fn ensure_bun(core: &Core, mut each: impl FnMut(pocket_hub_services::Progress)) -> Result<PathBuf, RpcError> {
     let runtime = core.supervisor.runtime();
     if let Some(path) = runtime.available() {
         return Ok(path);
@@ -809,12 +809,12 @@ async fn ensure_bun(core: &Core, mut each: impl FnMut(pocket_hub_daemons::Progre
     runtime.ensure_with(&mut each).await.map_err(|error| internal(map::sentence(&format!("Bun could not be installed: {error}"))))
 }
 
-async fn daemon_install(core: &Core, p: DaemonPathParams, progress: &Progress<'_>) -> Result<Value, RpcError> {
+async fn service_install(core: &Core, p: ServicePathParams, progress: &Progress<'_>) -> Result<Value, RpcError> {
     let path = absolute(&p.path)?;
     if !path.exists() {
         return Err(RpcError::op(ErrorKind::NotFound, format!("There is nothing at {}.", path.display())));
     }
-    // A daemon runs on Bun: the first install downloads it.
+    // A service runs on Bun: the first install downloads it.
     let mut shown = None;
     let source = path.display().to_string();
     ensure_bun(core, |step| {
@@ -823,20 +823,20 @@ async fn daemon_install(core: &Core, p: DaemonPathParams, progress: &Progress<'_
             _ => format!("Downloading Bun: {} KiB.", step.done / 1024),
         };
         if shown.as_ref() != Some(&message) {
-            progress.send(DaemonInstallProgress { stage: "runtime".into(), message: message.clone() });
+            progress.send(ServiceInstallProgress { stage: "runtime".into(), message: message.clone() });
             shown = Some(message);
         }
     })
     .await
-    .map_err(|error| RpcError::op(ErrorKind::Daemon, error.message))?;
-    progress.send(DaemonInstallProgress { stage: "installing".into(), message: format!("Installing the daemon package {}.", path.display()) });
+    .map_err(|error| RpcError::op(ErrorKind::Service, error.message))?;
+    progress.send(ServiceInstallProgress { stage: "installing".into(), message: format!("Installing the service package {}.", path.display()) });
     // A package that is not one is an unusable argument; a package that
-    // could not be installed (its dependencies, the disk) is the daemon's.
+    // could not be installed (its dependencies, the disk) is the service's.
     let report = core.supervisor.install(&path).await.map_err(|error| match error {
         InstallError::Source(_) | InstallError::Archive(_) | InstallError::Manifest(_) => invalid(map::sentence(&error.to_string())),
-        other => RpcError::op(ErrorKind::Daemon, map::sentence(&format!("{source} could not be installed: {other}"))),
+        other => RpcError::op(ErrorKind::Service, map::sentence(&format!("{source} could not be installed: {other}"))),
     })?;
-    daemon_now(core, &report.daemon.id)
+    service_now(core, &report.service.id)
 }
 
 async fn runtime(core: &Core, p: RuntimeParams, progress: &Progress<'_>) -> Result<Value, RpcError> {

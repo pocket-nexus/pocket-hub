@@ -7,7 +7,7 @@ members = [
     "crates/hub-net",
     "crates/hub-applet-store",
     "crates/hub-setup",
-    "crates/hub-daemons",
+    "crates/hub-services",
     "crates/hub-api",
     "crates/hubd",
     "crates/hub-cli",
@@ -27,7 +27,7 @@ pocket-hub-core = { path = "crates/hub-core" }
 pocket-hub-net = { path = "crates/hub-net" }
 pocket-hub-applet-store = { path = "crates/hub-applet-store" }
 pocket-hub-setup = { path = "crates/hub-setup" }
-pocket-hub-daemons = { path = "crates/hub-daemons" }
+pocket-hub-services = { path = "crates/hub-services" }
 pocket-hub-api = { path = "crates/hub-api" }
 pocket-hubd = { path = "crates/hubd" }
 

@@ -1,0 +1,6 @@
+{
+  "service": 1,
+  "id": "dev.pocket-hub.service-sample",
+  "version": "0.1.0",
+  "entry": "service.ts"
+}

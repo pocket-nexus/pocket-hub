@@ -1,7 +1,7 @@
 # The control API
 
 `pocket-hubd` is Pocket Hub's resident core: it owns every device connection,
-the daemons and the store of paired devices. **Everything else is a client of
+the services and the store of paired devices. **Everything else is a client of
 this API**: the SwiftUI app, the `pocket-hub` command line, and later a relay
 that lets Pocket Studio's agents reach a device. One surface for all of them
 means a client can do nothing the others cannot, and a device is never held by
@@ -41,9 +41,15 @@ notification before it is ignored. A second `hello` is `-32600`; another
 answered `-32700`; a line over 1 MiB is answered `-32600` and the connection is
 closed.
 
+**The protocol is 2.** Version 1 is the API of Pocket Hub 0.2.2 and earlier,
+before the methods, objects and events of services took their names (§3, §4).
+A client that says 1 is refused with `-32602` and one sentence that names both
+versions, and a core of version 1 refuses a client that says 2 the same way;
+neither side reads the other's names.
+
 ```
-→ {"jsonrpc":"2.0","id":1,"method":"hub.hello","params":{"protocol":1,"client":{"kind":"cli","name":"pocket-hub","version":"0.1.0"}}}
-← {"jsonrpc":"2.0","id":1,"result":{"protocol":1,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}}
+→ {"jsonrpc":"2.0","id":1,"method":"hub.hello","params":{"protocol":2,"client":{"kind":"cli","name":"pocket-hub","version":"0.1.0"}}}
+← {"jsonrpc":"2.0","id":1,"result":{"protocol":2,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}}
 ```
 
 `client.kind` is `gui`, `cli` or `remote`. **The client's kind and name are its
@@ -85,8 +91,8 @@ on purpose (`--link-port`).
 - After `hub.subscribe`, Hub sends `{"jsonrpc":"2.0","method":"event","params":
   {"topic":<topic>, …}}` (§4). A later `hub.subscribe` replaces the topic list.
   **A client that reads too slowly loses no state**: when its event queue
-  overflows, Hub sends `device.changed`, `daemon.changed`, `pairing.changed`
-  and `store.changed` for everything again; only `device.log` and `daemon.log`
+  overflows, Hub sends `device.changed`, `service.changed`, `pairing.changed`
+  and `store.changed` for everything again; only `device.log` and `service.log`
   lines are lost.
 - A client that disconnects cancels its open calls and releases what it held.
 
@@ -98,14 +104,14 @@ says which:
 
 | `kind` | Meaning | More in `data` |
 | --- | --- | --- |
-| `not_found` | no such device, daemon, app or file | |
+| `not_found` | no such device, service, app or file | |
 | `not_linked` | the device is paired and not connected now | |
 | `busy` | the device is held by a state-changing operation | `holder` (below) |
 | `link` | the device answered with an error, or the link failed | `code` (the link's error code, or `closed`, `timeout`; `unsupported` also for an operation the device's `supports` does not name, §2), `phase` and `reason` when the device gave them (`devices.remove`: `reason` is `running` or `home`) |
 | `cancelled` | the client cancelled the call | |
 | `setup` | a setup step failed | `step`: the `stage` it failed in (§3 Setup). `reason?`: `unreachable` (the console did not answer), `companions_full` (the device already holds 8 computers), `release_unavailable` (the program could not be fetched), `storage` (a read or a write on the device failed), `card` (the folder is not a card of that device). `detail?`: the failing step in the setup's own words, for a log. `device?` and `confirmed: false` when a key was stored for the device and its final readback did not return: that device is then listed with `setupUnconfirmed` |
 | `invalid` | an argument is unusable (not a `.pocket`, a bad name) | |
-| `daemon` | a daemon could not be installed, started or stopped | `id?` |
+| `service` | a service could not be installed, started or stopped | `id?` |
 | `release` | the release of a device's program could not be used | `reason`: `unreachable` (the release source did not answer, or not with a release), `not_found` (no such tag), `rejected` (the file fails its checksum or is not a program of that device) |
 | `store` | the applet store could not be used | `reason`: `unreachable` (no answer, or not the store's answer), `rejected` (a downloaded file does not match its hash, its publisher's signature does not verify, or the package is not what its catalog entry says) |
 | `pairing` | a pairing by a code did not complete (§3 Pairing) | `reason`: `wrong_code` (the device did not take the code: it is not the one it shows), `bad_proof` (the device did not prove that it holds the key Hub sent), `gone` (the device left, or its request ended, before it answered). Nothing was stored in any of them |
@@ -154,7 +160,7 @@ is the same object in a Device's `busy` and in the error `busy`.
 | `since` | integer | when Hub read the request |
 | `expires` | integer | when Hub closes it: 5 minutes after `since`, the time the device keeps its code |
 
-**Daemon** — one installed daemon:
+**Service** — one installed service:
 
 | Field | Type | Content |
 | --- | --- | --- |
@@ -180,7 +186,7 @@ is the same object in a Device's `busy` and in the error `busy`.
 | `bytes` | integer | the package's size |
 | `icon` | string or null | absolute path of the applet's icon (a PNG) in Hub's cache; null until Hub has fetched it |
 | `cached` | boolean | Hub holds the verified package. A device's own store page lists an applet only once this is true |
-| `services`, `hosts` | array | the services and hosts the applet declares it reaches |
+| `services`, `hosts` | array | what the applet declares it reaches: the `companion.pocket` services of the link specification (§11), which are not Hub's services, and hosts |
 | `installed` | object or null | only in an answer for a device (absent without `device`): `{version, hash}` of the copy that device holds, null when it holds none |
 | `update` | boolean | only in an answer for a device: the store's version orders above the version the device holds (`major.minor.patch`). An equal version is no update whatever its hash |
 
@@ -213,7 +219,7 @@ Methods that change a device's state take the device mutex (link specification
 | `hub.status` | | `{id, name, version, home, startedAt, carriers: [{kind, port?}], bun: {version, installed}}` |
 | `hub.setName` | `{name}` | `{name}`. Devices see it at their next link |
 | `hub.subscribe` | `{topics?}` | `{}`. Without `topics`, every topic |
-| `hub.shutdown` | | `{}`. Hub closes its links with `going_away`, stops its daemons and exits |
+| `hub.shutdown` | | `{}`. Hub closes its links with `going_away`, stops its services and exits |
 
 ### Devices
 
@@ -313,16 +319,16 @@ waits: with none `"*"` is `not_found`, with several it is `invalid`.
   `setup.discover`, `setup.install` and `setup.card` take the kind `3ds`
   alone.
 
-### Daemons
+### Services
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `daemons.list` | | `{daemons: [Daemon]}` |
-| `daemons.install` | `{path}` (a folder or a `.tar.gz`) | `Daemon`. Progress: `{stage, message}`; `stage` is `runtime` while Hub downloads Bun for it, then `installing` |
-| `daemons.remove` | `{id, purge?}` | `{}`. The daemon's data folder stays unless `purge` is true |
-| `daemons.start`, `daemons.stop`, `daemons.restart` | `{id}` | `Daemon` |
-| `daemons.logs` | `{id, tail?}` | `{lines: [{at, stream, text}]}`; `tail` defaults to 200 |
-| `daemons.runtime` | `{install?}` | `{version, installed, path}`: the Bun that Hub runs daemons on. With `install: true` Hub downloads Bun now. Progress: `{done, total}` |
+| `services.list` | | `{services: [Service]}` |
+| `services.install` | `{path}` (a folder or a `.tar.gz`) | `Service`. Progress: `{stage, message}`; `stage` is `runtime` while Hub downloads Bun for it, then `installing` |
+| `services.remove` | `{id, purge?}` | `{}`. The service's data folder stays unless `purge` is true |
+| `services.start`, `services.stop`, `services.restart` | `{id}` | `Service` |
+| `services.logs` | `{id, tail?}` | `{lines: [{at, stream, text}]}`; `tail` defaults to 200 |
+| `services.runtime` | `{install?}` | `{version, installed, path}`: the Bun that Hub runs services on. With `install: true` Hub downloads Bun now. Progress: `{done, total}` |
 
 ### Store
 
@@ -346,8 +352,8 @@ package's own hash and the store has no route that gives it. Until a package is
 there (`cached`), the device's store page does not list that applet; the
 computer's does.
 
-The store carries applet packages alone today. An applet's daemon is not part
-of what `store.install` fetches until the store publishes daemons.
+The store carries applet packages alone today. An applet's service is not part
+of what `store.install` fetches until the store publishes services.
 
 ## 4. Events
 
@@ -359,9 +365,9 @@ of what `store.install` fetches until the store publishes daemons.
 | `device.log` | `id`, `level`, `source`, `text`, `frame`, `dropped?` | a log line while logs are on |
 | `device.screenshot` | `id`, `path`, `width`, `height`, `frame` | the device sent a screenshot unasked |
 | `pairing.changed` | `requests: [PairRequest]` | the requests that wait for a code changed (§3 Pairing): the whole list, as `pairing.list` answers it |
-| `daemon.changed` | `daemon: Daemon` | a daemon was installed or changed state |
-| `daemon.removed` | `id` | |
-| `daemon.log` | `id`, `at`, `stream`, `text` | a line of a daemon's output |
+| `service.changed` | `service: Service` | a service was installed or changed state |
+| `service.removed` | `id` | |
+| `service.log` | `id`, `at`, `stream`, `text` | a line of a service's output |
 | `hub.changed` | `hub: {id, name, version}` | the name changed |
 | `store.changed` | `fetchedAt` | the catalog Hub holds, or what it has cached of it (packages, icons), changed; a client calls `store.apps` again |
 

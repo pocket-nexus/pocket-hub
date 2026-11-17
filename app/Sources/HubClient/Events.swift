@@ -9,9 +9,9 @@ public enum HubEvent: Sendable, Hashable {
     case deviceScreenshot(DeviceScreenshot)
     /// The requests to be paired that wait for a code: the whole list.
     case pairingChanged([PairRequest])
-    case daemonChanged(Daemon)
-    case daemonRemoved(id: String)
-    case daemonLog(id: String, line: DaemonLogLine)
+    case serviceChanged(Service)
+    case serviceRemoved(id: String)
+    case serviceLog(id: String, line: ServiceLogLine)
     case hubChanged(HubIdentity)
     /// The catalog Hub holds, or what it has cached of it, changed: call `store.apps` again.
     case storeChanged(fetchedAt: EpochMilliseconds)
@@ -25,9 +25,9 @@ public enum HubEvent: Sendable, Hashable {
         case deviceLog = "device.log"
         case deviceScreenshot = "device.screenshot"
         case pairingChanged = "pairing.changed"
-        case daemonChanged = "daemon.changed"
-        case daemonRemoved = "daemon.removed"
-        case daemonLog = "daemon.log"
+        case serviceChanged = "service.changed"
+        case serviceRemoved = "service.removed"
+        case serviceLog = "service.log"
         case hubChanged = "hub.changed"
         case storeChanged = "store.changed"
     }
@@ -50,9 +50,9 @@ public enum HubEvent: Sendable, Hashable {
         case .deviceLog: self = .deviceLog(try params.decode())
         case .deviceScreenshot: self = .deviceScreenshot(try params.decode())
         case .pairingChanged: self = .pairingChanged(try member("requests"))
-        case .daemonChanged: self = .daemonChanged(try member("daemon"))
-        case .daemonRemoved: self = .daemonRemoved(id: try member("id"))
-        case .daemonLog: self = .daemonLog(id: try member("id"), line: try params.decode())
+        case .serviceChanged: self = .serviceChanged(try member("service"))
+        case .serviceRemoved: self = .serviceRemoved(id: try member("id"))
+        case .serviceLog: self = .serviceLog(id: try member("id"), line: try params.decode())
         case .hubChanged: self = .hubChanged(try member("hub"))
         case .storeChanged: self = .storeChanged(fetchedAt: try member("fetchedAt"))
         case nil: self = .unknown(topic: topic, params: params)
@@ -64,14 +64,14 @@ public enum HubEvent: Sendable, Hashable {
         switch self {
         case .deviceChanged, .deviceRemoved, .deviceUnlinked, .deviceLog, .deviceScreenshot: .devices
         case .pairingChanged: .pairing
-        case .daemonChanged, .daemonRemoved, .daemonLog: .daemons
+        case .serviceChanged, .serviceRemoved, .serviceLog: .services
         case .hubChanged: .hub
         // A hint to call store.apps again; it carries no state to roll back.
         case .storeChanged, .unknown: .other
         }
     }
 
-    enum Family { case devices, pairing, daemons, hub, other }
+    enum Family { case devices, pairing, services, hub, other }
 }
 
 /// `device.unlinked`: the link ended. `code` is the close code's name (link

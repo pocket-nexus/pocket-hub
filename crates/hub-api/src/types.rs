@@ -439,12 +439,12 @@ pub struct PairAnswerParams {
 }
 
 // ---------------------------------------------------------------------------
-// Daemons
+// Services
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum DaemonState {
+pub enum ServiceState {
     Stopped,
     Starting,
     Running,
@@ -462,10 +462,10 @@ pub struct LastExit {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Daemon {
+pub struct Service {
     pub id: String,
     pub version: String,
-    pub state: DaemonState,
+    pub state: ServiceState,
     pub pid: Option<u32>,
     pub since: Option<i64>,
     pub channels: u32,
@@ -474,37 +474,37 @@ pub struct Daemon {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DaemonList {
-    pub daemons: Vec<Daemon>,
+pub struct ServiceList {
+    pub services: Vec<Service>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DaemonPathParams {
+pub struct ServicePathParams {
     pub path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DaemonIdParams {
+pub struct ServiceIdParams {
     pub id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DaemonRemoveParams {
+pub struct ServiceRemoveParams {
     pub id: String,
-    /// Remove the daemon's data folder too.
+    /// Remove the service's data folder too.
     #[serde(default)]
     pub purge: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DaemonLogsParams {
+pub struct ServiceLogsParams {
     pub id: String,
     #[serde(default)]
     pub tail: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DaemonLogLine {
+pub struct ServiceLogLine {
     pub at: i64,
     /// `stdout`, `stderr`, or `hub` for Hub's own lines about the process.
     pub stream: String,
@@ -512,12 +512,12 @@ pub struct DaemonLogLine {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DaemonLogs {
-    pub lines: Vec<DaemonLogLine>,
+pub struct ServiceLogs {
+    pub lines: Vec<ServiceLogLine>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DaemonInstallProgress {
+pub struct ServiceInstallProgress {
     /// `runtime` (Bun is being downloaded) or `installing`.
     pub stage: String,
     pub message: String,
@@ -730,12 +730,12 @@ pub enum Event {
     /// The requests that wait for a code changed: the whole list.
     #[serde(rename = "pairing.changed")]
     PairingChanged { requests: Vec<PairRequest> },
-    #[serde(rename = "daemon.changed")]
-    DaemonChanged { daemon: Daemon },
-    #[serde(rename = "daemon.removed")]
-    DaemonRemoved { id: String },
-    #[serde(rename = "daemon.log")]
-    DaemonLog { id: String, at: i64, stream: String, text: String },
+    #[serde(rename = "service.changed")]
+    ServiceChanged { service: Service },
+    #[serde(rename = "service.removed")]
+    ServiceRemoved { id: String },
+    #[serde(rename = "service.log")]
+    ServiceLog { id: String, at: i64, stream: String, text: String },
     #[serde(rename = "hub.changed")]
     HubChanged { hub: HubInfo },
     /// The catalog Hub holds changed; a client calls `store.apps` again.
@@ -756,9 +756,9 @@ impl Event {
             Self::DeviceLog { .. } => DEVICE_LOG,
             Self::DeviceScreenshot { .. } => DEVICE_SCREENSHOT,
             Self::PairingChanged { .. } => PAIRING_CHANGED,
-            Self::DaemonChanged { .. } => DAEMON_CHANGED,
-            Self::DaemonRemoved { .. } => DAEMON_REMOVED,
-            Self::DaemonLog { .. } => DAEMON_LOG,
+            Self::ServiceChanged { .. } => SERVICE_CHANGED,
+            Self::ServiceRemoved { .. } => SERVICE_REMOVED,
+            Self::ServiceLog { .. } => SERVICE_LOG,
             Self::HubChanged { .. } => HUB_CHANGED,
             Self::StoreChanged { .. } => STORE_CHANGED,
         }

@@ -1,0 +1,27 @@
+[package]
+name = "pocket-hub-services"
+description = "Pocket Hub's services: the Bun runtime, installed service packages and their processes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pocket-link.workspace = true
+bytes.workspace = true
+hex.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+flate2.workspace = true
+libc.workspace = true
+reqwest.workspace = true
+tar.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

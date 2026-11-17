@@ -200,8 +200,8 @@ public struct MockPairingBehavior: Sendable {
     public init() {}
 }
 
-/// An installed daemon in the mock, rendered by hand like `MockDevice`.
-public struct MockDaemon: Sendable {
+/// An installed service in the mock, rendered by hand like `MockDevice`.
+public struct MockService: Sendable {
     public var id: String
     public var version: String
     public var state = "stopped"
@@ -393,7 +393,7 @@ public struct MockScenario: Sendable {
     public var hubName = "Studio Mac"
     public var hubVersion = "0.1.0-mock"
     public var devices: [MockDevice] = []
-    public var daemons: [MockDaemon] = []
+    public var services: [MockService] = []
     public var candidates: [SetupCandidate] = []
     public var setup = MockSetupBehavior()
     /// The devices that ask to be paired by their code and wait for it.
@@ -452,11 +452,11 @@ public struct MockScenario: Sendable {
             SetupCandidate(address: "192.168.1.57", port: 5000, banner: "220 Hello!", ftpd: true),
         ]
         scenario.setup.discoverEmptyCalls = 1
-        scenario.daemons = []
+        scenario.services = []
         return scenario
     }
 
-    /// Two paired consoles, one linked, two daemons, and a console running ftpd.
+    /// Two paired consoles, one linked, two services, and a console running ftpd.
     public static var demo: MockScenario {
         var scenario = MockScenario.firstRun
         var living = MockDevice(id: "0123456789abcdef")
@@ -476,22 +476,22 @@ public struct MockScenario: Sendable {
         travel.lastAddress = "192.168.1.77"
         travel.lastSeen = MockClock.now() - 86_400_000
         scenario.devices = [living, travel]
-        var weather = MockDaemon(id: "nexus.pocket.weather", version: "0.3.1")
+        var weather = MockService(id: "nexus.pocket.weather", version: "0.3.1")
         weather.state = "running"
         weather.pid = 48211
         weather.since = MockClock.now() - 60_000
         weather.channels = 1
         weather.log = [
-            ["at": .number(Double(MockClock.now() - 59_000)), "stream": "stdout", "text": "weather daemon 0.3.1 ready"],
+            ["at": .number(Double(MockClock.now() - 59_000)), "stream": "stdout", "text": "weather service 0.3.1 ready"],
             ["at": .number(Double(MockClock.now() - 30_000)), "stream": "stdout", "text": "forecast refreshed for 1 channel"],
         ]
-        var notes = MockDaemon(id: "nexus.pocket.notes", version: "1.2.0")
+        var notes = MockService(id: "nexus.pocket.notes", version: "1.2.0")
         notes.state = "failed"
         notes.since = MockClock.now() - 3_600_000
         notes.lastExit = ["code": 1, "signal": .null, "at": .number(Double(MockClock.now() - 3_600_000))]
-        notes.error = "The daemon exited with code 1 during start."
+        notes.error = "The service exited with code 1 during start."
         notes.log = [["at": .number(Double(MockClock.now() - 3_600_000)), "stream": "stderr", "text": "error: cannot find module './store'"]]
-        scenario.daemons = [weather, notes]
+        scenario.services = [weather, notes]
         return scenario
     }
 }

@@ -9,7 +9,7 @@ enum SidebarItem: Hashable {
     /// The applet store: the whole catalog, whatever devices are paired.
     case store
     case device(String)
-    case daemons
+    case services
 }
 
 /// The sections of a device's page. A screenshot has no section: it is
@@ -311,7 +311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Quitting leaves Hub running and devices connected, unless the owner
     /// chose "Quit and Stop Pocket Hub": then the core is asked to shut down
-    /// (links close, daemons stop) and the app waits until it is gone, bounded
+    /// (links close, services stop) and the app waits until it is gone, bounded
     /// by the client's own timeout so a hung core cannot keep it alive.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated {

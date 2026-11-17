@@ -71,8 +71,8 @@ struct ExamplesTests {
             switch name {
             case "hub.hello":
                 let client = try p["client"].orThrow("client").decoded() as ClientIdentity
-                let hello = try await replay.hello(protocol: p["protocol"]?.intValue ?? 1, client: client)
-                #expect(hello.protocol == 1 && !hello.hub.id.isEmpty)
+                let hello = try await replay.hello(protocol: p["protocol"]?.intValue ?? HubClient.protocolVersion, client: client)
+                #expect(hello.protocol == HubClient.protocolVersion && !hello.hub.id.isEmpty)
             case "hub.status": _ = try await replay.status()
             case "hub.setName": _ = try await replay.setName(p["name"]?.stringValue ?? "")
             case "hub.subscribe": try await replay.subscribe()
@@ -118,17 +118,17 @@ struct ExamplesTests {
                 let paired = try await replay.answerPairing(device: device, code: p["code"]?.stringValue ?? "")
                 #expect(paired.kind == .tab5 && paired.supports.isEmpty, "a Tab5 takes none of the four operations")
             case "pairing.decline": try await replay.declinePairing(device: device)
-            case "daemons.list": _ = try await replay.daemons()
-            case "daemons.install":
+            case "services.list": _ = try await replay.services()
+            case "services.install":
                 let stages = Locked<[String]>([])
-                _ = try await replay.installDaemon(path: path) { progress in stages.mutate { $0.append(progress.stage) } }
+                _ = try await replay.installService(path: path) { progress in stages.mutate { $0.append(progress.stage) } }
                 #expect(stages.value.allSatisfy { ["runtime", "installing"].contains($0) })
-            case "daemons.remove": try await replay.removeDaemon(id: id, purge: p["purge"]?.boolValue ?? false)
-            case "daemons.start": _ = try await replay.daemon(.start, id: id)
-            case "daemons.stop": _ = try await replay.daemon(.stop, id: id)
-            case "daemons.restart": _ = try await replay.daemon(.restart, id: id)
-            case "daemons.logs": #expect(try await !replay.daemonLogs(id: id, tail: p["tail"]?.intValue).isEmpty)
-            case "daemons.runtime": _ = try await replay.bunRuntime(install: p["install"]?.boolValue ?? false)
+            case "services.remove": try await replay.removeService(id: id, purge: p["purge"]?.boolValue ?? false)
+            case "services.start": _ = try await replay.service(.start, id: id)
+            case "services.stop": _ = try await replay.service(.stop, id: id)
+            case "services.restart": _ = try await replay.service(.restart, id: id)
+            case "services.logs": #expect(try await !replay.serviceLogs(id: id, tail: p["tail"]?.intValue).isEmpty)
+            case "services.runtime": _ = try await replay.bunRuntime(install: p["install"]?.boolValue ?? false)
             case "store.apps":
                 let catalog = try await replay.storeApps(device: p["device"]?.stringValue, refresh: p["refresh"]?.boolValue ?? false)
                 #expect(!catalog.apps.isEmpty && catalog.fetchedAt > 0)
@@ -163,8 +163,8 @@ struct ExamplesTests {
         let contract: Set<String> = ["hub.hello", "hub.status", "hub.setName", "hub.subscribe", "hub.shutdown",
             "devices.list", "devices.get", "devices.forget", "devices.status", "devices.push", "devices.launch",
             "devices.remove", "devices.screenshot", "devices.logs", "devices.installProgram", "setup.discover", "setup.install",
-            "setup.card", "pairing.list", "pairing.answer", "pairing.decline", "daemons.list", "daemons.install", "daemons.remove", "daemons.start", "daemons.stop",
-            "daemons.restart", "daemons.logs", "daemons.runtime", "store.apps", "store.details", "store.sample", "store.install"]
+            "setup.card", "pairing.list", "pairing.answer", "pairing.decline", "services.list", "services.install", "services.remove", "services.start", "services.stop",
+            "services.restart", "services.logs", "services.runtime", "store.apps", "store.details", "store.sample", "store.install"]
         #expect(covered == contract)
     }
 
@@ -211,7 +211,7 @@ struct ExamplesTests {
     /// newest; its absence is reported here rather than passing silently.
     @Test func everyErrorKindOfTheContractHasAnExample() throws {
         let kinds = Set(try Self.section("errors").keys)
-        for kind in ["not_found", "not_linked", "busy", "cancelled", "setup", "invalid", "daemon", "release", "store", "pairing"] {
+        for kind in ["not_found", "not_linked", "busy", "cancelled", "setup", "invalid", "service", "release", "store", "pairing"] {
             #expect(kinds.contains(kind), "the examples hold no error \(kind)")
         }
     }

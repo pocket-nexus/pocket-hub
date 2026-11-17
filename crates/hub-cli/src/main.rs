@@ -27,7 +27,7 @@ pub mod status {
 }
 
 /// How long `shutdown` waits for the core to be gone: its links' close
-/// drain and its daemons' stop (5 s, then SIGTERM, 5 s, then SIGKILL) fit.
+/// drain and its services' stop (5 s, then SIGTERM, 5 s, then SIGKILL) fit.
 const SHUTDOWN_WAIT: std::time::Duration = std::time::Duration::from_secs(20);
 
 const AFTER_HELP: &str = "\
@@ -37,7 +37,7 @@ The core (pocket-hubd) is started when none answers: $POCKET_HUBD, else the pock
 Its home is --home, else $POCKET_HUB_HOME, else ~/Library/Application Support/nexus.pocket.hub on macOS.";
 
 #[derive(Parser, Debug)]
-#[command(name = "pocket-hub", version, about = "Manage Pocket Hub's devices and daemons from a terminal.", after_help = AFTER_HELP)]
+#[command(name = "pocket-hub", version, about = "Manage Pocket Hub's devices and services from a terminal.", after_help = AFTER_HELP)]
 struct Cli {
     /// Print the raw result objects of the control API as JSON.
     #[arg(long, global = true)]
@@ -73,17 +73,17 @@ enum Command {
     /// Pair a device that shows a code (an M5Stack Tab5): list the devices that ask, or answer one with its code.
     #[command(after_help = "On the device, open its pairing page and choose this computer; the device shows a code of 6 digits, good for 5 minutes.\nExamples:\n  pocket-hub pair                 # the devices that ask to be paired\n  pocket-hub pair --code 314159   # the code the device shows\n  pocket-hub pair --decline       # dismiss the request")]
     Pair(PairArgs),
-    /// The installed daemons.
-    Daemons,
-    /// One daemon.
-    Daemon {
+    /// The installed services.
+    Services,
+    /// One service.
+    Service {
         #[command(subcommand)]
-        command: DaemonCommand,
+        command: ServiceCommand,
     },
     /// The applet store: what it offers (for a device, with what it holds), and installing from it.
     #[command(after_help = "Examples:\n  pocket-hub store --device 0123456789abcdef\n  pocket-hub store install dev.pocket-nexus.hn")]
     Store(StoreArgs),
-    /// The Bun runtime daemons run on.
+    /// The Bun runtime services run on.
     Runtime {
         /// Download and install Bun now.
         #[arg(long)]
@@ -91,11 +91,11 @@ enum Command {
     },
     /// Print the core's events as they happen (Ctrl-C ends).
     Watch {
-        /// Only these topics (device.changed, device.log, daemon.changed, …).
+        /// Only these topics (device.changed, device.log, service.changed, …).
         #[arg(long = "topic", value_name = "TOPIC")]
         topics: Vec<String>,
     },
-    /// Stop the core: its links close, its daemons stop.
+    /// Stop the core: its links close, its services stop.
     Shutdown,
 }
 
@@ -213,13 +213,13 @@ enum DeviceCommand {
 const DEVICE_COMMANDS: [&str; 9] = ["status", "apps", "push", "launch", "remove", "shot", "logs", "update", "forget"];
 
 #[derive(Subcommand, Debug)]
-enum DaemonCommand {
-    /// Install a daemon package: a folder or a .tar.gz.
+enum ServiceCommand {
+    /// Install a service package: a folder or a .tar.gz.
     Install { path: PathBuf },
     Start { id: String },
     Stop { id: String },
     Restart { id: String },
-    /// The daemon's output.
+    /// The service's output.
     Logs {
         id: String,
         /// Keep printing new lines.
@@ -229,10 +229,10 @@ enum DaemonCommand {
         #[arg(long, default_value_t = 200)]
         tail: usize,
     },
-    /// Remove the daemon (its data folder is kept unless --purge).
+    /// Remove the service (its data folder is kept unless --purge).
     Remove {
         id: String,
-        /// Remove the daemon's data folder too.
+        /// Remove the service's data folder too.
         #[arg(long)]
         purge: bool,
     },
@@ -312,8 +312,8 @@ async fn run(cli: Cli, out: &Out) -> Outcome {
         Command::Status => {
             let value = client.call(methods::STATUS, &json!({})).await?;
             let devices = client.call_as::<DeviceList>(methods::DEVICES_LIST, &json!({})).await?;
-            let daemons = client.call_as::<DaemonList>(methods::DAEMONS_LIST, &json!({})).await?;
-            out.result(&value, || output::status(&decode(&value)?, &devices, &daemons))
+            let services = client.call_as::<ServiceList>(methods::SERVICES_LIST, &json!({})).await?;
+            out.result(&value, || output::status(&decode(&value)?, &devices, &services))
         }
         Command::Devices => {
             let value = client.call(methods::DEVICES_LIST, &json!({})).await?;
@@ -325,13 +325,13 @@ async fn run(cli: Cli, out: &Out) -> Outcome {
         }
         Command::Setup { kind: SetupKind::ThreeDs(args) } => setup(&client, out, args).await,
         Command::Pair(args) => pair(&client, out, args).await,
-        Command::Daemons => {
-            let value = client.call(methods::DAEMONS_LIST, &json!({})).await?;
-            out.result(&value, || Ok(output::daemons(&decode::<DaemonList>(&value)?.daemons)))
+        Command::Services => {
+            let value = client.call(methods::SERVICES_LIST, &json!({})).await?;
+            out.result(&value, || Ok(output::services(&decode::<ServiceList>(&value)?.services)))
         }
-        Command::Daemon { command } => daemon_command(&client, out, command).await,
+        Command::Service { command } => service_command(&client, out, command).await,
         Command::Runtime { install } => {
-            let call = client.start(methods::DAEMONS_RUNTIME, &RuntimeParams { install: Some(install) }).await?;
+            let call = client.start(methods::SERVICES_RUNTIME, &RuntimeParams { install: Some(install) }).await?;
             let bar = out.bar("Downloading Bun");
             let value = call
                 .finish_with(|progress| {
@@ -352,7 +352,7 @@ async fn run(cli: Cli, out: &Out) -> Outcome {
         Command::Shutdown => {
             let value = client.call(methods::SHUTDOWN, &json!({})).await?;
             // The answer comes before the core has stopped its links and
-            // daemons: it is gone when it has closed this connection and
+            // services: it is gone when it has closed this connection and
             // removed its socket (§1 "Starting and stopping the core").
             let socket = pocket_hub_api::paths::socket_path(&home);
             let gone = async {
@@ -599,44 +599,44 @@ fn split_host(text: &str) -> Result<(String, Option<u16>), Failure> {
     }
 }
 
-async fn daemon_command(client: &Client, out: &Out, command: DaemonCommand) -> Outcome {
+async fn service_command(client: &Client, out: &Out, command: ServiceCommand) -> Outcome {
     let simple = |method: &'static str, id: String| async move {
-        let value = client.call(method, &DaemonIdParams { id }).await?;
-        out.result(&value, || Ok(output::daemons(&[decode::<Daemon>(&value)?])))
+        let value = client.call(method, &ServiceIdParams { id }).await?;
+        out.result(&value, || Ok(output::services(&[decode::<Service>(&value)?])))
     };
     match command {
-        DaemonCommand::Install { path } => {
-            let call = client.start(methods::DAEMONS_INSTALL, &DaemonPathParams { path: absolute(&path)? }).await?;
+        ServiceCommand::Install { path } => {
+            let call = client.start(methods::SERVICES_INSTALL, &ServicePathParams { path: absolute(&path)? }).await?;
             let value = call
                 .finish_with(|progress| {
-                    if let Ok(progress) = serde_json::from_value::<DaemonInstallProgress>(progress) {
+                    if let Ok(progress) = serde_json::from_value::<ServiceInstallProgress>(progress) {
                         out.note(&progress.message);
                     }
                 })
                 .await?;
             out.result(&value, || {
-                let daemon: Daemon = decode(&value)?;
-                Ok(format!("Installed {} {}.", daemon.id, daemon.version))
+                let service: Service = decode(&value)?;
+                Ok(format!("Installed {} {}.", service.id, service.version))
             })
         }
-        DaemonCommand::Start { id } => simple(methods::DAEMONS_START, id).await,
-        DaemonCommand::Stop { id } => simple(methods::DAEMONS_STOP, id).await,
-        DaemonCommand::Restart { id } => simple(methods::DAEMONS_RESTART, id).await,
-        DaemonCommand::Remove { id, purge } => {
-            let value = client.call(methods::DAEMONS_REMOVE, &DaemonRemoveParams { id: id.clone(), purge: Some(purge) }).await?;
+        ServiceCommand::Start { id } => simple(methods::SERVICES_START, id).await,
+        ServiceCommand::Stop { id } => simple(methods::SERVICES_STOP, id).await,
+        ServiceCommand::Restart { id } => simple(methods::SERVICES_RESTART, id).await,
+        ServiceCommand::Remove { id, purge } => {
+            let value = client.call(methods::SERVICES_REMOVE, &ServiceRemoveParams { id: id.clone(), purge: Some(purge) }).await?;
             out.result(&value, || Ok(if purge { format!("Removed {id} and its data.") } else { format!("Removed {id}; its data folder is kept.") }))
         }
-        DaemonCommand::Logs { id, follow, tail } => {
+        ServiceCommand::Logs { id, follow, tail } => {
             if follow {
-                client.call(methods::SUBSCRIBE, &SubscribeParams { topics: Some(vec![topics::DAEMON_LOG.into()]) }).await?;
+                client.call(methods::SUBSCRIBE, &SubscribeParams { topics: Some(vec![topics::SERVICE_LOG.into()]) }).await?;
             }
-            let value = client.call(methods::DAEMONS_LOGS, &DaemonLogsParams { id: id.clone(), tail: Some(tail) }).await?;
-            let logs: DaemonLogs = decode(&value)?;
+            let value = client.call(methods::SERVICES_LOGS, &ServiceLogsParams { id: id.clone(), tail: Some(tail) }).await?;
+            let logs: ServiceLogs = decode(&value)?;
             if out.json && !follow {
                 out.print_json(&value);
             } else {
                 for line in &logs.lines {
-                    out.event(&json!({"topic": topics::DAEMON_LOG, "id": id, "at": line.at, "stream": line.stream, "text": line.text}), output::event_line);
+                    out.event(&json!({"topic": topics::SERVICE_LOG, "id": id, "at": line.at, "stream": line.stream, "text": line.text}), output::event_line);
                 }
             }
             if !follow {

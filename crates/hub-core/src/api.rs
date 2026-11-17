@@ -1,6 +1,6 @@
 //! What the rest of Hub sees of the endpoint: snapshots, events, the error of
 //! a runtime operation, and the two traits other crates implement (the
-//! daemon supervisor's `ChannelHost`, and `DeviceRequests` for the device's
+//! service supervisor's `ChannelHost`, and `DeviceRequests` for the device's
 //! own system requests).
 
 use std::future::Future;
@@ -17,11 +17,11 @@ use crate::carrier::CarrierKind;
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 // ---------------------------------------------------------------------------
-// Applet channels toward daemons (§7, docs/DAEMON-PROTOCOL.md §5)
+// Applet channels toward services (§7, docs/SERVICE-PROTOCOL.md §5)
 // ---------------------------------------------------------------------------
 
 /// A device opened an applet's channel; the supervisor finds (or starts) the
-/// applet's daemon and hands back one local connection for this channel.
+/// applet's service and hands back one local connection for this channel.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChannelOffer {
@@ -40,16 +40,16 @@ pub struct ChannelOffer {
     pub payload_limit: u32,
 }
 
-/// The daemon's channel connection. The supervisor has read the daemon's
+/// The service's channel connection. The supervisor has read the service's
 /// `channel.attach`, matched its ticket, and read nothing else; the relay
 /// writes `channel.ready` first and then carries the channel's frames.
 pub struct ChannelStream {
     pub reader: Box<dyn AsyncRead + Send + Unpin>,
     pub writer: Box<dyn AsyncWrite + Send + Unpin>,
-    /// Resolves when the supervisor stops the daemon with this channel open
+    /// Resolves when the supervisor stops the service with this channel open
     /// (the owner's stop, an upgrade, Hub quitting): the relay then sends the
-    /// daemon `channel.close` `stop` and tells the device `daemon`
-    /// (docs/DAEMON-PROTOCOL.md §4).
+    /// service `channel.close` `stop` and tells the device `daemon`, the link's
+    /// close reason (link specification §7.5; docs/SERVICE-PROTOCOL.md §4).
     pub stop: Option<BoxFuture<'static, ()>>,
 }
 
@@ -57,10 +57,10 @@ pub struct ChannelStream {
 /// of §7.1 that sets the device's retry rule.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ChannelOpenError {
-    /// `no_daemon`: no daemon is installed for this applet id.
-    #[error("no daemon serves this applet")]
-    NoDaemon,
-    /// `busy`: the daemon exists but could not start or attach in time.
+    /// `no_daemon` (the wire's code, §7.1): no service is installed for this applet id.
+    #[error("no service serves this applet")]
+    NoService,
+    /// `busy`: the service exists but could not start or attach in time.
     #[error("{0}")]
     Busy(String),
     /// `rejected`: Hub's policy refuses the applet id.
@@ -68,7 +68,7 @@ pub enum ChannelOpenError {
     Rejected(String),
 }
 
-/// The daemon supervisor's side of a channel. `open` is called after the
+/// The service supervisor's side of a channel. `open` is called after the
 /// generation is stored; Hub answers the device `busy` when it has not
 /// returned within LINK_CHANNEL_OPEN_MS, and **drops the future** when the
 /// device cancels the open or the link ends: dropping it is how the
@@ -579,7 +579,7 @@ pub enum HubEvent {
     ChannelClosed {
         device: String,
         channel: ChannelInfo,
-        /// The reason the daemon was given (§7.5, docs/DAEMON-PROTOCOL.md §5).
+        /// The reason the service was given (§7.5, docs/SERVICE-PROTOCOL.md §5).
         reason: String,
     },
     /// A device's `channel.open` was refused (§7.1).

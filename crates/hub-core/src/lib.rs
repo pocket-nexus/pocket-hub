@@ -8,7 +8,7 @@
 //! - `family`: the device families Hub knows and what each takes.
 //! - `conn`: one link after `ready`: the write queue, requests, events,
 //!   streams and credit, keepalive and closing (§4 to §8).
-//! - `relay`: applet channels joined to daemons (§7, docs/DAEMON-PROTOCOL.md §5).
+//! - `relay`: applet channels joined to services (§7, docs/SERVICE-PROTOCOL.md §5).
 //! - `ops`: the runtime operations as methods of a `DeviceHandle` (§6.2).
 //! - `lock`: the device mutex (§8.3).
 //! - `apps`, `screenshot`, `reading`: `runtime.apps` paging, the screenshot

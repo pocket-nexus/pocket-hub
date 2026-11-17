@@ -11,7 +11,7 @@ use std::time::Duration;
 use common::*;
 use pocket_hub_api::rpc::{INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR};
 use pocket_hub_api::types::*;
-use pocket_hub_api::{Client, ErrorKind, methods};
+use pocket_hub_api::{Client, ErrorKind, PROTOCOL, methods};
 use pocket_hubd::StartError;
 use serde_json::{Value, json};
 
@@ -41,10 +41,10 @@ async fn hello_first_and_protocol_errors() {
     assert_eq!(error.code, INVALID_REQUEST);
     let error = rpc(raw.call(methods::DEVICES_LIST, &json!({})).await.unwrap_err());
     assert_eq!(error.code, INVALID_REQUEST);
-    let hello = raw.call(methods::HELLO, &HelloParams { protocol: 1, client: info(ClientKind::Cli, "raw") }).await.unwrap();
-    assert_eq!(hello["protocol"], 1);
+    let hello = raw.call(methods::HELLO, &HelloParams { protocol: PROTOCOL, client: info(ClientKind::Cli, "raw") }).await.unwrap();
+    assert_eq!(hello["protocol"], PROTOCOL);
     assert_eq!(hello["hub"]["version"], pocket_hubd::VERSION);
-    assert_eq!(rpc(raw.call(methods::HELLO, &HelloParams { protocol: 1, client: info(ClientKind::Cli, "raw") }).await.unwrap_err()).code, INVALID_REQUEST);
+    assert_eq!(rpc(raw.call(methods::HELLO, &HelloParams { protocol: PROTOCOL, client: info(ClientKind::Cli, "raw") }).await.unwrap_err()).code, INVALID_REQUEST);
 
     assert_eq!(rpc(raw.call("devices.nothing", &json!({})).await.unwrap_err()).code, METHOD_NOT_FOUND);
     assert_eq!(rpc(raw.call(methods::DEVICES_GET, &json!({"device": 7})).await.unwrap_err()).code, INVALID_PARAMS);
@@ -57,10 +57,14 @@ async fn hello_first_and_protocol_errors() {
     assert_eq!(status.carriers, vec![Carrier { kind: "tcp".into(), port: Some(core.core.link_port) }]);
     assert_ne!(core.core.link_port, 0);
 
-    // A hello of another protocol, or with a bad kind, is refused.
+    // A hello of another protocol, or with a bad kind, is refused. Protocol 1
+    // is Pocket Hub 0.2.2's and earlier, before services took their names:
+    // one sentence that names both versions.
     let other = Client::connect_raw(&core.socket, None).await.unwrap();
-    assert_eq!(rpc(other.call(methods::HELLO, &json!({"protocol": 2, "client": {"kind": "cli", "name": "x", "version": "1"}})).await.unwrap_err()).code, INVALID_PARAMS);
-    assert_eq!(rpc(other.call(methods::HELLO, &json!({"protocol": 1, "client": {"kind": "robot", "name": "x", "version": "1"}})).await.unwrap_err()).code, INVALID_PARAMS);
+    let old = rpc(other.call(methods::HELLO, &json!({"protocol": 1, "client": {"kind": "gui", "name": "Pocket Hub", "version": "0.2.2"}})).await.unwrap_err());
+    assert_eq!((old.code, old.message.as_str()), (INVALID_PARAMS, "This Hub speaks protocol 2, not 1."));
+    assert_eq!(rpc(other.call(methods::HELLO, &json!({"protocol": 3, "client": {"kind": "cli", "name": "x", "version": "1"}})).await.unwrap_err()).code, INVALID_PARAMS);
+    assert_eq!(rpc(other.call(methods::HELLO, &json!({"protocol": PROTOCOL, "client": {"kind": "robot", "name": "x", "version": "1"}})).await.unwrap_err()).code, INVALID_PARAMS);
 
     // The raw parse error answer, read off a socket by hand.
     {
