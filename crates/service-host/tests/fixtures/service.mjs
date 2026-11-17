@@ -38,8 +38,8 @@ function readFrames(socket, onFrame) {
   });
 }
 
-console.log(`fixture start app=${env.POCKET_SERVICE_ID} data=${env.POCKET_SERVICE_DATA}`);
-console.log(`env ${Object.keys(env).filter((k) => k.startsWith("POCKET_SERVICE_")).sort().join(",")}`);
+console.log(`fixture start app=${env.POCKET_SERVICE_ID}`);
+console.log(`env ${Object.keys(env).sort().join(",")}`);
 for (let i = 0; i < (cfg.logLines ?? 0); i++) console.log(`line ${i}`);
 // The descriptors this process holds (the listing's own included).
 if (cfg.listFds) console.log(`fds ${fs.readdirSync("/dev/fd").join(",")}`);
@@ -66,7 +66,7 @@ const control = net.createConnection(socketPath);
 control.on("connect", () => {
   control.write(jsonFrame(HANDSHAKE, {
     t: "service.hello",
-    protocol: cfg.mode === "badProtocol" ? 1 : 2,
+    protocol: cfg.mode === "badProtocol" ? 2 : 3,
     token: cfg.mode === "badToken" ? "0".repeat(32) : env.POCKET_SERVICE_TOKEN,
     app: env.POCKET_SERVICE_ID,
   }));
@@ -82,6 +82,9 @@ readFrames(control, (f) => {
   if (message.t === "service.refused") {
     console.log(`refused: ${message.message}`);
     process.exit(4);
+  } else if (message.t === "service.ready") {
+    console.log(`ready app=${message.app} release=${message.release} data=${message.data}`);
+    if (cfg.mode !== "noHostAttach") attachHost(message.host);
   } else if (message.t === "channel.offer") {
     console.log(`offer device=${message.device} name=${message.deviceName} generation=${message.generation} limit=${message.payloadLimit}`);
     if (cfg.mode !== "noAttach") attach(cfg.attachTicket ?? message.ticket);
@@ -94,6 +97,28 @@ readFrames(control, (f) => {
     }
   }
 });
+
+// The host connection (§6): `host.attach` with the ticket of service.ready.
+function attachHost(ticket) {
+  const host = net.createConnection(socketPath);
+  host.on("connect", () => host.write(jsonFrame(HANDSHAKE, { t: "host.attach", ticket })));
+  host.on("error", () => {});
+  readFrames(host, (f) => {
+    const message = JSON.parse(f.payload.toString());
+    if (message.t === "host.ready") {
+      console.log(`host.ready limit=${message.payloadLimit} requires=${message.requires.join(",")} provides=${message.provides.join(",")}`);
+      if (cfg.secondHostAttach) {
+        const again = net.createConnection(socketPath);
+        again.on("connect", () => again.write(jsonFrame(HANDSHAKE, { t: "host.attach", ticket })));
+        again.on("error", () => {});
+        readFrames(again, (g) => console.log(`second host connection: ${JSON.parse(g.payload.toString()).t} ${JSON.parse(g.payload.toString()).message}`));
+      }
+      if (cfg.closeHostAfterMs) setTimeout(() => { console.log("closing host"); host.destroy(); }, cfg.closeHostAfterMs);
+    } else {
+      console.log(`host ${message.t} ${message.message ?? ""}`);
+    }
+  });
+}
 
 function attach(ticket) {
   const socket = net.createConnection(socketPath);

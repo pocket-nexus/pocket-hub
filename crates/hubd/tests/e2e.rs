@@ -135,7 +135,7 @@ async fn the_vertical_slice_through_the_binary() {
     let refused_transcript = Transcript::default();
     let refused = Client::connect_raw(&socket, Some(refused_transcript.clone())).await.unwrap();
     let error = rpc(refused.call(methods::HELLO, &HelloParams { protocol: 1, client: info(ClientKind::Gui, "Pocket Hub") }).await.unwrap_err());
-    assert_eq!((error.code, error.message.as_str()), (-32602, "This Hub speaks protocol 3, not 1."));
+    assert_eq!((error.code, error.message.as_str()), (-32602, "This Hub speaks protocol 4, not 1."));
     assert_eq!((error.refused_protocol(), error.data.as_ref().and_then(|data| data.protocol), error.kind()), (Some(PROTOCOL), Some(PROTOCOL), None));
     drop(refused);
 
@@ -389,8 +389,17 @@ async fn the_vertical_slice_through_the_binary() {
     assert_eq!((blob["bytes"].as_u64(), blob["value"]["bytes"].as_u64()), (Some(MIB as u64), Some(MIB as u64)));
     assert_eq!(blob["sum"], blob["value"]["hash"], "the device read the bytes the service wrote");
 
+    // A request answered from the service's store: written, then read back.
+    device.send(json!({"cmd": "request", "tag": "keep", "t": "keep", "args": {"value": {"visits": 3}}})).await;
+    let kept = device.reply("keep").await;
+    assert_eq!((kept["ok"].as_bool(), &kept["value"]), (Some(true), &json!({"kept": {"visits": 3}})), "{kept}");
+    device.send(json!({"cmd": "request", "tag": "kept", "t": "kept", "args": {}})).await;
+    assert_eq!(device.reply("kept").await["value"], json!({"value": {"visits": 3}}));
+
     let services: ServiceList = client.call_as(methods::SERVICES_LIST, &json!({})).await.unwrap();
     assert_eq!((services.services[0].state, services.services[0].channels), (ServiceState::Running, 1));
+    let store = services.services[0].store.clone().expect("the service requires its store");
+    assert_eq!((store.bytes, store.max_bytes), (Some(("kept".len() + r#"{"visits":3}"#.len()) as u64), 1_048_576));
     if !logged {
         event(&client, |e| topic(e, "service.log") && e["id"] == APP).await;
     }
@@ -409,6 +418,18 @@ async fn the_vertical_slice_through_the_binary() {
     assert_eq!(stopped["service"]["channels"], 0);
     assert!(stopped["service"]["lastExit"]["at"].is_i64());
     assert!(gone(service_pid).await);
+
+    // The applet runs again: a new process, and the value is still in its store.
+    device.send(json!({"cmd": "open", "app": APP})).await;
+    device.expect("channel-open").await;
+    let again = event(&client, |e| topic(e, "service.changed") && e["service"]["state"] == "running" && e["service"]["channels"] == 1).await;
+    let again_pid = again["service"]["pid"].as_u64().unwrap() as u32;
+    assert_ne!(again_pid, service_pid);
+    device.send(json!({"cmd": "request", "tag": "kept-again", "t": "kept", "args": {}})).await;
+    assert_eq!(device.reply("kept-again").await["value"], json!({"value": {"visits": 3}}), "the store outlived the process");
+    device.send(json!({"cmd": "exit"})).await;
+    event(&client, |e| topic(e, "service.changed") && e["service"]["state"] == "stopped").await;
+    assert!(gone(again_pid).await);
 
     // Its owner's start, restart and stop.
     let started: Service = client.call_as(methods::SERVICES_START, &ServiceIdParams { id: APP.into(), release: None }).await.unwrap();
@@ -522,7 +543,8 @@ async fn the_vertical_slice_through_the_binary() {
     event(&client, |e| topic(e, "service.removed")).await;
     assert_eq!(kind_of(client.call(methods::SERVICES_START, &ServiceIdParams { id: APP.into(), release: None }).await.unwrap_err()), ErrorKind::NotFound);
 
-    // A service that cannot start is the error `service`; `purge` removes its data.
+    // A service that cannot start is the error `service`; `purge` removes the
+    // data folder an earlier step left for it (no process gets one now).
     let broken = work.path().join("broken");
     std::fs::create_dir_all(&broken).unwrap();
     std::fs::write(broken.join("pocket.service.json"), r#"{"service":1,"id":"dev.test.broken","entry":"service.ts"}"#).unwrap();
@@ -531,7 +553,8 @@ async fn the_vertical_slice_through_the_binary() {
     let error = rpc(client.call(methods::SERVICES_START, &ServiceIdParams { id: "dev.test.broken".into(), release: None }).await.unwrap_err());
     let data = error.data.unwrap();
     assert_eq!((data.kind.unwrap(), data.id.as_deref()), (ErrorKind::Service, Some("dev.test.broken")));
-    assert!(home.path().join("service-data/dev.test.broken").is_dir());
+    assert!(!home.path().join("service-data/dev.test.broken").exists(), "no data folder is made");
+    std::fs::create_dir_all(home.path().join("service-data/dev.test.broken")).unwrap();
     client.call(methods::SERVICES_REMOVE, &ServiceRemoveParams { id: "dev.test.broken".into(), release: None, purge: Some(true) }).await.unwrap();
     assert!(!home.path().join("service-data/dev.test.broken").exists());
 

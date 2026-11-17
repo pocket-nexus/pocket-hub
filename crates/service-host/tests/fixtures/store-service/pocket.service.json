@@ -1,0 +1,7 @@
+{
+  "service": 1,
+  "id": "dev.test.host",
+  "entry": "service.ts",
+  "requires": ["store"],
+  "store": { "maxBytes": 65536 }
+}

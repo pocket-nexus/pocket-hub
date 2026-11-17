@@ -185,7 +185,7 @@ extension HubCalling {
     }
 
     /// Removes a service: one release, or every release (and one an earlier
-    /// Pocket Hub installed) without `release`. Its data folder stays unless `purge`.
+    /// Pocket Hub installed) without `release`. Its stored data stays unless `purge`.
     public func removeService(id: String, release: String? = nil, purge: Bool = false) async throws {
         var params: [String: JSONValue] = ["id": .string(id)]
         if let release { params["release"] = .string(release) }

@@ -25,11 +25,11 @@ import { T } from "./mock-hub.ts";
 
 describe("encoder: one frame of each type, by hand", () => {
   test("HANDSHAKE service.hello", () => {
-    const json = '{"t":"service.hello","protocol":2,"token":"00112233445566778899aabbccddeeff","app":"dev.x"}';
+    const json = '{"t":"service.hello","protocol":3,"token":"00112233445566778899aabbccddeeff","app":"dev.x"}';
     expect(json.length).toBe(91);
     // type 0x04, flags 0, reserved 0, length 91 = 0x5b, id 0
     const expected = `04 00 00 00 5b 00 00 00 00 00 00 00 ${utf8(json)}`;
-    expect(hex(encodeHandshake({ t: "service.hello", protocol: 2, token: "00112233445566778899aabbccddeeff", app: "dev.x" }))).toBe(expected);
+    expect(hex(encodeHandshake({ t: "service.hello", protocol: 3, token: "00112233445566778899aabbccddeeff", app: "dev.x" }))).toBe(expected);
   });
 
   test("REQUEST with BODY alone (local dialect) on the first Hub id", () => {
@@ -123,7 +123,7 @@ describe("on the socket: the bytes the service writes", () => {
         });
       },
     }, { token: "00112233445566778899aabbccddeeff", app: "dev.x" });
-    const hello = `{"t":"service.hello","protocol":2,"token":"00112233445566778899aabbccddeeff","app":"dev.x"}`;
+    const hello = `{"t":"service.hello","protocol":3,"token":"00112233445566778899aabbccddeeff","app":"dev.x"}`;
     expect(run.hub.hellos).toEqual([JSON.parse(hello)]);
     const ch = await run.hub.offer({}, { channel: 7 });
     const credit = await ch.waitFor((f) => f.type === T.credit);

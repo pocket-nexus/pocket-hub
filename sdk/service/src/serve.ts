@@ -1,17 +1,14 @@
-// The service process's side of docs/SERVICE-PROTOCOL.md §2, §4 and §5: the
-// environment Hub starts it with, the control connection (`service.hello` →
-// `service.ready`, then `channel.offer` and `service.stop`), and one channel
-// connection per offer (`channel.attach` → `channel.ready`).
+// The service process's side of docs/SERVICE-PROTOCOL.md §4 to §6: the
+// control connection (`service.hello` → `service.ready`, then `channel.offer`
+// and `service.stop`), the host connection (`host.attach` → `host.ready`),
+// and one channel connection per offer (`channel.attach` → `channel.ready`).
 //
-// `serve(service)` is the entry point of a service package: it reads the four
-// POCKET_SERVICE_* variables and exits the process when Hub stops it or
-// the control connection closes. `runService(service, options)` is the same
-// without the environment and without `process.exit`, for tests and for
-// hosting a service inside another Bun program.
+// `runService(factory, options)` is what the host's bootstrap (boot.ts) runs
+// with the entry's default export; service code calls none of this.
 
-import { AppletChannel, type ServiceInfo } from "./channel.ts";
+import { AppletChannel, type ChannelInfo } from "./channel.ts";
 import { Connection } from "./connection.ts";
-import { asServiceError } from "./errors.ts";
+import { ServiceError, asServiceError } from "./errors.ts";
 import {
   CONTROL_PAYLOAD,
   FRAME,
@@ -23,40 +20,29 @@ import {
   encodeHandshake,
   parseJson,
 } from "./frame.ts";
+import { type Host, HostLink, makeHost } from "./host.ts";
 
-/** What a service module gets from `serve` (the reference's `DaemonContext`). */
-export interface ServiceContext {
-  /** The applet id this service serves. */
-  app: string;
-  /** One line to the service's log: Hub captures standard output and error line by line (§2). */
-  log(line: string): void;
-  /** The service's own folder, mode 0700, kept across upgrades: `<home>/service-data/<id>/` (§1). */
-  data: string;
-}
-
-/** The computer side of one applet (the reference's `Daemon`). */
+/** The computer side of one applet: what a factory returns (§2). */
 export interface Service {
-  /** When present, `serve` says `service.hello` only once it resolves; Hub holds the device's `channel.open` meanwhile. */
+  /** When present, the channels offered meanwhile are attached only once it resolves. */
   ready?: Promise<void>;
-  /** One call per accepted channel: the service's end of it. Handlers registered before it returns (or before its promise resolves) see the channel's first frames. */
-  attach(channel: AppletChannel, info: ServiceInfo): void | Promise<void>;
-  /** Hub stops the service (`service.stop`), or the control connection closed. The channels close after it returns. */
+  /** One call per accepted channel: one applet run on one device. Handlers registered before it returns (or before its promise resolves) see the channel's first frames. */
+  attach(channel: AppletChannel, info: ChannelInfo): void | Promise<void>;
+  /** The host stops the service. The channels close after it returns. */
   stop?(): void | Promise<void>;
 }
 
-/** A module's default export may be a service or a function that makes one. */
-export type ServiceFactory = (context: ServiceContext) => Service | Promise<Service>;
+/** The entry's default export: the host calls it once with the host, and serves the service it returns. */
+export type ServiceFactory = (host: Host) => Service | Promise<Service>;
 
 export interface RunOptions {
-  /** Path of Hub's service socket (POCKET_SERVICE_SOCKET). */
+  /** Path of the host's service socket (POCKET_SERVICE_SOCKET). */
   socket: string;
   /** 32 lowercase hex digits (POCKET_SERVICE_TOKEN). */
   token: string;
   /** The applet id (POCKET_SERVICE_ID). */
   app: string;
-  /** The service's data folder (POCKET_SERVICE_DATA). */
-  data: string;
-  /** The context's `log`; standard output by default. */
+  /** The host's `log`; standard output by default. */
   log?: (line: string) => void;
   /** The SDK's own diagnostics; standard error by default. */
   diag?: (line: string) => void;
@@ -65,29 +51,29 @@ export interface RunOptions {
 }
 
 export interface ServiceRun {
-  /** Resolves with the exit code once the service is done: 0 after `service.stop` or the control connection closing, 1 after a refusal or a failure to start. */
+  /** Resolves with the exit code once the service is done: 0 after `service.stop` or the lease ending, 1 after a refusal or a failure to start. */
   readonly done: Promise<number>;
   /** The channels open now. */
   channels(): AppletChannel[];
 }
 
 /** Protocol version of `service.hello` (§4). */
-export const SERVICE_PROTOCOL = 2;
+export const SERVICE_PROTOCOL = 3;
 
 const HEX32 = /^[0-9a-f]{32}$/;
 
 const defaultLog = (line: string) => void process.stdout.write(`${line}\n`);
-const defaultDiag = (line: string) => void process.stderr.write(`[pocket-hub service] ${line}\n`);
+export const defaultDiag = (line: string) => void process.stderr.write(`[pocket-hub service] ${line}\n`);
 
-async function makeService(service: Service | ServiceFactory, context: ServiceContext): Promise<Service> {
-  const made = typeof service === "function" ? await service(context) : service;
+async function makeService(factory: ServiceFactory, host: Host): Promise<Service> {
+  const made = await factory(host);
   if (made === null || typeof made !== "object" || typeof made.attach !== "function") {
-    throw new Error("no service: the default export is a service with attach(), or a function that returns one");
+    throw new Error("the factory did not return a service: an object with attach(channel, info)");
   }
   return made;
 }
 
-interface Offer extends ServiceInfo {
+interface Offer extends ChannelInfo {
   ticket: string;
   payloadLimit: number;
 }
@@ -112,25 +98,29 @@ function parseOffer(object: Record<string, unknown>): Offer | null {
 }
 
 /**
- * Runs a service against Hub's service socket: control connection, offers,
- * channel connections. Never throws; failures end `done` with 1.
+ * Runs a service against the host's service socket: the control connection,
+ * the host connection, offers, channel connections. Never throws; failures
+ * end `done` with 1.
  */
-export function runService(serviceOrFactory: Service | ServiceFactory, options: RunOptions): ServiceRun {
+export function runService(factory: ServiceFactory, options: RunOptions): ServiceRun {
   const log = options.log ?? defaultLog;
   const diag = options.diag ?? defaultDiag;
   const channels = new Set<AppletChannel>();
   const pending = new Set<Connection>();
+  const channelConnections = new Set<Connection>();
   let finish!: (code: number) => void;
   const done = new Promise<number>((resolve) => (finish = resolve));
   let finished = false;
   let stopping = false;
   let service: Service | null = null;
   let control: Connection | null = null;
+  let host: HostLink | null = null;
 
   const end = (code: number) => {
     if (finished) return;
     finished = true;
     control?.destroy();
+    host?.destroy();
     for (const connection of pending) connection.destroy();
     finish(code);
   };
@@ -146,16 +136,13 @@ export function runService(serviceOrFactory: Service | ServiceFactory, options: 
       diag(`stop() failed: ${asServiceError(error).message}`);
     }
     const flushed: Promise<void>[] = [];
-    for (const channel of [...channels]) {
-      channel.close("stop");
-    }
+    for (const channel of [...channels]) channel.close("stop");
     for (const connection of channelConnections) flushed.push(new Promise((resolve) => connection.onClosed(resolve)));
     for (const connection of pending) connection.destroy();
-    // Hub ends the process 5 s after `service.stop` (§4): a socket that does not close in 2 s is not waited for.
+    // The host ends the process 5 s after `service.stop` (§4): a socket that does not close in 2 s is not waited for.
     await Promise.race([Promise.all(flushed), new Promise((resolve) => setTimeout(resolve, 2000).unref?.())]);
     end(0);
   };
-  const channelConnections = new Set<Connection>();
 
   const attach = async (offer: Offer) => {
     if (stopping || finished || service === null) return;
@@ -197,7 +184,7 @@ export function runService(serviceOrFactory: Service | ServiceFactory, options: 
             : appMessageLimit(offer.payloadLimit);
           clearTimeout(timer);
           pending.delete(connection);
-          // Hub stopped the service while this channel was being attached: it is not taken.
+          // The host stopped the service while this channel was being attached: it is not taken.
           if (stopping || finished) return connection.destroy();
           const { ticket: _ticket, payloadLimit: _limit, ...info } = offer;
           const opened = new AppletChannel(connection, id, info, offer.payloadLimit, limit, diag);
@@ -242,22 +229,39 @@ export function runService(serviceOrFactory: Service | ServiceFactory, options: 
     connection.send(encodeHandshake({ t: "channel.attach", ticket: offer.ticket }));
   };
 
-  const start = async () => {
-    const context: ServiceContext = { app: options.app, data: options.data, log };
+  /** After `service.ready`: the host connection, then the service, then the offers that waited. */
+  const begin = async (ticket: string, offers: Offer[]) => {
     try {
-      service = await makeService(serviceOrFactory, context);
-      if (service.ready !== undefined) await service.ready;
+      host = await HostLink.attach(options.socket, ticket, diag);
     } catch (error) {
-      diag(`the service failed to start: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+      diag(asServiceError(error).message);
       return end(1);
     }
+    // The host connection is part of the process's lease (§6).
+    host.onClosed(() => {
+      if (!finished) void shutdown("the host connection closed");
+    });
+    try {
+      const made = await makeService(factory, makeHost(options.app, log, host));
+      if (made.ready !== undefined) await made.ready;
+      service = made;
+    } catch (error) {
+      const code = error instanceof ServiceError ? ` (${error.code})` : "";
+      diag(`the service failed to start${code}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+      return end(1);
+    }
+    for (const offer of offers.splice(0)) void attach(offer);
+  };
+
+  const start = async () => {
     try {
       control = await Connection.open(options.socket, CONTROL_PAYLOAD);
     } catch (error) {
-      diag(`cannot reach Hub's service socket ${options.socket}: ${asServiceError(error).message}`);
+      diag(`cannot reach the service socket ${options.socket}: ${asServiceError(error).message}`);
       return end(1);
     }
     let ready = false;
+    // Offers that come before the service is made wait for it.
     const offers: Offer[] = [];
     control.listen({
       frames: (frames) => {
@@ -269,10 +273,13 @@ export function runService(serviceOrFactory: Service | ServiceFactory, options: 
             if (object.t === "service.ready" && !ready) {
               ready = true;
               if (object.app !== options.app) diag(`service.ready names ${String(object.app)}, not ${options.app}`);
-              if (typeof object.data === "string" && object.data !== options.data) diag(`service.ready names the data folder ${object.data}, not ${options.data}`);
-              for (const offer of offers.splice(0)) void attach(offer);
+              if (typeof object.host !== "string" || !HEX32.test(object.host)) {
+                diag("service.ready without a host ticket");
+                return end(1);
+              }
+              void begin(object.host, offers);
             } else if (object.t === "service.refused") {
-              diag(`Hub refused the service: ${String(object.message ?? "")}`);
+              diag(`the host refused the service: ${String(object.message ?? "")}`);
               return end(1);
             }
             continue;
@@ -284,7 +291,7 @@ export function runService(serviceOrFactory: Service | ServiceFactory, options: 
               diag("a channel.offer without its fields");
               continue;
             }
-            if (ready) void attach(offer);
+            if (service !== null) void attach(offer);
             else offers.push(offer);
           } else if (object.t === "service.stop") {
             void shutdown("service.stop");
@@ -314,30 +321,4 @@ export function runService(serviceOrFactory: Service | ServiceFactory, options: 
 
   void start();
   return { done, channels: () => [...channels] };
-}
-
-/**
- * The entry point of a service package. Reads POCKET_SERVICE_SOCKET,
- * _TOKEN, _ID and _DATA, runs the service, and exits the process with 0
- * after `service.stop` or when the control connection closes, with 1 when Hub
- * refuses it or it fails to start. A rejected promise nobody handled is
- * logged and does not end the process: one handler's mistake must not close
- * every device's channel.
- */
-export async function serve(serviceOrFactory: Service | ServiceFactory): Promise<never> {
-  const env = process.env;
-  const socket = env.POCKET_SERVICE_SOCKET;
-  const token = env.POCKET_SERVICE_TOKEN;
-  const app = env.POCKET_SERVICE_ID;
-  const data = env.POCKET_SERVICE_DATA;
-  if (!socket || !token || !app || !data) {
-    defaultDiag("POCKET_SERVICE_SOCKET, _TOKEN, _ID and _DATA are not all set: this program is started by Pocket Hub");
-    process.exit(1);
-  }
-  process.on("unhandledRejection", (reason: unknown) => {
-    defaultDiag(`unhandled rejection: ${reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)}`);
-  });
-  const run = runService(serviceOrFactory, { socket, token, app, data });
-  const code = await run.done;
-  process.exit(code);
 }

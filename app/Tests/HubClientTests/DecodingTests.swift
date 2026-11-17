@@ -147,8 +147,8 @@ struct DecodingTests {
     }
 
     @Test func hubObjects() throws {
-        let hello = try decode(HelloResult.self, #"{"protocol":3,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}"#)
-        #expect(hello.protocol == 3 && hello.hub.name == "Studio Mac")
+        let hello = try decode(HelloResult.self, #"{"protocol":4,"hub":{"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0"}}"#)
+        #expect(hello.protocol == 4 && hello.hub.name == "Studio Mac")
         let status = try decode(HubStatus.self, """
         {"id":"fedcba9876543210","name":"Studio Mac","version":"0.1.0","home":"/Users/x/Library/Application Support/Pocket Hub",
          "startedAt":1762876800000,"carriers":[{"kind":"tcp","port":8628},{"kind":"usb"}],"bun":{"version":null,"installed":false}}
@@ -292,7 +292,15 @@ struct DecodingTests {
         guard case .serviceChanged(let earlier) = try event(#"{"topic":"service.changed","service":{"id":"e","release":null,"requires":[],"hosts":[],"state":"failed","pid":null,"since":null,"channels":0,"lastExit":null,"error":"Installed by an earlier Pocket Hub; install it again.","reason":"earlier"}}"#) else {
             Issue.record("an earlier service.changed"); return
         }
-        #expect(earlier.isEarlier && earlier.release == nil)
+        #expect(earlier.isEarlier && earlier.release == nil && earlier.store == nil)
+        guard case .serviceChanged(let stored) = try event(#"{"topic":"service.changed","service":{"id":"s","release":"dev","requires":["store"],"hosts":[],"state":"stopped","pid":null,"since":null,"channels":0,"lastExit":null,"error":null,"reason":null,"store":{"bytes":16,"maxBytes":1048576,"fileBytes":28848}}}"#) else {
+            Issue.record("a service with a store"); return
+        }
+        #expect(stored.store == ServiceStore(bytes: 16, maxBytes: 1_048_576, fileBytes: 28_848) && stored.store?.isNewer == false)
+        guard case .serviceChanged(let newer) = try event(#"{"topic":"service.changed","service":{"id":"n","release":"dev","requires":["store"],"hosts":[],"state":"stopped","pid":null,"since":null,"channels":0,"lastExit":null,"error":null,"reason":"store_format","store":{"bytes":null,"maxBytes":1048576,"fileBytes":8192}}}"#) else {
+            Issue.record("a service with a newer store"); return
+        }
+        #expect(newer.store?.isNewer == true && newer.reason == "store_format")
         #expect(try event(#"{"topic":"service.removed","id":"d","release":"dev"}"#) == .serviceRemoved(id: "d", release: "dev"))
         #expect(try event(#"{"topic":"service.removed","id":"e","release":null}"#) == .serviceRemoved(id: "e", release: nil))
         #expect(try event(#"{"topic":"service.log","id":"d","release":"dev","at":7,"stream":"stdout","text":"ok"}"#)

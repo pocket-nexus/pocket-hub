@@ -153,6 +153,16 @@ struct ServiceRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                if let store = service.store {
+                    if store.isNewer {
+                        Text("Its data was saved by a newer Pocket Hub and is kept as it is. Update Pocket Hub to use it.")
+                            .font(.caption).foregroundStyle(.orange)
+                    } else {
+                        Text("Data kept on this Mac: \(Self.size(store.bytes ?? 0)) of \(Self.size(store.maxBytes))")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .help(Text("\(Self.size(store.fileBytes)) on disk"))
+                    }
+                }
                 if service.isEarlier {
                     // The core's sentence is English; this one is the app's, in both languages.
                     Text("Installed by an earlier Pocket Hub. Install it again.").font(.caption).foregroundStyle(.red)
@@ -181,6 +191,10 @@ struct ServiceRow: View {
         .buttonStyle(.borderless)
         .padding(.vertical, 2)
         .accessibilityElement(children: .contain)
+    }
+
+    private static func size(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
     private var color: Color {

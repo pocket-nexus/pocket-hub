@@ -6,8 +6,8 @@ use std::time::Duration;
 /// The supervisor's configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Hub's home folder: `runtimes/`, `services/` and `service-data/` are made
-    /// in it. It should be mode 0700, as Hub's own files are.
+    /// Hub's home folder: `runtimes/`, `services/` and `service-store/` are
+    /// made in it. It should be mode 0700, as Hub's own files are.
     pub home: PathBuf,
     /// The service socket (§2, `POCKET_SERVICE_SOCKET`). Keep it short:
     /// macOS takes at most 103 bytes of path for a Unix socket.
@@ -16,9 +16,10 @@ pub struct Config {
     /// and tests use the system `bun`).
     pub bun_path: Option<PathBuf>,
     /// The folder of Hub's own copy of the service SDK (`@pocketjs/service`:
-    /// its `package.json` and sources). When set, a package whose
-    /// `node_modules` holds no `@pocketjs/service` of its own gets a link to
-    /// it at install and again before each start (§1 "Hub provides the SDK").
+    /// its `package.json` and sources). Every package gets a link to it at
+    /// install and again before each start (§1, "Hub provides the SDK"), and
+    /// a process starts with its `src/boot.ts` (§2). Without it no service
+    /// starts.
     pub sdk: Option<PathBuf>,
     pub timings: Timings,
 }
@@ -41,6 +42,8 @@ pub struct Timings {
     pub start: Duration,
     /// From `channel.offer` to the service's `channel.attach` (§4: 10 s).
     pub attach: Duration,
+    /// From `service.ready` to the service's `host.attach` (§6: 10 s).
+    pub host_attach: Duration,
     /// For the first frame of any connection on the socket.
     pub first_frame: Duration,
     /// From `service.stop` to `SIGTERM` (§4: 5 s).
@@ -67,6 +70,7 @@ impl Default for Timings {
             open_budget: Duration::from_secs(19),
             start: Duration::from_secs(8),
             attach: Duration::from_secs(10),
+            host_attach: Duration::from_secs(10),
             first_frame: Duration::from_secs(10),
             stop_grace: Duration::from_secs(5),
             term_grace: Duration::from_secs(5),

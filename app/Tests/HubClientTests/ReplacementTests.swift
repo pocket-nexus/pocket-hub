@@ -30,7 +30,7 @@ private func replacingClient(home: URL, launcher: CoreLauncher?, replaceWait: Du
 }
 
 /// A mock core of `version`, speaking `protocolVersion`.
-private func core(home: URL, protocolVersion: Int = 3, version: String, stops: Bool = true) async throws -> MockHubCore {
+private func core(home: URL, protocolVersion: Int = 4, version: String, stops: Bool = true) async throws -> MockHubCore {
     var scenario = MockScenario.demo
     scenario.speaksProtocol = protocolVersion
     scenario.hubVersion = version
@@ -67,11 +67,33 @@ struct ReplacementTests {
         await client.start()
         await eventually("its own core started") { startCount(starts) == 1 }
         #expect(await log.states.contains(.replacingCore))
-        #expect(await calls(earlier) == ["hub.hello 3", "hub.hello 1", "hub.shutdown"])
+        #expect(await calls(earlier) == ["hub.hello 4", "hub.hello 1", "hub.shutdown"])
         let own = try await core(home: home, version: "0.3.0")
         defer { Task { await own.stop() } }
         await eventually("connected to its own core") { await log.snapshots.last?.hello.hub.version == "0.3.0" }
         #expect(startCount(starts) == 1)
+        await client.stop()
+    }
+
+    /// A core of protocol 3 (the one before services had a store), even of the
+    /// same version, met by this app of protocol 4: its refusal says 3 in
+    /// `data`, the client says hello in 3, asks it to stop, waits until it is
+    /// gone, and starts its own.
+    @Test func aProtocol3CoreIsReplacedByThisProtocol4App() async throws {
+        let home = try temporaryHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let earlier = try await core(home: home, protocolVersion: 3, version: "0.3.0")
+        let (launcher, starts) = try standIn(home: home, version: "0.3.0")
+        let client = replacingClient(home: home, launcher: launcher)
+        let log = UpdateLog(client)
+        await client.start()
+        await eventually("its own core started") { startCount(starts) == 1 }
+        #expect(await log.states.contains(.replacingCore))
+        #expect(await calls(earlier) == ["hub.hello 4", "hub.hello 3", "hub.shutdown"])
+        #expect(!socketExists(home), "the protocol-3 core is gone")
+        let own = try await core(home: home, version: "0.3.0")
+        defer { Task { await own.stop() } }
+        await eventually("connected to its own core") { await log.snapshots.last?.hello.protocol == 4 }
         await client.stop()
     }
 
@@ -86,7 +108,7 @@ struct ReplacementTests {
         let log = UpdateLog(client)
         await client.start()
         await eventually("its own core started") { startCount(starts) == 1 }
-        #expect(await calls(earlier) == ["hub.hello 3", "hub.shutdown"])
+        #expect(await calls(earlier) == ["hub.hello 4", "hub.shutdown"])
         #expect(await log.snapshots.isEmpty, "nothing was read from the earlier core")
         await client.stop()
     }
@@ -130,7 +152,7 @@ struct ReplacementTests {
     @Test func aCoreOfAHigherProtocolIsLeftAlone() async throws {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }
-        let newer = try await core(home: home, protocolVersion: 4, version: "1.0.0")
+        let newer = try await core(home: home, protocolVersion: 5, version: "1.0.0")
         defer { Task { await newer.stop() } }
         let (launcher, starts) = try standIn(home: home, version: "0.3.0")
         let client = replacingClient(home: home, launcher: launcher)
@@ -141,7 +163,7 @@ struct ReplacementTests {
         }
         try await Task.sleep(for: .milliseconds(300))
         let seen = await calls(newer)
-        #expect(!seen.isEmpty && seen.allSatisfy { $0 == "hub.hello 3" }, "\(seen)")
+        #expect(!seen.isEmpty && seen.allSatisfy { $0 == "hub.hello 4" }, "\(seen)")
         #expect(startCount(starts) == 0)
         #expect(socketExists(home))
         await client.stop()
@@ -164,7 +186,7 @@ struct ReplacementTests {
         }
         try await Task.sleep(for: .milliseconds(500))
         #expect(await calls(stubborn).filter { $0 == "hub.shutdown" }.count == 1)
-        #expect(await calls(stubborn).allSatisfy { ["hub.hello 3", "hub.hello 1", "hub.shutdown"].contains($0) })
+        #expect(await calls(stubborn).allSatisfy { ["hub.hello 4", "hub.hello 1", "hub.shutdown"].contains($0) })
         #expect(startCount(starts) == 0)
         #expect(socketExists(home), "the socket is never removed by the client")
         if case .unreachable(.olderVersionDidNotStop, _)? = await log.states.last {} else {
@@ -178,7 +200,7 @@ struct ReplacementTests {
 
     /// Quit and Stop with no synced connection: whatever core is there stops,
     /// an earlier one and a newer one alike, through the frozen pair.
-    @Test(arguments: [(1, "0.2.2"), (4, "1.0.0")])
+    @Test(arguments: [(1, "0.2.2"), (5, "1.0.0")])
     func quitAndStopStopsACoreOfAnyVersion(protocolVersion: Int, version: String) async throws {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }
@@ -190,7 +212,7 @@ struct ReplacementTests {
         try await client.shutdownHub()
         #expect(!socketExists(home), "it stopped")
         let seen = await calls(other)
-        #expect(Array(seen.suffix(3)) == ["hub.hello 3", "hub.hello \(protocolVersion)", "hub.shutdown"], "\(seen)")
+        #expect(Array(seen.suffix(3)) == ["hub.hello 4", "hub.hello \(protocolVersion)", "hub.shutdown"], "\(seen)")
         #expect(seen.allSatisfy { $0.hasPrefix("hub.hello") || $0 == "hub.shutdown" })
         await eventually("stopped") { await log.states.last == .stopped }
     }

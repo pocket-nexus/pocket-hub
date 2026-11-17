@@ -1,6 +1,7 @@
-// The two ported services, each run as Hub runs a service package: its
-// manifest's entry, in its folder, with the four variables, against the mock
-// Hub playing the applet with the message sequences the originals expect
+// The two ported services, each run as Hub runs a service package: the
+// bootstrap with its manifest's entry, in its folder, with the three
+// variables, against the mock Hub playing the applet (and the host, with its
+// store) with the message sequences the originals expect
 // (PocketJS tools/pocket-link/v2/daemon-sample.ts's header;
 // apps/link-channel/app.tsx's script and `linkBench`).
 
@@ -19,6 +20,7 @@ interface Manifest {
   service: number;
   id: string;
   entry: string;
+  requires?: string[];
   idleSeconds?: number;
 }
 const manifest = (name: string): Manifest => JSON.parse(readFileSync(join(EXAMPLES, name, "pocket.service.json"), "utf8"));
@@ -38,8 +40,8 @@ afterEach(async () => {
 async function start(name: string, env: Record<string, string> = {}) {
   const m = manifest(name);
   expect(m.service).toBe(1);
-  hub = await MockHub.start({ app: m.id });
-  child = spawnService(m.entry, { ...hub.env(), ...env }, join(EXAMPLES, name));
+  hub = await MockHub.start({ app: m.id, requires: m.requires ?? [] });
+  child = spawnService(`./${m.entry}`, { ...hub.env(), ...env }, join(EXAMPLES, name));
   await hub.waitControl(5000);
   return { hub, child, manifest: m };
 }
@@ -194,6 +196,12 @@ describe("examples/link-channel (apps/link-channel/daemon.ts)", () => {
 
     expect((await ch.reply(ch.request("bench.report", { k: "down", n: 1, ms: 2 }))).json).toEqual({ ok: true });
     await child.line((l) => l === 'bench {"k":"down","n":1,"ms":2}');
+
+    // The store: a value kept, then read back, through the host connection.
+    expect((await ch.reply(ch.request("kept"))).json).toEqual({ value: null });
+    expect((await ch.reply(ch.request("keep", { value: { visits: 3 } }))).json).toEqual({ kept: { visits: 3 } });
+    expect((await ch.reply(ch.request("kept"))).json).toEqual({ value: { visits: 3 } });
+    expect(new TextDecoder().decode(hub.host!.store.get("kept"))).toBe('{"visits":3}');
 
     // The applet exits: the service logs what it saw, as the original does.
     ch.close("exit");

@@ -16,6 +16,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Socket, UnixSocketListener } from "bun";
+import { MockHost } from "./mock-host.ts";
 
 export const T = { handshake: 0x04, request: 0x10, reply: 0x11, event: 0x12, cancel: 0x13, data: 0x20, credit: 0x21, reset: 0x22 } as const;
 const KNOWN = new Set([0x01, 0x02, 0x03, 0x04, 0x10, 0x11, 0x12, 0x13, 0x20, 0x21, 0x22]);
@@ -561,6 +562,10 @@ export interface MockHubOptions {
   token?: string;
   /** Answer `service.hello` with `service.refused` and this message. */
   refuse?: string;
+  /** The manifest's `requires`, as `host.ready` gives it. */
+  requires?: string[];
+  /** Answer `host.attach` with `host.refused` and this message. */
+  refuseHost?: string;
 }
 
 /** Hub's service socket, with the applet behind each channel. */
@@ -569,9 +574,13 @@ export class MockHub {
   readonly socketPath: string;
   readonly token: string;
   readonly app: string;
-  readonly data: string;
   readonly violations: string[] = [];
   readonly hellos: Record<string, any>[] = [];
+  /** The host connection's end, once the service attached it. */
+  host: MockHost | null = null;
+  private hostSocket: MockSocket | null = null;
+  private hostTicket = hex32();
+  private hostWaiters: (() => void)[] = [];
   private server: UnixSocketListener<MockSocket> | null = null;
   private control: MockSocket | null = null;
   private controlWaiters: ((sock: MockSocket) => void)[] = [];
@@ -587,7 +596,6 @@ export class MockHub {
     this.socketPath = join(this.dir, "service.sock");
     this.token = options.token ?? hex32();
     this.app = options.app ?? "dev.pocket-hub.test";
-    this.data = join(this.dir, "service-data");
     this.controlClosed = new Promise((resolve) => (this.resolveControlClosed = resolve));
   }
 
@@ -627,12 +635,12 @@ export class MockHub {
     return hub;
   }
 
-  /** The four variables Hub starts a service with (§2). */
+  /** The three variables the host starts a service with (§2). */
   env(): Record<string, string> {
-    return { POCKET_SERVICE_SOCKET: this.socketPath, POCKET_SERVICE_TOKEN: this.token, POCKET_SERVICE_ID: this.app, POCKET_SERVICE_DATA: this.data };
+    return { POCKET_SERVICE_SOCKET: this.socketPath, POCKET_SERVICE_TOKEN: this.token, POCKET_SERVICE_ID: this.app };
   }
   runOptions() {
-    return { socket: this.socketPath, token: this.token, app: this.app, data: this.data };
+    return { socket: this.socketPath, token: this.token, app: this.app };
   }
 
   private firstFrames(sock: MockSocket, frames: MFrame[]): void {
@@ -645,7 +653,7 @@ export class MockHub {
     if (first.json.t === "service.hello") {
       this.hellos.push(first.json);
       const { protocol, token, app } = first.json;
-      if (this.options.refuse !== undefined || protocol !== 2 || token !== this.token || app !== this.app) {
+      if (this.options.refuse !== undefined || protocol !== 3 || token !== this.token || app !== this.app) {
         sock.send(jsonFrame(T.handshake, 0, { t: "service.refused", message: this.options.refuse ?? "unknown token" }));
         return sock.end();
       }
@@ -654,9 +662,25 @@ export class MockHub {
         for (const f of more) this.violations.push(`control: unexpected frame 0x${f.type.toString(16)} from the service`);
       };
       sock.onClose = () => this.resolveControlClosed();
-      sock.send(jsonFrame(T.handshake, 0, { t: "service.ready", app: this.app, data: this.data }));
+      sock.send(jsonFrame(T.handshake, 0, { t: "service.ready", app: this.app, release: "dev", host: this.hostTicket }));
       for (const wake of this.controlWaiters.splice(0)) wake(sock);
       if (rest.length > 0) sock.onFrames(rest);
+      return;
+    }
+    if (first.json.t === "host.attach") {
+      if (first.json.ticket !== this.hostTicket || this.options.refuseHost !== undefined) {
+        sock.send(jsonFrame(T.handshake, 0, { t: "host.refused", message: this.options.refuseHost ?? "unknown or used ticket" }));
+        return sock.end();
+      }
+      this.hostTicket = hex32();
+      if (rest.length > 0) this.violations.push("host: frames before host.ready");
+      sock.decoder.limit = 65_536;
+      this.hostSocket = sock;
+      const host = new MockHost((bytes) => sock.send(bytes), (why) => this.violations.push(why));
+      this.host = host;
+      sock.onFrames = (more) => host.frames(more);
+      sock.send(jsonFrame(T.handshake, 0, { t: "host.ready", payloadLimit: 65_536, requires: this.options.requires ?? [], provides: ["store"] }));
+      for (const wake of this.hostWaiters.splice(0)) wake();
       return;
     }
     if (first.json.t === "channel.attach") {
@@ -692,6 +716,23 @@ export class MockHub {
         resolve();
       });
     });
+  }
+
+  /** Resolves once the service attached its host connection. */
+  waitHost(timeoutMs = 3000): Promise<MockHost> {
+    if (this.host !== null) return Promise.resolve(this.host);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("no host.attach")), timeoutMs);
+      this.hostWaiters.push(() => {
+        clearTimeout(timer);
+        resolve(this.host!);
+      });
+    });
+  }
+
+  /** Ends the host connection: part of the lease. */
+  closeHost(): void {
+    this.hostSocket?.end();
   }
 
   /** Sends `channel.offer` and resolves with the applet's end once the service attached. */

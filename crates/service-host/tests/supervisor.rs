@@ -70,7 +70,16 @@ async fn a_channel_opens_on_demand_and_carries_bytes_untouched() {
     assert_eq!(status.restarts, 0);
 
     let texts = log_texts(&supervisor, "app.echo");
-    assert!(texts.iter().any(|line| line.starts_with("env POCKET_SERVICE_DATA,POCKET_SERVICE_ID,POCKET_SERVICE_SOCKET,POCKET_SERVICE_TOKEN")), "{texts:#?}");
+    // §2: the three variables and the locale, nothing else of Hub's
+    // environment (the test's own has PATH, HOME and more).
+    let mut names: Vec<String> = ["POCKET_SERVICE_ID", "POCKET_SERVICE_SOCKET", "POCKET_SERVICE_TOKEN"].map(String::from).into();
+    names.extend(std::env::vars().map(|(name, _)| name).filter(|name| name == "TZ" || name == "LANG" || name.starts_with("LC_")));
+    names.sort();
+    assert!(texts.contains(&format!("env {}", names.join(","))), "{texts:#?}");
+    // §4: `service.ready` names the release and carries no data folder; §6:
+    // the host connection is attached with its ticket.
+    assert!(texts.iter().any(|line| line == "ready app=app.echo release=dev data=undefined"), "{texts:#?}");
+    assert!(texts.iter().any(|line| line == "host.ready limit=65536 requires= provides=store"), "{texts:#?}");
     assert!(texts.iter().any(|line| line == "offer device=0123456789abcdef name=Test 3DS generation=7 limit=16384"), "{texts:#?}");
     drop(second);
     supervisor.shutdown().await;
@@ -153,9 +162,48 @@ async fn a_wrong_token_or_protocol_is_refused() {
     assert_eq!(supervisor.status("app.token").unwrap().state, ServiceState::Failed);
 
     let error = supervisor.open_channel(offer("app.proto")).await.err().unwrap();
-    assert!(matches!(&error, OpenError::Busy(why) if why.contains("protocol 1 is not supported")), "{error}");
-    assert!(eventually(Duration::from_secs(2), || logged(&supervisor, "app.proto", "refused: protocol 1 is not supported")).await);
+    assert!(matches!(&error, OpenError::Busy(why) if why.contains("protocol 2 is not supported")), "{error}");
+    assert!(eventually(Duration::from_secs(2), || logged(&supervisor, "app.proto", "refused: protocol 2 is not supported; this Hub speaks protocol 3")).await);
     supervisor.shutdown().await;
+}
+
+/// §6: a process that attaches no host connection within `host_attach` of
+/// `service.ready` is a failed start; one connection per process, the
+/// ticket good once; and the host connection is part of the lease.
+#[tokio::test]
+async fn the_host_connection_is_attached_once_and_part_of_the_lease() {
+    let bun = bun_or_skip!();
+    let home = temp_home();
+    let services = [
+        ("app.nohost", json!({ "mode": "noHostAttach" })),
+        ("app.twice", json!({ "secondHostAttach": true })),
+        ("app.closes", json!({ "closeHostAfterMs": 300 })),
+    ];
+    let supervisor = supervisor_with(home.path(), bun, &services, |_| {}).await;
+
+    let error = supervisor.open_channel(offer("app.nohost")).await.err().unwrap();
+    assert!(matches!(&error, OpenError::Busy(why) if why.contains("no host.attach within 1.0 s of service.ready")), "{error}");
+    assert!(eventually(Duration::from_secs(3), || supervisor.status("app.nohost").unwrap().state == ServiceState::Failed).await);
+    assert!(supervisor.status("app.nohost").unwrap().retry_at.is_some(), "a failed start holds the next one off");
+
+    let channel = supervisor.open_channel(offer("app.twice")).await.expect("the first host connection serves");
+    assert!(eventually(Duration::from_secs(2), || logged(&supervisor, "app.twice", "second host connection: host.refused unknown or used ticket")).await);
+    assert_eq!(supervisor.status("app.twice").unwrap().state, ServiceState::Running);
+    drop(channel);
+
+    let mut channel = supervisor.open_channel(offer("app.closes")).await.expect("a channel");
+    let pid = channel.info.pid;
+    assert!(eventually(Duration::from_secs(3), || logged(&supervisor, "app.closes", "the service closed its host connection")).await);
+    let mut rest = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_secs(3), channel.reader.read_to_end(&mut rest)).await.expect("the channel ends with the lease");
+    assert!(eventually(Duration::from_secs(3), || supervisor.status("app.closes").unwrap().pid.is_none()).await);
+    assert!(!pid_alive(pid));
+    supervisor.shutdown().await;
+}
+
+fn pid_alive(pid: u32) -> bool {
+    // SAFETY: signal 0 checks for the process without sending anything.
+    unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
 }
 
 #[tokio::test]
@@ -439,7 +487,7 @@ async fn a_connection_that_says_nothing_valid_is_closed() {
     let supervisor = supervisor_with(home.path(), bun, &[], |_| {}).await;
     // A hello with no process waiting for it.
     let mut stream = tokio::net::UnixStream::connect(supervisor.socket()).await.unwrap();
-    let hello = br#"{"t":"service.hello","protocol":2,"token":"00000000000000000000000000000000","app":"x"}"#;
+    let hello = br#"{"t":"service.hello","protocol":3,"token":"00000000000000000000000000000000","app":"x"}"#;
     stream.write_all(&frame(0x04, 0, 0, hello)).await.unwrap();
     let refused = read_frame(&mut stream).await.unwrap();
     assert_eq!(&refused[12..], br#"{"t":"service.refused","message":"unknown token"}"#);

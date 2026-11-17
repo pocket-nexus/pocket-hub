@@ -3,7 +3,7 @@
 // each test ends by asserting there is none.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { type AppletCall, type AppletChannel, type ServiceInfo, ServiceError, type StreamReader, type StreamWriter } from "../src/index.ts";
+import { type AppletCall, type AppletChannel, type ChannelInfo, ServiceError, type StreamReader, type StreamWriter } from "../src/index.ts";
 import { inProcess, pattern, until, type InProcess } from "./helpers.ts";
 import { type MockChannel, T, frameBytes, units } from "./mock-hub.ts";
 
@@ -17,9 +17,9 @@ afterEach(async () => {
 });
 
 /** Starts a service whose attach() hands the test its channel and info. */
-async function open(setup: (channel: AppletChannel, info: ServiceInfo) => void = () => {}, offer: Parameters<InProcess["hub"]["offer"]>[0] = {}) {
+async function open(setup: (channel: AppletChannel, info: ChannelInfo) => void = () => {}, offer: Parameters<InProcess["hub"]["offer"]>[0] = {}) {
   let channel: AppletChannel | null = null;
-  let info: ServiceInfo | null = null;
+  let info: ChannelInfo | null = null;
   run = await inProcess({
     attach(c, i) {
       channel = c;
@@ -29,7 +29,7 @@ async function open(setup: (channel: AppletChannel, info: ServiceInfo) => void =
   });
   const ch = await run.hub.offer(offer);
   await until(() => channel !== null);
-  return { ch, channel: channel! as AppletChannel, info: info! as ServiceInfo, hub: run.hub };
+  return { ch, channel: channel! as AppletChannel, info: info! as ChannelInfo, hub: run.hub };
 }
 
 const crc = (bytes: Uint8Array) => Bun.hash.crc32(bytes) >>> 0;

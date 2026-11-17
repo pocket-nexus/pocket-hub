@@ -73,6 +73,17 @@ pub fn inherited_env() -> Vec<(OsString, OsString)> {
         .collect()
 }
 
+/// The locale of Hub's environment, `TZ`, `LANG` and `LC_*`: what a service's
+/// process gets beside its three variables (SERVICE-PROTOCOL.md §2).
+pub fn locale_env() -> Vec<(OsString, OsString)> {
+    std::env::vars_os()
+        .filter(|(name, _)| {
+            let name = name.to_string_lossy();
+            name == "TZ" || name == "LANG" || name.starts_with("LC_")
+        })
+        .collect()
+}
+
 /// `PATH` with the folder of the Bun Hub runs first, so a service that starts
 /// `bun` itself gets the same runtime.
 pub fn path_with(bun: &Path) -> OsString {

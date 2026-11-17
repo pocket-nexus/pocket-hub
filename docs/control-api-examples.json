@@ -430,7 +430,7 @@
         "id": 2,
         "method": "hub.hello",
         "params": {
-          "protocol": 3,
+          "protocol": 4,
           "client": {
             "kind": "gui",
             "name": "Pocket Hub",
@@ -442,7 +442,7 @@
         "jsonrpc": "2.0",
         "id": 2,
         "result": {
-          "protocol": 3,
+          "protocol": 4,
           "hub": {
             "id": "fedcba9876543210",
             "name": "Studio Mac",
@@ -617,7 +617,9 @@
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "release": "dev",
-          "requires": [],
+          "requires": [
+            "store"
+          ],
           "hosts": [],
           "state": "stopped",
           "pid": null,
@@ -625,7 +627,12 @@
           "channels": 0,
           "lastExit": null,
           "error": null,
-          "reason": null
+          "reason": null,
+          "store": {
+            "bytes": 0,
+            "maxBytes": 1048576,
+            "fileBytes": 0
+          }
         }
       },
       "progress": [
@@ -655,7 +662,9 @@
             {
               "id": "dev.pocket-nexus.link-channel",
               "release": "dev",
-              "requires": [],
+              "requires": [
+                "store"
+              ],
               "hosts": [],
               "state": "running",
               "pid": 4242,
@@ -663,7 +672,12 @@
               "channels": 1,
               "lastExit": null,
               "error": null,
-              "reason": null
+              "reason": null,
+              "store": {
+                "bytes": 16,
+                "maxBytes": 1048576,
+                "fileBytes": 28848
+              }
             }
           ]
         }
@@ -723,7 +737,9 @@
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "release": "dev",
-          "requires": [],
+          "requires": [
+            "store"
+          ],
           "hosts": [],
           "state": "running",
           "pid": 4242,
@@ -735,7 +751,12 @@
             "at": 1767225600000
           },
           "error": null,
-          "reason": null
+          "reason": null,
+          "store": {
+            "bytes": 16,
+            "maxBytes": 1048576,
+            "fileBytes": 28848
+          }
         }
       }
     },
@@ -773,7 +794,9 @@
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "release": "dev",
-          "requires": [],
+          "requires": [
+            "store"
+          ],
           "hosts": [],
           "state": "running",
           "pid": 4242,
@@ -785,7 +808,12 @@
             "at": 1767225600000
           },
           "error": null,
-          "reason": null
+          "reason": null,
+          "store": {
+            "bytes": 16,
+            "maxBytes": 1048576,
+            "fileBytes": 28848
+          }
         }
       }
     },
@@ -804,7 +832,9 @@
         "result": {
           "id": "dev.pocket-nexus.link-channel",
           "release": "dev",
-          "requires": [],
+          "requires": [
+            "store"
+          ],
           "hosts": [],
           "state": "stopped",
           "pid": null,
@@ -816,7 +846,12 @@
             "at": 1767225600000
           },
           "error": null,
-          "reason": null
+          "reason": null,
+          "store": {
+            "bytes": 16,
+            "maxBytes": 1048576,
+            "fileBytes": 28848
+          }
         }
       }
     },
@@ -1462,7 +1497,9 @@
         "service": {
           "id": "dev.pocket-nexus.link-channel",
           "release": "dev",
-          "requires": [],
+          "requires": [
+            "store"
+          ],
           "hosts": [],
           "state": "stopped",
           "pid": null,
@@ -1470,7 +1507,12 @@
           "channels": 0,
           "lastExit": null,
           "error": null,
-          "reason": null
+          "reason": null,
+          "store": {
+            "bytes": 0,
+            "maxBytes": 1048576,
+            "fileBytes": 0
+          }
         }
       }
     },
@@ -1556,9 +1598,9 @@
         "id": 1,
         "error": {
           "code": -32602,
-          "message": "This Hub speaks protocol 3, not 1.",
+          "message": "This Hub speaks protocol 4, not 1.",
           "data": {
-            "protocol": 3
+            "protocol": 4
           }
         }
       }

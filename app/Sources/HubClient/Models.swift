@@ -389,12 +389,15 @@ public struct Service: Codable, Sendable, Hashable, Identifiable {
     public var channels: Int
     public var lastExit: ServiceExit?
     public var error: String?
-    /// `earlier` for a service an earlier Pocket Hub installed; nil otherwise.
+    /// `earlier` for a service an earlier Pocket Hub installed; `store_format`
+    /// for one whose store a newer Pocket Hub wrote; nil otherwise.
     public var reason: String?
+    /// Its store's use; nil when its manifest does not require `store`.
+    public var store: ServiceStore?
 
     public init(id: String, release: String? = "dev", requires: [String] = [], hosts: [String] = [], state: ServiceState,
                 pid: Int? = nil, since: EpochMilliseconds? = nil, channels: Int = 0, lastExit: ServiceExit? = nil,
-                error: String? = nil, reason: String? = nil)
+                error: String? = nil, reason: String? = nil, store: ServiceStore? = nil)
     {
         self.id = id
         self.release = release
@@ -407,11 +410,31 @@ public struct Service: Codable, Sendable, Hashable, Identifiable {
         self.lastExit = lastExit
         self.error = error
         self.reason = reason
+        self.store = store
     }
 
     /// Installed by an earlier Pocket Hub: listed, never run, until the owner
     /// removes it or installs it again.
     public var isEarlier: Bool { reason == "earlier" }
+}
+
+/// `Service.store` (CONTROL-API.md §2): what the service keeps on this Mac.
+public struct ServiceStore: Codable, Sendable, Hashable {
+    /// The keys and values it holds, in bytes, which `maxBytes` bounds; nil
+    /// when a newer Pocket Hub wrote the store, which this one does not read.
+    public var bytes: Int?
+    public var maxBytes: Int
+    /// What the store takes on disk.
+    public var fileBytes: Int
+
+    public init(bytes: Int?, maxBytes: Int, fileBytes: Int) {
+        self.bytes = bytes
+        self.maxBytes = maxBytes
+        self.fileBytes = fileBytes
+    }
+
+    /// A newer Pocket Hub wrote it: kept as it is, not used.
+    public var isNewer: Bool { bytes == nil }
 }
 
 /// `{code, signal, at}`: `code` an integer or null, `signal` a name such as `SIGTERM` or null.

@@ -2,5 +2,7 @@
   "service": 1,
   "id": "dev.pocket-nexus.link-channel",
   "entry": "service.ts",
+  "requires": ["store"],
+  "store": { "maxBytes": 1048576 },
   "idleSeconds": 30
 }

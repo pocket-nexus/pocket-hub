@@ -289,6 +289,22 @@
         }
       }
     },
+    "%@ on disk" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ on disk"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "占用磁盘 %@"
+          }
+        }
+      }
+    },
     "%@ — Busy" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1445,6 +1461,22 @@
         }
       }
     },
+    "Data kept on this Mac: %@ of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Data kept on this Mac: %1$@ of %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存在这台 Mac 上的数据：%1$@，上限 %2$@"
+          }
+        }
+      }
+    },
     "Delete" : {
       "localizations" : {
         "en" : {
@@ -2369,6 +2401,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "它在设备上的数据也会一并删除。"
+          }
+        }
+      }
+    },
+    "Its data was saved by a newer Pocket Hub and is kept as it is. Update Pocket Hub to use it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Its data was saved by a newer Pocket Hub and is kept as it is. Update Pocket Hub to use it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它的数据由较新版本的 Pocket Hub 保存，并原样保留。请更新 Pocket Hub 以使用这些数据。"
           }
         }
       }
@@ -5617,6 +5665,22 @@
         }
       }
     },
+    "This service's data was saved by a newer Pocket Hub." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This service's data was saved by a newer Pocket Hub."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个服务的数据由较新版本的 Pocket Hub 保存。"
+          }
+        }
+      }
+    },
     "This service's packages couldn't be installed." : {
       "localizations" : {
         "en" : {
@@ -6103,6 +6167,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "立即更新"
+          }
+        }
+      }
+    },
+    "Update Pocket Hub to start it. Its data is kept as it is." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Pocket Hub to start it. Its data is kept as it is."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请更新 Pocket Hub 后再启动它。它的数据会原样保留。"
           }
         }
       }

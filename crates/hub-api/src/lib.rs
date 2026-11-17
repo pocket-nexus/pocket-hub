@@ -23,7 +23,7 @@ pub use types::*;
 /// Hello). 1 was Pocket Hub 0.2.2's and earlier, before services took their
 /// names; 2 installed a service by its own version; 3 installs it as a
 /// release. The core refuses another like any other version.
-pub const PROTOCOL: u32 = 3;
+pub const PROTOCOL: u32 = 4;
 
 /// The methods of §3.
 pub mod methods {

@@ -278,12 +278,15 @@ fn devices_setup_and_services_in_both_modes() {
     let _ = watch.wait();
     let services = run(home.path(), &["--json", "services"]).json();
     assert_eq!(services["services"][0]["state"], "stopped");
+    assert_eq!(services["services"][0]["store"], serde_json::json!({"bytes": 0, "maxBytes": 1_048_576, "fileBytes": 0}));
+    let table = run(home.path(), &["services"]).stdout;
+    assert!(table.lines().next().unwrap().ends_with("STORE") && table.contains("0 B of 1.0 MB"), "{table}");
     let started = run(home.path(), &["service", "start", "dev.pocket-nexus.link-channel"]);
     assert!(started.stdout.contains("running"), "{}", started.stdout);
     let logs = run(home.path(), &["--json", "service", "logs", "dev.pocket-nexus.link-channel"]).json();
     assert!(logs["lines"].as_array().unwrap().iter().any(|line| line["text"].as_str().unwrap().contains("installed release dev")));
     assert!(run(home.path(), &["service", "stop", "dev.pocket-nexus.link-channel"]).stdout.contains("stopped"));
-    assert_eq!(run(home.path(), &["service", "remove", "dev.pocket-nexus.link-channel"]).stdout.trim(), "Removed dev.pocket-nexus.link-channel; its data folder is kept.");
+    assert_eq!(run(home.path(), &["service", "remove", "dev.pocket-nexus.link-channel"]).stdout.trim(), "Removed dev.pocket-nexus.link-channel; its stored data is kept.");
     assert_eq!(run(home.path(), &["service", "start", "dev.pocket-nexus.link-channel"]).status, 1);
     assert!(run(home.path(), &["runtime"]).stdout.contains("is installed at"));
 
@@ -709,16 +712,16 @@ fn a_core_of_another_protocol_is_named_and_stopped_never_replaced() {
     assert_eq!(
         status.stderr.trim(),
         format!(
-            "pocket-hub: The Pocket Hub core on {} speaks protocol 1 of the control API and this pocket-hub speaks 3: use the pocket-hub of its version, or stop it with `pocket-hub shutdown`.",
+            "pocket-hub: The Pocket Hub core on {} speaks protocol 1 of the control API and this pocket-hub speaks 4: use the pocket-hub of its version, or stop it with `pocket-hub shutdown`.",
             earlier.socket.display()
         )
     );
     assert!(!home.path().join("logs").exists(), "no core of this version was started beside it");
-    assert_eq!(earlier.calls(), ["hub.hello 3"]);
+    assert_eq!(earlier.calls(), ["hub.hello 4"]);
 
     let stopped = run(home.path(), &["shutdown"]);
     assert_eq!((stopped.status, stopped.stdout.trim()), (0, "The Pocket Hub core stopped."), "{}", stopped.stderr);
-    assert_eq!(earlier.calls(), ["hub.hello 3", "hub.hello 3", "hub.hello 1", "hub.shutdown"]);
+    assert_eq!(earlier.calls(), ["hub.hello 4", "hub.hello 4", "hub.hello 1", "hub.shutdown"]);
     assert!(!earlier.socket.exists());
     let none = run(home.path(), &["shutdown"]);
     assert_eq!(none.status, 3);

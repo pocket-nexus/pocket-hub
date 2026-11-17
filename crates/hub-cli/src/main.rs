@@ -244,13 +244,13 @@ enum ServiceCommand {
         #[arg(long, default_value_t = 200)]
         tail: usize,
     },
-    /// Remove the service, or one release of it (its data folder is kept unless --purge).
+    /// Remove the service, or one release of it (its stored data is kept unless --purge).
     Remove {
         id: String,
         /// Only this release.
         #[arg(long)]
         release: Option<String>,
-        /// Remove the service's data folder too.
+        /// Delete the service's stored data too.
         #[arg(long)]
         purge: bool,
     },
@@ -648,7 +648,7 @@ async fn service_command(client: &Client, out: &Out, command: ServiceCommand) ->
                 Some(release) => format!("{id} release {release}"),
                 None => id.clone(),
             };
-            out.result(&value, || Ok(if purge { format!("Removed {what} and its data.") } else { format!("Removed {what}; its data folder is kept.") }))
+            out.result(&value, || Ok(if purge { format!("Removed {what} and its stored data.") } else { format!("Removed {what}; its stored data is kept.") }))
         }
         ServiceCommand::Logs { id, follow, tail } => {
             if follow {

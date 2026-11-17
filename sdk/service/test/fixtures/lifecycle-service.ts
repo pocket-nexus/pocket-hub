@@ -1,11 +1,12 @@
-// A service for the lifecycle tests, run as Hub runs one: `bun run` with the
-// four POCKET_SERVICE_* variables. It logs what happens to it on standard
-// output, one line per step, for the test to read.
+// A service for the lifecycle tests, run as the host runs one: its bootstrap
+// with the three POCKET_SERVICE_* variables. It logs what happens to it on
+// standard output, one line per step, for the test to read.
 
-import { type ServiceFactory, ServiceError, serve } from "@pocketjs/service";
+import { type ServiceFactory, ServiceError } from "@pocketjs/service";
 
-const service: ServiceFactory = ({ app, data, log }) => {
-  log(`started ${app} ${data}`);
+const service: ServiceFactory = ({ id, log }) => {
+  log(`started ${id}`);
+  log(`env ${Object.keys(process.env).sort().join(",")}`);
   return {
     attach(channel, info) {
       log(`attach ${JSON.stringify(info)}`);
@@ -36,4 +37,3 @@ const service: ServiceFactory = ({ app, data, log }) => {
 };
 
 export default service;
-if (import.meta.main) await serve(service);
