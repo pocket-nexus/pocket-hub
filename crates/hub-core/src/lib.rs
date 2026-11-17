@@ -30,8 +30,8 @@ mod relay;
 pub mod screenshot;
 
 pub use api::{
-    BoxFuture, CALL_HELD_BYTES, CallBody, CallCancel, CallSink, CancelCause, ChannelHost, ChannelInfo, ChannelOffer, ChannelOpenError, ChannelStream, CloseInfo, DeviceCall, DeviceRequests,
-    DeviceSnapshot, ErrorReply, HubEvent, LaunchTarget, LinkInfo, OpError, PairError, PairRequest, SinkError,
+    BoxFuture, CALL_HELD_BYTES, CallBody, CallCancel, CallSink, CancelCause, ChannelInfo, ChannelOffer, ChannelOpenError, ChannelStream, CloseInfo, DeviceCall, DeviceRequests,
+    DeviceSnapshot, ErrorReply, HubEvent, LaunchTarget, LinkInfo, OpError, PairError, PairRequest, ServiceConnector, SinkError,
 };
 pub use apps::InstalledApp;
 pub use carrier::{CarrierKind, CarrierListener, CarrierStream, TcpCarrier};

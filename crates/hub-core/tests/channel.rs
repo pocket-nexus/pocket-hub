@@ -442,7 +442,7 @@ async fn close_reasons_and_generations() {
     let mut service = next_service(&mut s.notices).await;
     service.credit(service.channel, 256).await;
     let (host, notices) = FakeHost::new();
-    s.hub.endpoint.set_channel_host(None);
+    s.hub.endpoint.set_service_connector(None);
     let close = service.next_non_credit().await;
     assert_eq!(object(&close)["reason"], "feature");
     assert_eq!(closed_reason(&mut s.device).await, "feature");
@@ -451,7 +451,7 @@ async fn close_reasons_and_generations() {
     assert!(!state["inUse"].as_array().unwrap().contains(&json!("channel")));
     tokio::time::sleep(Duration::from_millis(1100)).await;
     s.notices = notices;
-    s.hub.endpoint.set_channel_host(Some(host));
+    s.hub.endpoint.set_service_connector(Some(host));
     let service = next_service(&mut s.notices).await;
     assert!(service.offer.generation > first + 2);
 

@@ -20,7 +20,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-use crate::api::{ChannelHost, CloseInfo, DeviceRequests, DeviceSnapshot, HubEvent, LinkInfo, PairError, PairRequest};
+use crate::api::{CloseInfo, DeviceRequests, DeviceSnapshot, HubEvent, LinkInfo, PairError, PairRequest, ServiceConnector};
 use crate::apps::InstalledApp;
 use crate::carrier::{CarrierKind, CarrierListener, CarrierStream};
 use crate::config::EndpointConfig;
@@ -60,7 +60,7 @@ pub(crate) struct Shared {
     pub config: EndpointConfig,
     /// The providers of the device's system requests, each serving the groups it lists.
     pub requests: Vec<Arc<dyn DeviceRequests>>,
-    host: RwLock<Option<Arc<dyn ChannelHost>>>,
+    connector: RwLock<Option<Arc<dyn ServiceConnector>>>,
     pub registry: Mutex<Registry>,
     /// The requests to be paired by a code (§3.11), by device id.
     pub pairing: Mutex<HashMap<String, crate::pairing::Slot>>,
@@ -71,16 +71,16 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
-    pub fn host(&self) -> Option<Arc<dyn ChannelHost>> {
-        self.host.read().unwrap().clone()
+    pub fn connector(&self) -> Option<Arc<dyn ServiceConnector>> {
+        self.connector.read().unwrap().clone()
     }
 
     /// The groups Hub serves (§6.1): the runtime operations always (the
-    /// removal of an applet among them), `channel` while a channel host is
+    /// removal of an applet among them), `channel` while a service connector is
     /// installed, and those of `DeviceRequests`.
     pub fn hub_features(&self) -> Vec<String> {
         let mut list: Vec<String> = ["runtime", "runtime.native", "runtime.remove", "apps"].iter().map(|s| s.to_string()).collect();
-        if self.host().is_some() {
+        if self.connector().is_some() {
             list.push("channel".into());
         }
         for requests in &self.requests {
@@ -239,7 +239,7 @@ pub struct EndpointBuilder {
     store: Arc<Store>,
     config: EndpointConfig,
     listeners: Vec<Box<dyn CarrierListener>>,
-    host: Option<Arc<dyn ChannelHost>>,
+    connector: Option<Arc<dyn ServiceConnector>>,
     requests: Vec<Arc<dyn DeviceRequests>>,
 }
 
@@ -253,8 +253,8 @@ impl EndpointBuilder {
         self
     }
     /// Routes applet channels to services; Hub lists `channel` while one is set.
-    pub fn channel_host(mut self, host: Arc<dyn ChannelHost>) -> Self {
-        self.host = Some(host);
+    pub fn service_connector(mut self, connector: Arc<dyn ServiceConnector>) -> Self {
+        self.connector = Some(connector);
         self
     }
     /// Serves the device's system requests of the groups `requests` lists.
@@ -272,7 +272,7 @@ impl EndpointBuilder {
             store: self.store,
             config: self.config,
             requests: self.requests,
-            host: RwLock::new(self.host),
+            connector: RwLock::new(self.connector),
             registry: Mutex::new(Registry::default()),
             pairing: Mutex::new(HashMap::new()),
             events,
@@ -314,7 +314,7 @@ impl EndpointBuilder {
 
 impl Endpoint {
     pub fn builder(store: Arc<Store>) -> EndpointBuilder {
-        EndpointBuilder { store, config: EndpointConfig::default(), listeners: Vec::new(), host: None, requests: Vec::new() }
+        EndpointBuilder { store, config: EndpointConfig::default(), listeners: Vec::new(), connector: None, requests: Vec::new() }
     }
 
     /// The carriers listened on, with the port each one's beacon names.
@@ -343,11 +343,11 @@ impl Endpoint {
         self.shared.hub_features()
     }
 
-    /// Installs or removes the channel host. Every linked device gets a
+    /// Installs or removes the service connector. Every linked device gets a
     /// `features` event (§6.1); removing it closes every channel with
     /// `feature` first.
-    pub fn set_channel_host(&self, host: Option<Arc<dyn ChannelHost>>) {
-        *self.shared.host.write().unwrap() = host;
+    pub fn set_service_connector(&self, connector: Option<Arc<dyn ServiceConnector>>) {
+        *self.shared.connector.write().unwrap() = connector;
         let features = self.shared.hub_features();
         let registry = self.shared.registry.lock().unwrap();
         for link in registry.devices.values().filter_map(|s| s.link.as_ref()) {

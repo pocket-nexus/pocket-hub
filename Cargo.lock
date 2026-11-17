@@ -1560,6 +1560,8 @@ dependencies = [
  "flate2",
  "hex",
  "libc",
+ "pocket-hub-api",
+ "pocket-hub-core",
  "pocket-link",
  "rand 0.9.5",
  "reqwest",

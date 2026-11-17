@@ -1,8 +1,9 @@
-//! Hub provides the service SDK (docs/SERVICE-PROTOCOL.md §1): the runtime
-//! files of `sdk/service` are built into this binary and written under
-//! `<home>/sdk/service` at each start, so the SDK a service runs is always the
-//! one of the Hub that started it. `hub-services` links that folder into a
-//! package that has no `node_modules/@pocketjs/service` of its own.
+//! The host provides the service SDK (docs/SERVICE-PROTOCOL.md §1): the
+//! runtime files of `sdk/service` are built into this crate and written under
+//! `<home>/sdk/service` at each start, so the SDK a service runs is always
+//! the one of the host that started it. The registry links that folder into
+//! a package that has no `node_modules/@pocketjs/service` of its own
+//! (`registry::link_sdk`).
 
 use std::fs;
 use std::io;

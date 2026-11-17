@@ -1,12 +1,11 @@
-//! The contract's shapes made from the internal types of `hub-core`,
-//! `hub-services` and `hub-setup`. Those types are not the contract: each
+//! The contract's shapes made from the internal types of `hub-core` and
+//! `hub-setup` (the service host maps its own). Those types are not the contract: each
 //! mapping here is written out, so a change on either side is a compile
 //! error or a visible line, never a silent change of the API.
 
 use pocket_hub_api::types as api;
 use pocket_hub_api::{ErrorKind, RpcError};
 use pocket_hub_core::{DeviceSnapshot, OpError, Operation, PairError, family};
-use service_host::{ServiceState, ServiceStatus, InstalledService, LogLine, LogStream};
 use pocket_hub_setup::{InstallReport, InstallTarget, PairingOutcome, ProgramAction, Progress, Stage};
 
 // ---------------------------------------------------------------------------
@@ -118,19 +117,7 @@ pub fn unlinked_code(code: Option<&str>) -> String {
 }
 
 /// A sentence from one of hub-core's lower-case phrases.
-pub fn sentence(text: &str) -> String {
-    let text = text.trim();
-    let mut out = String::with_capacity(text.len() + 1);
-    let mut chars = text.chars();
-    if let Some(first) = chars.next() {
-        out.extend(first.to_uppercase());
-        out.push_str(chars.as_str());
-    }
-    if !out.ends_with(['.', '!', '?']) {
-        out.push('.');
-    }
-    out
-}
+pub use pocket_hub_api::rpc::sentence;
 
 /// `OpError` → the error of §1.
 ///
@@ -349,83 +336,6 @@ fn setup_error(report: &InstallReport, target: &InstallTarget) -> RpcError {
     })
 }
 
-// ---------------------------------------------------------------------------
-// Services
-// ---------------------------------------------------------------------------
-
-/// `ServiceStatus` → `Service` (§2).
-///
-/// | contract | hub-services |
-/// | --- | --- |
-/// | `version` | the installed version, else the running process's |
-/// | `state` | `state` (same five names) |
-/// | `since` | `since`; for a service that has not changed state since Hub started, its install time |
-/// | `lastExit.signal` | the signal number's name (`SIGTERM`) |
-/// | `error` | `last_error` while `failed`, else null |
-///
-/// `running_version`, `started_at`, `restarts`, `crashes` and `retry_at`
-/// have no place in the contract.
-pub fn service(status: &ServiceStatus, installed: Option<&InstalledService>) -> api::Service {
-    api::Service {
-        id: status.id.clone(),
-        version: status.version.clone().or_else(|| installed.map(|service| service.version.clone())).or_else(|| status.running_version.clone()).unwrap_or_default(),
-        state: match status.state {
-            ServiceState::Stopped => api::ServiceState::Stopped,
-            ServiceState::Starting => api::ServiceState::Starting,
-            ServiceState::Running => api::ServiceState::Running,
-            ServiceState::Stopping => api::ServiceState::Stopping,
-            ServiceState::Failed => api::ServiceState::Failed,
-        },
-        pid: status.pid,
-        since: status.since.or_else(|| installed.map(|service| service.installed_at)),
-        channels: status.channels as u32,
-        last_exit: status.last_exit.as_ref().map(|exit| api::LastExit { code: exit.code, signal: exit.signal.map(signal_name), at: exit.at }),
-        error: if status.state == ServiceState::Failed { status.last_error.clone() } else { None },
-    }
-}
-
-pub fn log_stream(stream: LogStream) -> &'static str {
-    match stream {
-        LogStream::Stdout => "stdout",
-        LogStream::Stderr => "stderr",
-        LogStream::Hub => "hub",
-    }
-}
-
-pub fn service_log_line(line: &LogLine) -> api::ServiceLogLine {
-    api::ServiceLogLine { at: line.at, stream: log_stream(line.stream).to_owned(), text: line.text.clone() }
-}
-
-/// A signal's name, `SIG<number>` for one this table does not hold.
-pub fn signal_name(signal: i32) -> String {
-    let name = match signal {
-        libc::SIGHUP => "SIGHUP",
-        libc::SIGINT => "SIGINT",
-        libc::SIGQUIT => "SIGQUIT",
-        libc::SIGILL => "SIGILL",
-        libc::SIGTRAP => "SIGTRAP",
-        libc::SIGABRT => "SIGABRT",
-        libc::SIGBUS => "SIGBUS",
-        libc::SIGFPE => "SIGFPE",
-        libc::SIGKILL => "SIGKILL",
-        libc::SIGUSR1 => "SIGUSR1",
-        libc::SIGSEGV => "SIGSEGV",
-        libc::SIGUSR2 => "SIGUSR2",
-        libc::SIGPIPE => "SIGPIPE",
-        libc::SIGALRM => "SIGALRM",
-        libc::SIGTERM => "SIGTERM",
-        libc::SIGCHLD => "SIGCHLD",
-        libc::SIGCONT => "SIGCONT",
-        libc::SIGSTOP => "SIGSTOP",
-        libc::SIGTSTP => "SIGTSTP",
-        libc::SIGXCPU => "SIGXCPU",
-        libc::SIGXFSZ => "SIGXFSZ",
-        libc::SIGSYS => "SIGSYS",
-        other => return format!("SIG{other}"),
-    };
-    name.to_owned()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -442,11 +352,9 @@ mod tests {
     }
 
     #[test]
-    fn stages_signals_and_sentences() {
+    fn stages_and_sentences() {
         assert_eq!(setup_stage(Stage::Checking), api::SetupStage::Reading);
         assert_eq!(setup_stage(Stage::Resolving), api::SetupStage::Downloading);
-        assert_eq!(signal_name(libc::SIGTERM), "SIGTERM");
-        assert_eq!(signal_name(200), "SIG200");
         assert_eq!(sentence("a package is 1 byte to 24 MiB"), "A package is 1 byte to 24 MiB.");
         assert_eq!(unlinked_code(None), "lost");
         let progress = setup_progress(&Progress { stage: Stage::Checking, done: 0, total: None });

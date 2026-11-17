@@ -1577,7 +1577,7 @@ impl Conn {
             self.reply_error(id, "malformed", "channel.open needs an app of 1 to 128 bytes and a 16-hex hash");
             return;
         }
-        let Some(host) = self.shared.host() else {
+        let Some(host) = self.shared.connector() else {
             self.reply_error(id, "unsupported", "Hub routes no channels");
             return;
         };

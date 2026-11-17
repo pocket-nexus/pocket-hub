@@ -50,7 +50,7 @@ async fn handshake_status_and_record() {
     let link = snapshot.link.unwrap();
     assert_eq!(link.payload_limit, 16384);
     assert!(link.features_in_use.contains(&"runtime".to_owned()));
-    assert!(!link.hub_features.contains(&"channel".to_owned()), "no channel host, no channel feature");
+    assert!(!link.hub_features.contains(&"channel".to_owned()), "no service connector, no channel feature");
     // No key in anything a client sees.
     let text = serde_json::to_string(&hub.endpoint.devices()).unwrap();
     assert!(!text.contains(&record.key));

@@ -266,7 +266,7 @@ fn resync(core: &Core, topics: &Topics, buffer: &mut Vec<u8>) {
         add(pocket_hub_api::Event::DeviceChanged { device: Box::new(device) });
     }
     add(pocket_hub_api::Event::PairingChanged { requests: core.pair_requests() });
-    for service in core.services() {
+    for service in core.services.services() {
         add(pocket_hub_api::Event::ServiceChanged { service });
     }
     if let Some(catalog) = core.applets.held() {
