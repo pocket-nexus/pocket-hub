@@ -553,6 +553,12 @@ public struct StoreApp: Codable, Sendable, Hashable, Identifiable {
     public var official: Bool
     /// The device targets the package has a variant for.
     public var targets: [String]
+    /// The devices the package was built for, as the store names them, in
+    /// its order; nil until Hub holds the details of this version.
+    public var devices: [DeviceName]?
+    /// The store has sample data for this version: its player runs it on
+    /// that data (`store.sample`).
+    public var sample: Bool
     /// The package's size in bytes.
     public var bytes: Int64
     /// Absolute path of the icon (a PNG) in Hub's cache; nil until Hub has fetched it.
@@ -585,8 +591,8 @@ public struct StoreApp: Codable, Sendable, Hashable, Identifiable {
     }
 
     public init(id: String, title: String, summary: String, author: String, version: String, official: Bool,
-                targets: [String], bytes: Int64, icon: String?, cached: Bool, services: [String], hosts: [String],
-                installed: DeviceCopy = .notAsked, update: Bool? = nil)
+                targets: [String], devices: [DeviceName]? = nil, sample: Bool = false, bytes: Int64, icon: String?,
+                cached: Bool, services: [String], hosts: [String], installed: DeviceCopy = .notAsked, update: Bool? = nil)
     {
         self.id = id
         self.title = title
@@ -595,6 +601,8 @@ public struct StoreApp: Codable, Sendable, Hashable, Identifiable {
         self.version = version
         self.official = official
         self.targets = targets
+        self.devices = devices
+        self.sample = sample
         self.bytes = bytes
         self.icon = icon
         self.cached = cached
@@ -613,6 +621,8 @@ public struct StoreApp: Codable, Sendable, Hashable, Identifiable {
         version = try c.decode(String.self, forKey: .version)
         official = try c.decode(Bool.self, forKey: .official)
         targets = try c.decode([String].self, forKey: .targets)
+        devices = try c.decodeIfPresent([DeviceName].self, forKey: .devices)
+        sample = try c.decode(Bool.self, forKey: .sample)
         bytes = try c.decode(Int64.self, forKey: .bytes)
         icon = try c.decodeIfPresent(String.self, forKey: .icon)
         cached = try c.decode(Bool.self, forKey: .cached)
@@ -637,6 +647,8 @@ public struct StoreApp: Codable, Sendable, Hashable, Identifiable {
         try c.encode(version, forKey: .version)
         try c.encode(official, forKey: .official)
         try c.encode(targets, forKey: .targets)
+        try c.encode(devices, forKey: .devices)
+        try c.encode(sample, forKey: .sample)
         try c.encode(bytes, forKey: .bytes)
         try c.encode(icon, forKey: .icon)
         try c.encode(cached, forKey: .cached)
@@ -651,7 +663,7 @@ public struct StoreApp: Codable, Sendable, Hashable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, summary, author, version, official, targets, bytes, icon, cached, services, hosts, installed, update
+        case id, title, summary, author, version, official, targets, devices, sample, bytes, icon, cached, services, hosts, installed, update
     }
 }
 
@@ -670,6 +682,32 @@ extension StoreApp {
         case .none: .install
         case .copy: update == true ? .update : .installed
         }
+    }
+}
+
+/// A device as the store names it: the target its build names, and its
+/// name, the same in every language.
+public struct DeviceName: Codable, Sendable, Hashable {
+    public var target: String
+    public var name: String
+
+    public init(target: String, name: String) {
+        self.target = target
+        self.name = name
+    }
+}
+
+/// The answer of `store.sample`: the files the store's player runs an applet
+/// from, in Hub's cache.
+public struct StoreSample: Codable, Sendable, Hashable {
+    /// The verified package, every variant.
+    public var package: String
+    /// The sample data, a JSON document.
+    public var mock: String
+
+    public init(package: String, mock: String) {
+        self.package = package
+        self.mock = mock
     }
 }
 

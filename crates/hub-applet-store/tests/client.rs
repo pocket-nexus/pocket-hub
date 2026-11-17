@@ -67,6 +67,10 @@ async fn the_catalog_is_fetched_cached_and_refreshed() {
     }
     assert!(store.icon_path(&hn).is_some());
     assert!(matches!(tokio::time::timeout(Duration::from_secs(5), events.recv()).await, Ok(Ok(StoreEvent::Catalog { .. }))));
+    // So do the app's details, announced once they are held.
+    until(|| store.held_details(&hn).is_some()).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    while events.try_recv().is_ok() {}
 
     // Younger than 10 minutes: answered from what is held.
     setup.clock.fetch_add(9 * 60_000, Ordering::SeqCst);
@@ -117,52 +121,120 @@ async fn the_catalog_is_fetched_cached_and_refreshed() {
     assert!(matches!(nowhere.apps(false).await, Err(StoreError::Unreachable(_))));
 }
 
+/// Waits up to 5 s for `held` to hold.
+async fn until(mut held: impl FnMut() -> bool) {
+    for _ in 0..250 {
+        if held() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(held(), "never held");
+}
+
 #[tokio::test]
-async fn details_are_the_stores_kept_while_the_catalog_is() {
+async fn details_are_the_stores_read_again_after_each_catalog() {
     let setup = Setup::new().await;
     let key = test_key(KEY);
     let hn = setup.fake.publish(&key, fixture("hn.pocket"), fixture("hn.png"), "pocket-nexus", "Hacker News.");
-    setup.fake.set_details(&hn.package, Some(fixture_details("hn")));
     let built = setup.fake.publish(&key, build_package("io.example.plain", "1.0.0", "Plain", &[("3ds-dev", "plain"), ("x-unknown", "plain")], 100), icon(3), "someone", "Plain.");
+    // The store does not answer hn's details at first.
+    setup.fake.set_details(&hn.package, None);
     let store = setup.open(&[]);
     store.apps(false).await.unwrap();
     let path = format!("/v1/details/{}", hn.package);
 
-    // Asked by the hash of the package the catalog names; the store's answer
-    // as it reads the package.
-    let details = store.details(&hn).await.unwrap();
-    assert_eq!(details.devices.iter().map(|device| device.name.as_str()).collect::<Vec<_>>(), ["Omarchy Pocket", "M5Stack Tab5", "Nintendo 3DS"]);
-    assert_eq!(details.needs.len(), 5);
-    assert_eq!(details.surface.as_ref().and_then(|surface| surface.size.as_ref()).map(|size| (size.min, size.max)), Some(([320, 240], [640, 720])));
-    assert_eq!(setup.fake.hits(&path), 1);
-    // Kept while the catalog is held.
-    assert_eq!(store.details(&hn).await.unwrap(), details);
-    assert_eq!(setup.fake.hits(&path), 1);
+    // Every app's details are asked for after the fetch, in the background,
+    // by the hash of the package the catalog names.
+    until(|| store.held_details(&built).is_some() && setup.fake.hits(&path) == 1).await;
     // A device the store has no name for keeps its target, last.
     let plain = store.details(&built).await.unwrap();
     assert_eq!(plain.devices.iter().map(|device| (device.target.as_str(), device.name.as_str())).collect::<Vec<_>>(), [("3ds-dev", "Nintendo 3DS"), ("x-unknown", "x-unknown")]);
     assert_eq!((plain.needs.len(), plain.surface.clone(), plain.api), (0, None, Some(1)));
-
-    // Another catalog drops them: the store's reading of a package grows.
-    let mut grown = fixture_details("hn");
-    grown["devices"][0]["name"] = serde_json::json!("Omarchy Pocket 2");
-    setup.fake.set_details(&hn.package, Some(grown));
-    assert_eq!(store.details(&hn).await.unwrap().devices[0].name, "Omarchy Pocket");
-    store.apps(true).await.unwrap();
-    assert_eq!(store.details(&hn).await.unwrap().devices[0].name, "Omarchy Pocket 2");
-    assert_eq!(setup.fake.hits(&path), 2);
-
     // Not answered, or not with details: unreachable, nothing older in their place.
-    store.apps(true).await.unwrap();
-    setup.fake.set_details(&hn.package, None);
     let missing = store.details(&hn).await.unwrap_err();
     assert_eq!(missing.reason(), "unreachable");
     assert!(missing.to_string().contains("404"), "{missing}");
     setup.fake.set_details(&hn.package, Some(serde_json::json!({"error": "not details"})));
     assert!(matches!(store.details(&hn).await, Err(StoreError::Unreachable(_))));
-    // A failed answer is not kept: the next ask tries again.
+    // A failed answer is not kept: the next ask tries again, and keeps what it gets.
     setup.fake.set_details(&hn.package, Some(fixture_details("hn")));
-    assert_eq!(store.details(&hn).await.unwrap().devices.len(), 3);
+    let details = store.details(&hn).await.unwrap();
+    let asked = setup.fake.hits(&path);
+    assert_eq!(store.details(&hn).await.unwrap(), details);
+    assert_eq!(setup.fake.hits(&path), asked, "kept: answered without a request");
+    assert_eq!(details.devices.iter().map(|device| device.name.as_str()).collect::<Vec<_>>(), ["Omarchy Pocket", "M5Stack Tab5", "Nintendo 3DS"]);
+    assert_eq!(details.needs.len(), 5);
+    assert_eq!(details.surface.as_ref().and_then(|surface| surface.size.as_ref()).map(|size| (size.min, size.max)), Some(([320, 240], [640, 720])));
+
+    // The next catalog fetch reads them again; what changed is announced,
+    // what did not is not.
+    let mut events = store.subscribe();
+    let mut grown = fixture_details("hn");
+    grown["devices"][0]["name"] = serde_json::json!("Omarchy Pocket 2");
+    setup.fake.set_details(&hn.package, Some(grown));
+    store.apps(true).await.unwrap();
+    until(|| store.held_details(&hn).is_some_and(|held| held.devices[0].name == "Omarchy Pocket 2")).await;
+    let announced = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let StoreEvent::Catalog { .. } = events.recv().await.unwrap() {
+                return;
+            }
+        }
+    });
+    assert!(announced.await.is_ok(), "new details are announced");
+    let reads = setup.fake.hits(&path);
+    store.apps(true).await.unwrap();
+    until(|| setup.fake.hits(&path) == reads + 1).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    while let Ok(event) = events.try_recv() {
+        assert!(!matches!(event, StoreEvent::Catalog { .. }), "the same details are not announced: {event:?}");
+    }
+    // A read that fails drops what was held.
+    setup.fake.set_details(&hn.package, None);
+    store.apps(true).await.unwrap();
+    until(|| store.held_details(&hn).is_none()).await;
+}
+
+#[tokio::test]
+async fn sample_data_is_checked_and_kept() {
+    let setup = Setup::new().await;
+    let key = test_key(KEY);
+    let hn = setup.fake.publish(&key, fixture("hn.pocket"), fixture("hn.png"), "pocket-nexus", "Hacker News.");
+    let none = setup.fake.publish(&key, build_package("io.example.plain", "1.0.0", "Plain", &[("3ds-dev", "plain")], 100), icon(3), "someone", "Plain.");
+    let sample = serde_json::json!({"mock": 1, "routes": [{"url": "https://hacker-news.firebaseio.com/v0/topstories.json", "text": "[1,2,3]"}]});
+    let hn = setup.fake.set_sample(&hn, &sample);
+    let store = setup.open(&[]);
+    let catalog = store.apps(false).await.unwrap();
+    // The listing's hash is kept with the entry; the signature still verifies.
+    let listed = catalog.app(&hn.id).unwrap();
+    assert_eq!(listed.mock, hn.mock);
+    listed.verify(&public(&key)).unwrap();
+    assert_eq!(catalog.app(&none.id).unwrap().mock, None);
+
+    let path = store.sample(listed).await.unwrap().expect("sample data");
+    assert_eq!(path, setup.cache.path().join("mocks").join(format!("{}.json", hn.mock.as_deref().unwrap())));
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).unwrap()).unwrap(), sample);
+    let route = format!("/v1/mocks/{}", hn.mock.as_deref().unwrap());
+    assert_eq!(setup.fake.hits(&route), 1);
+    // Kept: asked again, nothing is downloaded.
+    store.sample(listed).await.unwrap();
+    assert_eq!(setup.fake.hits(&route), 1);
+    // A version with none has none.
+    assert_eq!(store.sample(catalog.app(&none.id).unwrap()).await.unwrap(), None);
+
+    // A cached file that changed is downloaded again; bytes that do not match are rejected and not kept.
+    std::fs::write(&path, b"{}").unwrap();
+    store.sample(listed).await.unwrap();
+    assert_eq!(setup.fake.hits(&route), 2);
+    let mut forged = listed.clone();
+    forged.mock = Some("0".repeat(64));
+    setup.fake.set_details(&forged.package, None);
+    assert!(matches!(store.sample(&forged).await, Err(StoreError::Unreachable(_))), "the store has no such file");
+    std::fs::remove_file(&path).unwrap();
+    setup.fake.fault(hn.mock.as_deref().unwrap(), Fault::Corrupt);
+    assert_eq!(store.sample(listed).await.unwrap_err().reason(), "rejected");
+    assert!(!path.exists(), "rejected bytes are not kept");
 }
 
 #[tokio::test]

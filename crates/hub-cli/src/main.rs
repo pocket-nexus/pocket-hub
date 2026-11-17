@@ -154,6 +154,11 @@ enum StoreCommand {
         /// The applet's id (dev.pocket-nexus.hn).
         app: String,
     },
+    /// The package and sample data the store's player runs an applet from, downloaded when Hub has not.
+    Sample {
+        /// The applet's id (dev.pocket-nexus.hn).
+        app: String,
+    },
     /// Install an applet from the store on a device, downloading it first when Hub has not.
     Install {
         /// The applet's id (dev.pocket-nexus.hn).
@@ -461,6 +466,14 @@ async fn store(client: &Client, out: &Out, args: StoreArgs) -> Outcome {
         Some(StoreCommand::Details { app }) => {
             let value = client.call(methods::STORE_DETAILS, &StoreDetailsParams { app }).await?;
             out.result(&value, || Ok(output::store_details(&decode(&value)?)))
+        }
+        Some(StoreCommand::Sample { app }) => {
+            let call = client.start(methods::STORE_SAMPLE, &StoreDetailsParams { app }).await?;
+            let value = transfer(out, call, "Downloading").await?;
+            out.result(&value, || {
+                let sample: StoreSample = decode(&value)?;
+                Ok(format!("Package:      {}\nSample data:  {}", sample.package, sample.mock))
+            })
         }
         Some(StoreCommand::Install { app }) => {
             let device = args.device.unwrap_or_else(|| "*".into());

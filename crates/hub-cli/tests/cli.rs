@@ -295,7 +295,7 @@ fn devices_setup_and_daemons_in_both_modes() {
     shutdown(home.path());
 }
 
-/// `store`, `store details` and `store install` against the fake applet store, in both
+/// `store`, `store details`, `store sample` and `store install` against the fake applet store, in both
 /// output modes. The first command starts the core with the store's URL and
 /// key; the later ones reach that core.
 #[test]
@@ -307,6 +307,7 @@ fn the_store_in_both_modes() {
     store.publish(&test_key(2), build_package("io.example.rg", "2.0.0", "RG", &[("rg-ds-plus", "rg")], 100), icon(2), "someone", "Elsewhere.");
     let hn = store.publish(&test_key(1), fixture("hn.pocket"), fixture("hn.png"), "pocket-nexus", "Hacker News.");
     store.set_details(&hn.package, Some(fixture_details("hn")));
+    let hn = store.set_sample(&hn, &serde_json::json!({"mock": 1, "routes": []}));
     let home = home();
     let _stop = Stop(home.path());
     let key = public(&test_key(1));
@@ -336,6 +337,13 @@ fn the_store_in_both_modes() {
     assert_eq!(plain.stdout, "dev.pocket-nexus.notes 1.0.0\nBuilt for:   Nintendo 3DS (3ds-dev, host ABI 12)\nNeeds:       nothing\nUses:        nothing\nApplet API:  1\n");
     let json = with_store(&["--json", "store", "details", &hn.id]).json();
     assert_eq!((json["devices"][2]["hostAbi"].as_u64(), json["surface"]["size"]["max"][1].as_u64(), json["framework"].as_str()), (Some(12), Some(720), Some("solid")), "{json}");
+    // The files the store's player runs it from, downloaded into Hub's cache.
+    let sample = with_store(&["store", "sample", &hn.id]);
+    assert_eq!(sample.status, 0, "{}", sample.stderr);
+    let mock = format!("{}.json", hn.mock.as_deref().unwrap());
+    assert!(sample.stdout.starts_with("Package:      ") && sample.stdout.contains("\nSample data:  ") && sample.stdout.trim_end().ends_with(&mock), "{}", sample.stdout);
+    let none = with_store(&["--json", "store", "sample", &notes.id]);
+    assert_eq!((none.status, none.json()["error"]["data"]["kind"].as_str()), (1, Some("not_found")));
     let unlisted = with_store(&["--json", "store", "details", "io.example.none"]);
     assert_eq!((unlisted.status, unlisted.json()["error"]["data"]["kind"].as_str()), (1, Some("not_found")));
 

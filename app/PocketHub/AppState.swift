@@ -46,9 +46,17 @@ final class AppState {
     /// menu command).
     var importingApplet = false
     var confirmingRemoveDevice = false
-    /// The store applet whose sheet is open: from a row's Details, or from a
-    /// link (docs/DEEP-LINKS.md §2).
-    var storeDetails: StoreApp?
+    /// The Store page's navigation: the ids of the applets whose pages are
+    /// open over its list, the last one shown. A row opens one, so do an
+    /// installed applet's Details and a link (docs/DEEP-LINKS.md §2).
+    var storePath: [String] = []
+    /// The device the Store page lists applets for, by the store's name for
+    /// it; nil lists every applet.
+    var storeFilter: String?
+    #if DEBUG
+    /// Counts the debug command `store try`: an applet page's Try It.
+    var debugTries = 0
+    #endif
     /// Counts the links followed, so one still waiting for the core gives way
     /// to a newer one.
     private var linksFollowed = 0
@@ -119,7 +127,6 @@ final class AppState {
                 withObservationTracking {
                     _ = model.pairRequests
                     _ = showingSetup
-                    _ = storeDetails
                 } onChange: { continuation.resume() }
             }
         }
@@ -129,9 +136,8 @@ final class AppState {
         func key(_ request: PairRequest) -> String { "\(request.device) \(request.since)" }
         let waiting = model.pairRequests
         presentedRequests.formIntersection(waiting.map(key))
-        // A sheet that is open handles requests itself (SetupFlowModel), and
-        // an applet's sheet is not covered by another.
-        guard !showingSetup, storeDetails == nil, let request = waiting.first(where: { !presentedRequests.contains(key($0)) }) else { return }
+        // A sheet that is open handles requests itself (SetupFlowModel).
+        guard !showingSetup, let request = waiting.first(where: { !presentedRequests.contains(key($0)) }) else { return }
         presentedRequests.insert(key(request))
         startPairing(request)
     }
@@ -175,30 +181,18 @@ final class AppState {
         }
     }
 
-    /// Says what a link could not show. The sheet an earlier link opened
-    /// closes first: the window's alert would wait behind it until the owner
-    /// closed it (measured), and the newer link is the one being answered.
+    /// Says what a link could not show.
     private func reportLink(_ failure: UserFacingError) {
-        storeDetails = nil
         presentedError = failure
     }
 
-    /// Opens the Store page with an applet's sheet, the device to install
-    /// on being one that can run it when there is one.
+    /// Opens an applet's page in the Store, over its list: from a link, or
+    /// from an installed applet's Details. The device is chosen when
+    /// installing, on that page.
     func show(storeApp app: StoreApp) {
         selection = .store
-        chooseDevice(for: app)
-        storeDetails = app
+        storePath = [app.id]
         showWindow()
-    }
-
-    /// Makes the device that fits `app` best (StoreModel.device(for:preferring:))
-    /// the one the store installs on, where the store's list says what that
-    /// device holds of it. The device chosen now is kept when it can run the
-    /// applet; with no device that can, nothing changes.
-    func chooseDevice(for app: StoreApp) {
-        guard let device = model.store.device(for: app, preferring: model.store.deviceId) else { return }
-        model.store.choose(device: device.id)
     }
 
     /// Takes a screenshot from anywhere (toolbar, menu bar, keyboard). It is

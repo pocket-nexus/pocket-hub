@@ -138,6 +138,13 @@ struct ExamplesTests {
             case "store.details":
                 let details = try await replay.storeDetails(app: p["app"]?.stringValue ?? "")
                 #expect(!details.devices.isEmpty && details.devices.allSatisfy { !$0.name.isEmpty })
+            case "store.sample":
+                let phases = Locked<[String]>([])
+                let files = try await replay.storeSample(app: p["app"]?.stringValue ?? "") { progress in
+                    phases.mutate { $0.append(progress.phase ?? "") }
+                }
+                #expect(files.package.hasSuffix(".pocket") && files.mock.hasSuffix(".json"))
+                #expect(phases.value.allSatisfy { $0 == "downloading" })
             case "store.install":
                 let phases = Locked<[String]>([])
                 let result = try await replay.storeInstall(device: device, app: p["app"]?.stringValue ?? "") { progress in
@@ -157,7 +164,7 @@ struct ExamplesTests {
             "devices.list", "devices.get", "devices.forget", "devices.status", "devices.push", "devices.launch",
             "devices.remove", "devices.screenshot", "devices.logs", "devices.installProgram", "setup.discover", "setup.install",
             "setup.card", "pairing.list", "pairing.answer", "pairing.decline", "daemons.list", "daemons.install", "daemons.remove", "daemons.start", "daemons.stop",
-            "daemons.restart", "daemons.logs", "daemons.runtime", "store.apps", "store.details", "store.install"]
+            "daemons.restart", "daemons.logs", "daemons.runtime", "store.apps", "store.details", "store.sample", "store.install"]
         #expect(covered == contract)
     }
 

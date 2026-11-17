@@ -12,9 +12,8 @@ import SwiftUI
 /// the button it stands for; results show in the window and in the snapshots.
 ///
 ///   select store | daemons | device <id>     tab applets | log | details
-///   store refresh | install <app> | cancel <app> | details <app> | close-details
-///                                            (the Store page, on the device it installs on)
-///   store device <id>                        (the Store page's Install On menu)
+///   store refresh | details <app> | back | filter <device name…> | filter all
+///   store install <app> <device id> | cancel <app> <device id> | try   (an applet's page: Install's menu, Try It)
 ///   screenshot | logs on | logs off | open <app id> | delete <app id> | home | update | update-dismiss
 ///                                            (on the selected device)
 ///   menu-preview | menu-preview-close        (the menu bar menu's views in a window)
@@ -48,7 +47,7 @@ enum DebugCommands {
     private static func perform(_ line: String, _ state: AppState) {
         let words = line.split(separator: " ").map(String.init)
         let store = state.model.store
-        func storeApp(_ id: String) -> StoreApp? { store.apps.first { $0.id == id } ?? store.known[id] }
+        func storeApp(_ id: String) -> StoreApp? { store.known[id] }
         let device = state.selectedDeviceID
         func onDevice(_ action: @escaping @MainActor (String) async throws -> Void) {
             guard let device else { print("debug command needs a selected device: \(line)"); return }
@@ -116,19 +115,17 @@ enum DebugCommands {
             state.setupFlow?.declinePairRequest()
             state.setupFlow?.cancel()
             state.showingSetup = false
-        case ["store", "add-device"]:
-            state.storeDetails = nil
-            state.startSetup()
+        case ["store", "add-device"]: state.startSetup()
         case ["store", "refresh"]: store.reload(refresh: true)
-        case ["store", "close-details"]: state.storeDetails = nil
-        case let w where w.count == 3 && w[0] == "store":
-            switch w[1] {
-            case "install": if let app = storeApp(w[2]), let device = store.deviceId { store.install(app, on: device) }
-            case "cancel": if let app = storeApp(w[2]), let device = store.deviceId { store.cancelInstall(of: app, on: device) }
-            case "details": state.storeDetails = storeApp(w[2])
-            case "pick": store.choose(device: w[2])
-            case "device": store.choose(device: w[2])
-            default: print("debug command not understood: \(line)")
+        case ["store", "back"]: _ = state.storePath.popLast()
+        case ["store", "try"]: state.debugTries += 1
+        case ["store", "filter", "all"]: state.storeFilter = nil
+        case let w where w.count >= 3 && w[0] == "store" && w[1] == "filter": state.storeFilter = w.dropFirst(2).joined(separator: " ")
+        case let w where w.count == 3 && w[0] == "store" && w[1] == "details":
+            if let app = storeApp(w[2]) { state.show(storeApp: app) }
+        case let w where w.count == 4 && w[0] == "store" && (w[1] == "install" || w[1] == "cancel"):
+            if let app = storeApp(w[2]), let offer = store.offer(of: app.id, for: w[3]) ?? Optional(app) {
+                if w[1] == "install" { store.install(offer, on: w[3]) } else { store.cancelInstall(of: app, on: w[3]) }
             }
         default: print("debug command not understood: \(line)")
         }

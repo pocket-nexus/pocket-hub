@@ -81,16 +81,6 @@
         }
       }
     },
-    "%@ hasn't connected yet. Once it does, the store shows what it can install." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 还没有连接过。连接后，商店会显示它能安装哪些小程序。"
-          }
-        }
-      }
-    },
     "%@ hasn't reconnected after the update." : {
       "localizations" : {
         "en" : {
@@ -299,6 +289,16 @@
         }
       }
     },
+    "%@ — Busy" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 忙碌中"
+          }
+        }
+      }
+    },
     "%@ — Connected" : {
       "localizations" : {
         "en" : {
@@ -327,6 +327,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ — 已连接 · 有可用更新"
+          }
+        }
+      }
+    },
+    "%@ — Install It on the Device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 请在设备上安装"
+          }
+        }
+      }
+    },
+    "%@ — Loading…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 正在载入…"
+          }
+        }
+      }
+    },
+    "%@ — Not Connected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 未连接"
           }
         }
       }
@@ -597,6 +627,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "高级"
+          }
+        }
+      }
+    },
+    "All" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部"
           }
         }
       }
@@ -1023,6 +1063,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请选择 SD 卡本身（包含 3ds 文件夹的那一个）。"
+          }
+        }
+      }
+    },
+    "Choose the device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择设备"
           }
         }
       }
@@ -1897,16 +1947,6 @@
         }
       }
     },
-    "Install On" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "安装到"
-          }
-        }
-      }
-    },
     "Install a .pocket applet on this device" : {
       "localizations" : {
         "en" : {
@@ -1977,6 +2017,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装版本 %@"
+          }
+        }
+      }
+    },
+    "Install version %@ on %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install version %1$@ on %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %2$@ 上安装版本 %1$@"
           }
         }
       }
@@ -2839,16 +2895,6 @@
         }
       }
     },
-    "Not for %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不适用于 %@"
-          }
-        }
-      }
-    },
     "Not installed. Daemons need it to run." : {
       "localizations" : {
         "en" : {
@@ -2973,6 +3019,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "官方"
+          }
+        }
+      }
+    },
+    "On sample data: it reaches no device and no account." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用样例数据运行：不会连接任何设备或账号。"
           }
         }
       }
@@ -3165,6 +3221,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在设备上打开 Pocket Shell 即可连接。"
+          }
+        }
+      }
+    },
+    "Open on %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 上打开"
           }
         }
       }
@@ -4207,6 +4273,16 @@
         }
       }
     },
+    "Show %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看 %@"
+          }
+        }
+      }
+    },
     "Show Log" : {
       "localizations" : {
         "en" : {
@@ -4267,6 +4343,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Pocket Hub 中显示"
+          }
+        }
+      }
+    },
+    "Show the applets for one device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只显示适用于某台设备的小程序"
           }
         }
       }
@@ -4633,6 +4719,16 @@
         }
       }
     },
+    "The applet stopped." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小程序已停止。"
+          }
+        }
+      }
+    },
     "The code on the device" : {
       "localizations" : {
         "en" : {
@@ -4665,18 +4761,18 @@
         }
       }
     },
-    "The connection to %@ ended while installing %@. When it reconnects, this list shows whether %@ was installed." : {
+    "The connection to %@ ended while installing %@. When it reconnects, this page shows whether %@ was installed." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The connection to %@ ended while installing %@. When it reconnects, this list shows whether %@ was installed."
+            "value" : "The connection to %1$@ ended while installing %2$@. When it reconnects, this page shows whether %3$@ was installed."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装 %2$@ 时与 %1$@ 的连接断开了。它重新连接后，这个列表会显示 %3$@ 是否已安装。"
+            "value" : "安装 %2$@ 时与 %1$@ 的连接断开了。它重新连接后，这个页面会显示 %3$@ 是否已安装。"
           }
         }
       }
@@ -4937,6 +5033,16 @@
         }
       }
     },
+    "The device's Back button" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备的返回键"
+          }
+        }
+      }
+    },
     "The download didn't finish." : {
       "localizations" : {
         "en" : {
@@ -5087,6 +5193,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "商店已不再为这类设备提供它。列表现已更新。"
+          }
+        }
+      }
+    },
+    "The store offers nothing for %@ yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "商店暂时没有适用于 %@ 的小程序。"
           }
         }
       }
@@ -5321,6 +5437,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重试"
+          }
+        }
+      }
+    },
+    "Try It" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "试玩"
           }
         }
       }
@@ -5741,6 +5867,16 @@
         }
       }
     },
+    "Update on %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 上更新"
+          }
+        }
+      }
+    },
     "Update on the device" : {
       "localizations" : {
         "en" : {
@@ -6061,22 +6197,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设备具备时它会使用的功能"
-          }
-        }
-      }
-    },
-    "What this applet reaches, and where it runs" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What this applet reaches, and where it runs"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这个小程序会连接哪里、能在哪些设备上运行"
           }
         }
       }
@@ -6477,16 +6597,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用它"
-          }
-        }
-      }
-    },
-    "Choose the device to install applets on" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择要安装小程序的设备"
           }
         }
       }

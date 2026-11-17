@@ -6,34 +6,27 @@ import os
 /// The applet store as the app shows it (CONTROL-API.md §3 "Store").
 ///
 /// The Store page lists the whole catalog (`all`), whatever devices are
-/// paired or connected. Its actions go onto one device, the one chosen to
-/// install on (the one chosen, else the first linked, else the first): the
-/// store's list for that device (`apps`) gives each applet it can run with
-/// its `installed` and `update`. `known` holds the whole catalog by id so
-/// other pages can give installed applets a title and an icon.
+/// paired or connected. What an applet can do on a device comes from the
+/// store's list for that device (`list(for:)`): the applets it can run, each
+/// with its `installed` and `update`. A list is held for every paired device
+/// whose target is known, so the owner chooses the device when installing.
+/// `known` holds the whole catalog by id so other pages can give installed
+/// applets a title and an icon.
 ///
 /// Hub answers a failed catalog fetch with the error `store`, never the older
-/// catalog; the page then shows that failure instead of a list. While a list is
-/// being refreshed for the same device, the list on screen stays until the
-/// answer replaces it, so the many `store.changed` of a background prefetch do
-/// not make the page flicker.
+/// catalog; the page then shows that failure instead of a list. While the
+/// lists are fetched again, the ones on screen stay until the answer replaces
+/// them, so the many `store.changed` of a background prefetch do not make the
+/// page flicker.
 @MainActor
 @Observable
 public final class StoreModel {
     static let log = Logger(subsystem: "nexus.pocket.hub", category: "store")
 
-    /// What the page shows for.
-    public enum Context: Equatable, Sendable {
-        /// No device is paired: the whole catalog, nothing can be installed.
-        case noDevice
-        /// A paired device; `knownTarget` is false before its first link.
-        case device(id: String, knownTarget: Bool)
-    }
-
     public enum Page: Equatable, Sendable {
         case idle
         case loading
-        case loaded(StoreCatalog)
+        case loaded
         case failed(UserFacingError)
     }
 
@@ -46,8 +39,9 @@ public final class StoreModel {
         public var fraction: Double?
     }
 
+    /// Whether the lists are here, being fetched, or why they are not.
     public private(set) var page: Page = .idle
-    /// A refresh of the list on screen is under way.
+    /// A refresh of the lists on screen is under way.
     public private(set) var isRefreshing = false
     /// The whole catalog in the store's order (by title), whatever the
     /// device: what the Store page lists. Kept across outages, as `known` is.
@@ -55,6 +49,10 @@ public final class StoreModel {
     /// The whole catalog by applet id, for titles and icons elsewhere. Kept
     /// across outages: it names applets, it does not describe live state.
     public private(set) var known: [String: StoreApp] = [:]
+    /// The store's list for each paired device whose target is known, by
+    /// device id. A device that never linked has none: its target, which
+    /// decides what the store offers it, is unknown.
+    public private(set) var lists: [String: [StoreApp]] = [:]
     /// Installs in progress, by device and applet.
     public private(set) var installs: [String: Install] = [:]
     /// The last install failure, for the page to show; cleared by `dismissFailure()`.
@@ -67,12 +65,11 @@ public final class StoreModel {
 
     public struct InterruptedInstall: Equatable, Sendable {
         public var deviceId: String
+        public var appId: String
         public var appTitle: String
         /// The link the install ran on; a device on another link has come back.
         var linkSince: EpochMilliseconds?
     }
-    /// The device the owner chose with the picker; nil follows the default.
-    public private(set) var chosenDevice: String?
 
     weak var model: HubModel?
     private let client: any HubCalling
@@ -86,47 +83,26 @@ public final class StoreModel {
         self.model = model
     }
 
-    // MARK: - What the page is for
+    // MARK: - What a device holds
 
-    /// The device the page shows: the chosen one while it is paired, else the
-    /// only one, else the first linked one, else the first.
-    public var deviceId: String? {
-        let devices = model?.devices ?? []
-        if let chosenDevice, devices.contains(where: { $0.id == chosenDevice }) { return chosenDevice }
-        return devices.first(where: \.isLinked)?.id ?? devices.first?.id
-    }
-
-    public var context: Context {
-        guard let id = deviceId, let device = model?.device(id) else { return .noDevice }
-        return .device(id: id, knownTarget: device.hasKnownTarget)
-    }
-
-    /// Chooses the device of the page (the picker shown with several devices).
-    public func choose(device id: String) {
-        guard id != deviceId || chosenDevice != id else { return }
-        chosenDevice = id
-        reload(clearing: true)
-    }
-
-    /// The list on screen, when there is one.
-    public var apps: [StoreApp] {
-        if case .loaded(let catalog) = page { return catalog.apps }
-        return []
-    }
-
-    /// The store's list for `device` (the applets it can run, with
-    /// `installed` and `update`), when it is the device chosen and its list
-    /// is here; nil otherwise.
+    /// The store's list for `device`: the applets it can run, with
+    /// `installed` and `update`; nil while it is not here, or for a device
+    /// that never linked.
     public func list(for device: String) -> [StoreApp]? {
-        guard deviceId == device, case .loaded(let catalog) = page else { return nil }
-        return catalog.apps
+        lists[device]
+    }
+
+    /// The applet as the store offers it to `device`; nil when the device's
+    /// list is not here or does not have it (the device cannot run it).
+    public func offer(of appId: String, for device: String) -> StoreApp? {
+        lists[device]?.first { $0.id == appId }
     }
 
     // MARK: - Loading
 
-    /// Fetches the page's list again. With `refresh`, Hub fetches the catalog
-    /// from the store first (⌘R). `clearing` drops the list on screen first:
-    /// for another device, the old list is not this device's.
+    /// Fetches the whole catalog and every device's list again. With
+    /// `refresh`, Hub fetches the catalog from the store first (⌘R).
+    /// `clearing` drops what is on screen first (Try Again after a failure).
     public func reload(refresh: Bool = false, clearing: Bool = false) {
         guard model?.isLive == true else { return }
         if loadTask != nil && !refresh && !clearing {
@@ -136,28 +112,26 @@ public final class StoreModel {
         loadTask?.cancel()
         loadGeneration += 1
         let generation = loadGeneration
-        let context = self.context
+        // A device that never linked has no known target and is offered
+        // nothing; nothing is asked for it.
+        let devices = (model?.devices ?? []).filter(\.hasKnownTarget).map(\.id)
         if clearing || !isLoaded { page = .loading }
         isRefreshing = true
         reloadPending = false
         loadTask = Task { [weak self, client] in
-            let result: Result<(StoreCatalog, StoreCatalog), any Error>
+            let result: Result<(StoreCatalog, [String: [StoreApp]]), any Error>
             do {
-                switch context {
-                case .noDevice:
-                    let all = try await client.storeApps(device: nil, refresh: refresh)
-                    result = .success((all, all))
-                case .device(let id, let knownTarget):
-                    // A device that never linked has no known target and is
-                    // offered nothing; the page says so without asking Hub.
-                    let forDevice = knownTarget
-                        ? try await client.storeApps(device: id, refresh: refresh)
-                        : StoreCatalog(apps: [], fetchedAt: 0)
-                    // The whole catalog, which the Store page lists: from
-                    // the catalog Hub holds, which the call above fetched.
-                    let all = try await client.storeApps(device: nil, refresh: false)
-                    result = .success((forDevice, all))
+                let all = try await client.storeApps(device: nil, refresh: refresh)
+                var lists: [String: [StoreApp]] = [:]
+                for device in devices {
+                    do {
+                        lists[device] = try await client.storeApps(device: device, refresh: false).apps
+                    } catch let error as HubError where error.kind == .notFound {
+                        // Removed meanwhile: `devices.changed` reloads again.
+                        continue
+                    }
                 }
+                result = .success((all, lists))
             } catch {
                 result = .failure(error)
             }
@@ -165,23 +139,22 @@ public final class StoreModel {
         }
     }
 
-    private var isLoaded: Bool {
-        if case .loaded = page { return true }
-        return false
-    }
+    private var isLoaded: Bool { page == .loaded }
 
-    private func finishLoad(_ result: Result<(StoreCatalog, StoreCatalog), any Error>, generation: Int) {
+    private func finishLoad(_ result: Result<(StoreCatalog, [String: [StoreApp]]), any Error>, generation: Int) {
         guard generation == loadGeneration else { return }
         loadTask = nil
         isRefreshing = false
         switch result {
-        case .success(let (catalog, all)):
-            page = .loaded(catalog)
+        case .success(let (all, lists)):
+            page = .loaded
             self.all = all.apps
             known = Dictionary(all.apps.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+            self.lists = lists
         case .failure(let error):
             if let hubError = error as? HubError, hubError.isCancelled { return }
             page = .failed(UserFacingError(storeError: error))
+            lists = [:]
         }
         if reloadPending { reload() }
     }
@@ -200,21 +173,17 @@ public final class StoreModel {
         if let interrupted, interrupted.deviceId == new.id, let link = new.link, link.since != interrupted.linkSince {
             // Linked again: its apps report, not the ended call, says what it holds.
             self.interrupted = nil
-            if new.id == deviceId { reload() }
         }
-        guard new.id == deviceId else { return }
         // What the device holds decides `installed` and `update`; its first
         // link makes its target known.
-        if old?.apps != new.apps || old?.hasKnownTarget != new.hasKnownTarget || old == nil
-            || old?.isLinked != new.isLinked
-        {
-            reload(clearing: old?.hasKnownTarget != new.hasKnownTarget)
+        if old?.apps != new.apps || old?.hasKnownTarget != new.hasKnownTarget || old == nil || old?.isLinked != new.isLinked {
+            reload()
         }
     }
 
     func devicesDidChange() {
-        // The page's device may have changed (removed, or the first paired).
-        reload(clearing: true)
+        // A device was paired or removed: its list comes or goes.
+        reload()
     }
 
     func dropLiveState() {
@@ -224,6 +193,7 @@ public final class StoreModel {
         page = .idle
         isRefreshing = false
         reloadPending = false
+        lists = [:]
         for task in installTasks.values { task.cancel() }
         installTasks = [:]
         installs = [:]
@@ -265,7 +235,7 @@ public final class StoreModel {
             } catch {
                 let cancelled = (error as? HubError)?.isCancelled == true
                 if (error as? HubError)?.kind == .link {
-                    self?.installInterrupted(key, device: device, appTitle: title, linkSince: linkSince, error: error)
+                    self?.installInterrupted(key, device: device, appId: app.id, appTitle: title, linkSince: linkSince, error: error)
                     return
                 }
                 self?.installFinished(key, outcome: cancelled ? "cancelled" : "failed: \(error)",
@@ -283,7 +253,7 @@ public final class StoreModel {
     /// is still on the link it installed on answered with an error: that is a
     /// failure like any other. One that is away, or already back on a new link,
     /// may hold the applet: the page waits for its apps report.
-    private func installInterrupted(_ key: String, device: String, appTitle: String, linkSince: EpochMilliseconds?,
+    private func installInterrupted(_ key: String, device: String, appId: String, appTitle: String, linkSince: EpochMilliseconds?,
                                     error: any Error) {
         let current = model?.device(device)
         // `closed` is the link itself ending; the `device.unlinked` that says
@@ -298,7 +268,7 @@ public final class StoreModel {
             return
         }
         if current?.link == nil || sameLink {
-            interrupted = InterruptedInstall(deviceId: device, appTitle: appTitle, linkSince: linkSince)
+            interrupted = InterruptedInstall(deviceId: device, appId: appId, appTitle: appTitle, linkSince: linkSince)
         }
         installFinished(key, outcome: "link ended: \(error)", failure: nil)
     }
@@ -319,7 +289,7 @@ public final class StoreModel {
         try await model.launch(appId: app.id, on: device)
     }
 
-    // MARK: - An applet's details
+    // MARK: - An applet's details and sample data
 
     /// What the package of the applet's newest listed version says about it,
     /// as the store reads it out (CONTROL-API.md §3 `store.details`), or why
@@ -332,6 +302,13 @@ public final class StoreModel {
             Self.log.notice("details of \(app.id, privacy: .public): \(error, privacy: .public)")
             return .failure(UserFacingError(storeError: error))
         }
+    }
+
+    /// The verified package and the sample data the store's player runs the
+    /// applet from (CONTROL-API.md §3 `store.sample`), downloaded into Hub's
+    /// cache when it lacks them; `progress` gets the download's fraction.
+    public func sample(of app: StoreApp, progress: (@Sendable (Double?) -> Void)? = nil) async throws -> StoreSample {
+        try await client.storeSample(app: app.id) { update in progress?(update.fraction) }
     }
 
     // MARK: - Opened from a link (docs/DEEP-LINKS.md §2)
@@ -350,16 +327,6 @@ public final class StoreModel {
     /// The paired devices that can run `app`, in the model's order (linked first).
     public func devices(running app: StoreApp) -> [Device] {
         (model?.devices ?? []).filter(app.runs(on:))
-    }
-
-    /// The device a link's applet is shown for: one that is linked before one
-    /// that is not, since only a linked device can take the install now, and
-    /// the device whose page is open (`shown`) before another. nil when no
-    /// paired device can run the applet.
-    public func device(for app: StoreApp, preferring shown: String?) -> Device? {
-        let able = devices(running: app)
-        let linked = able.filter(\.isLinked)
-        return linked.first { $0.id == shown } ?? linked.first ?? able.first { $0.id == shown } ?? able.first
     }
 }
 

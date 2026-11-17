@@ -97,10 +97,7 @@ struct DeviceDetailView: View {
                     .allowsHitTesting(false)
             }
         }
-        // While an applet's sheet is open it shows this failure itself: an
-        // alert of this page would wait behind the sheet.
-        .alert(item: Binding(get: { state.storeDetails == nil ? model.store.installFailure : nil },
-                             set: { model.store.installFailure = $0 })) { failure in
+        .alert(item: Binding(get: { model.store.installFailure }, set: { model.store.installFailure = $0 })) { failure in
             Alert(title: Text(verbatim: failure.title),
                   message: Text(verbatim: [failure.advice, failure.detail].compactMap { $0 }.joined(separator: "\n\n")))
         }
@@ -343,14 +340,6 @@ struct DeviceOverview: View {
             }
         }
         .formStyle(.grouped)
-        // The store's list is for one device at a time: this one, while its
-        // page is shown, so the rows above know their updates. The Store
-        // page then installs on this device until the owner chooses another.
-        .task(id: device.id) {
-            let store = model.store
-            store.choose(device: device.id)
-            if store.page == .idle { store.reload() }
-        }
     }
 
     private func launch(_ app: InstalledApp) {
@@ -477,7 +466,7 @@ struct AppletRow: View {
         Button("Open", action: open)
             .disabled(!device.isLinked || device.busy != nil || isRunning)
         if let listed {
-            Button("Details") { state.storeDetails = listed }
+            Button("Details") { state.show(storeApp: listed) }
         }
         Divider()
         Button("Delete…", role: .destructive) {
@@ -504,8 +493,7 @@ struct AppletRow: View {
     /// The store's entry for this applet when it offers this device a newer
     /// version (`update` in the device's list, CONTROL-API.md §3 "Store").
     private var update: StoreApp? {
-        let store = state.model.store
-        guard !app.isHome, store.deviceId == device.id else { return nil }
-        return store.apps.first { $0.id == app.id && $0.action == .update }
+        guard !app.isHome, let offer = state.model.store.offer(of: app.id, for: device.id), offer.action == .update else { return nil }
+        return offer
     }
 }

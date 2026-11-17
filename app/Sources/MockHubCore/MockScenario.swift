@@ -247,11 +247,14 @@ public struct MockStoreApp: Sendable {
     public var needs: [String]
     public var uses: [String]
     public var touch: Bool?
+    /// The store has sample data for it (`store.sample`).
+    public var sample: Bool
 
     public init(id: String, title: String, summary: String, author: String = "pocket-nexus", version: String = "1.0.0",
                 official: Bool = true, targets: [String] = ["3ds", "3ds-dev"], bytes: Int = 120_000, cached: Bool = true,
                 services: [String] = [], hosts: [String] = [], output: String? = nil,
-                needs: [String] = ["text.glyphs.baked", "input.buttons"], uses: [String] = [], touch: Bool? = nil)
+                needs: [String] = ["text.glyphs.baked", "input.buttons"], uses: [String] = [], touch: Bool? = nil,
+                sample: Bool = true)
     {
         self.id = id
         self.title = title
@@ -268,6 +271,7 @@ public struct MockStoreApp: Sendable {
         self.needs = needs
         self.uses = uses
         self.touch = touch
+        self.sample = sample
     }
 
     /// The store's names for the devices it knows, in its order; the mock's
@@ -276,14 +280,22 @@ public struct MockStoreApp: Sendable {
         ("rg-ds-plus", "Omarchy Pocket"), ("tab5-home", "M5Stack Tab5"), ("3ds-dev", "Nintendo 3DS"), ("3ds", "Nintendo 3DS"),
     ]
 
-    /// The StoreDetails object, as the store reads it out of the package: a
-    /// device per target in the store's order, one it has no name for last.
-    var detailsJSON: JSONValue {
+    /// A device per target in the store's order, one it has no name for last.
+    private var named: [(target: String, name: String)] {
         let rank = { (target: String) in Self.deviceNames.firstIndex { $0.target == target } ?? Self.deviceNames.count }
-        let devices: [JSONValue] = targets.sorted { rank($0) < rank($1) }.map { target in
-            let name = Self.deviceNames.first { $0.target == target }?.name ?? target
-            return ["target": .string(target), "name": .string(name), "hostAbi": 12]
+        return targets.sorted { rank($0) < rank($1) }.map { target in
+            (target, Self.deviceNames.first { $0.target == target }?.name ?? target)
         }
+    }
+
+    /// StoreApp's `devices`: as the store names them.
+    var devicesJSON: JSONValue {
+        .array(named.map { ["target": .string($0.target), "name": .string($0.name)] })
+    }
+
+    /// The StoreDetails object, as the store reads it out of the package.
+    var detailsJSON: JSONValue {
+        let devices: [JSONValue] = named.map { ["target": .string($0.target), "name": .string($0.name), "hostAbi": 12] }
         let surface: JSONValue = touch.map { touch in
             ["touch": .bool(touch), "size": ["min": [320, 240], "max": [640, 720]]]
         } ?? .null
@@ -297,6 +309,7 @@ public struct MockStoreApp: Sendable {
         var object: [String: JSONValue] = [
             "id": .string(id), "title": .string(title), "summary": .string(summary), "author": .string(author),
             "version": .string(version), "official": .bool(official), "targets": .array(targets.map(JSONValue.string)),
+            "devices": devicesJSON, "sample": .bool(sample),
             "bytes": .number(Double(bytes)), "icon": icon.map(JSONValue.string) ?? .null, "cached": .bool(cached),
             "services": .array(services.map(JSONValue.string)), "hosts": .array(hosts.map(JSONValue.string)),
         ]

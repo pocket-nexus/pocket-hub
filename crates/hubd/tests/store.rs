@@ -1,9 +1,9 @@
-//! `store.apps`, `store.details` and `store.install` through the real
-//! `pocket-hubd` binary, against the fake applet store, onto the reference
-//! device under Bun: progress and cancel, `installed` and `update` from the
-//! device's apps report, an applet's details as the store reads them, the
-//! error kinds, the device mutex, and the link's own catalog of the same
-//! offer.
+//! `store.apps`, `store.details`, `store.sample` and `store.install`
+//! through the real `pocket-hubd` binary, against the fake applet store,
+//! onto the reference device under Bun: progress and cancel, `installed` and
+//! `update` from the device's apps report, an applet's details as the store
+//! reads them and its sample data, the error kinds, the device mutex, and
+//! the link's own catalog of the same offer.
 
 mod common;
 
@@ -91,6 +91,11 @@ async fn the_store_through_the_binary() {
     // 600 kB in 16 kB pieces 50 ms apart: about 2 s, long enough to cancel.
     let slow = store.publish(&someone, build_package("io.example.slow", "1.0.0", "Slow", &[("3ds-dev", "slow")], 600_000), icon(6), "someone", "Slow.");
     store.fault(&slow.package, Fault::Slow { chunk: 16 * 1024, delay: Duration::from_millis(50) });
+    // hn's details are the live store's; rg's are not answered, and rg has sample data.
+    store.set_details(&hn.package, Some(fixture_details("hn")));
+    store.set_details(&rg.package, None);
+    let sample = json!({"mock": 1, "routes": [{"url": "https://example.com/", "text": "hello"}]});
+    let rg = store.set_sample(&rg, &sample);
 
     let mut hubd = core(home.path(), &store).await;
     let socket = home.path().join("hubd.sock");
@@ -115,7 +120,6 @@ async fn the_store_through_the_binary() {
 
     // --- store.details: the store's reading of the package the catalog names,
     // with no download of the package itself.
-    store.set_details(&hn.package, Some(fixture_details("hn")));
     let raw = client.call(methods::STORE_DETAILS, &StoreDetailsParams { app: hn.id.clone() }).await.unwrap();
     let details: StoreDetails = serde_json::from_value(raw.clone()).unwrap();
     assert_eq!((details.id.as_str(), details.version.as_str()), ("dev.pocket-nexus.hn", "0.3.0"));
@@ -129,11 +133,40 @@ async fn the_store_through_the_binary() {
     // An applet the store does not list; a store that does not answer.
     let unlisted = rpc(client.call(methods::STORE_DETAILS, &StoreDetailsParams { app: "io.example.none".into() }).await.unwrap_err());
     assert_eq!(unlisted.data.unwrap().kind, ErrorKind::NotFound);
-    store.set_details(&rg.package, None);
     let unanswered = rpc(client.call(methods::STORE_DETAILS, &StoreDetailsParams { app: rg.id.clone() }).await.unwrap_err());
     let data = unanswered.data.unwrap();
     assert_eq!((data.kind, data.reason.as_deref()), (ErrorKind::Store, Some("unreachable")));
     assert!(unanswered.message.contains("io.example.rg") && unanswered.message.contains("404"), "{}", unanswered.message);
+
+    // Each app's devices, as the store names them, once Hub has read its
+    // details after the fetch; null for one whose details it does not hold.
+    let mut named = None;
+    for _ in 0..100 {
+        let now: StoreApps = client.call_as(methods::STORE_APPS, &StoreAppsParams::default()).await.unwrap();
+        if let Some(devices) = app(&now, &hn.id).devices.clone() {
+            assert_eq!(app(&now, &rg.id).devices, None);
+            named = Some(devices);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let named: Vec<String> = named.expect("hn's devices are named").into_iter().map(|device| device.name).collect();
+    assert_eq!(named, ["Omarchy Pocket", "M5Stack Tab5", "Nintendo 3DS"]);
+
+    // --- store.sample: the package and the sample data the store's player
+    // runs an applet from, downloaded into Hub's cache.
+    assert!(app(&all, &rg.id).sample && !app(&all, &tool.id).sample);
+    let mut call = client.start(methods::STORE_SAMPLE, &StoreDetailsParams { app: rg.id.clone() }).await.unwrap();
+    let mut phases = Vec::new();
+    while let Some(progress) = call.progress().await {
+        phases.push(progress["phase"].as_str().unwrap().to_owned());
+    }
+    let files: StoreSample = serde_json::from_value(call.finish().await.unwrap()).unwrap();
+    assert_eq!(phases.first().map(String::as_str), Some("downloading"));
+    assert_eq!(std::fs::read(&files.package).unwrap().len() as u64, rg.bytes);
+    assert_eq!(serde_json::from_slice::<Value>(&std::fs::read(&files.mock).unwrap()).unwrap(), sample);
+    let none = rpc(client.call(methods::STORE_SAMPLE, &StoreDetailsParams { app: tool.id.clone() }).await.unwrap_err());
+    assert_eq!(none.data.unwrap().kind, ErrorKind::NotFound);
     let changed = event(&client, |e| topic(e, "store.changed")).await;
     assert_eq!(changed["fetchedAt"], all.fetched_at);
     // The icons arrive in Hub's cache, then `store.changed` again.
@@ -260,7 +293,7 @@ async fn the_store_through_the_binary() {
 /// The examples file's `store.apps` result decodes as the shared types say.
 #[test]
 fn store_apps_decodes() {
-    let value: Value = json!({"apps": [{"id": "a.b.c", "title": "T", "summary": "S", "author": "x", "version": "1.0.0", "official": false, "targets": ["3ds-dev"], "bytes": 1, "icon": null, "cached": false, "services": [], "hosts": [], "installed": null, "update": false}], "fetchedAt": 1});
+    let value: Value = json!({"apps": [{"id": "a.b.c", "title": "T", "summary": "S", "author": "x", "version": "1.0.0", "official": false, "targets": ["3ds-dev"], "devices": [{"target": "3ds-dev", "name": "Nintendo 3DS"}], "sample": true, "bytes": 1, "icon": null, "cached": false, "services": [], "hosts": [], "installed": null, "update": false}], "fetchedAt": 1});
     let apps: StoreApps = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(apps.apps[0].installed, Some(None));
     assert_eq!(serde_json::to_value(&apps).unwrap(), value);

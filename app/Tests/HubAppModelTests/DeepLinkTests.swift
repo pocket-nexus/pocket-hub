@@ -101,40 +101,17 @@ struct DeepLinkTests {
         }
     }
 
-    @Test func aLinkedDeviceIsChosenBeforeOneThatIsAway() async throws {
+    /// The devices an applet's Install offers: those that can run it, a
+    /// linked one before one that is away, as the sidebar lists them.
+    @Test func theDevicesThatCanRunAnApplet() async throws {
         let h = try await Harness(StoreModelTests.scenario())
         defer { Task { await h.tearDown() } }
         let store = h.model.store
         let hn = try #require(try await store.lookUp(appId: "nexus.pocket.hackernews"))
         #expect(store.devices(running: hn).map(\.id) == [living, travel])
-        #expect(store.device(for: hn, preferring: nil)?.id == living)
-        #expect(store.device(for: hn, preferring: travel)?.id == living, "the page open is of a device that cannot take it now")
-        #expect(store.device(for: hn, preferring: "no such device")?.id == living)
     }
 
-    @Test func amongLinkedDevicesTheOneShownIsChosen() async throws {
-        var scenario = StoreModelTests.scenario()
-        scenario.devices[1].linkUp(address: "192.168.1.77")
-        let h = try await Harness(scenario)
-        defer { Task { await h.tearDown() } }
-        let store = h.model.store
-        let hn = try #require(try await store.lookUp(appId: "nexus.pocket.hackernews"))
-        #expect(store.device(for: hn, preferring: travel)?.id == travel)
-        #expect(store.device(for: hn, preferring: living)?.id == living)
-        #expect(store.device(for: hn, preferring: nil)?.id == h.model.devices.first?.id, "else the first, as the sidebar lists them")
-    }
-
-    @Test func aDeviceThatIsAwayIsChosenWhenNoneIsLinked() async throws {
-        var scenario = StoreModelTests.scenario()
-        scenario.devices.removeFirst()
-        let h = try await Harness(scenario)
-        defer { Task { await h.tearDown() } }
-        let store = h.model.store
-        let hn = try #require(try await store.lookUp(appId: "nexus.pocket.hackernews"))
-        #expect(store.device(for: hn, preferring: nil)?.id == travel)
-    }
-
-    @Test func noDeviceIsChosenForAnAppletNoneCanRun() async throws {
+    @Test func noDeviceRunsAnAppletOfAnotherTargetOrOneNeverLinked() async throws {
         var scenario = StoreModelTests.scenario()
         // A device that has never linked: no known target.
         scenario.devices.append(MockDevice(id: "fedcba9876543210"))
@@ -143,13 +120,12 @@ struct DeepLinkTests {
         let store = h.model.store
         let tab = try #require(try await store.lookUp(appId: "io.example.tabonly"))
         #expect(store.devices(running: tab).isEmpty, "a variant for the Tab5 alone")
-        #expect(store.device(for: tab, preferring: living) == nil)
         let hn = try #require(try await store.lookUp(appId: "nexus.pocket.hackernews"))
         #expect(!store.devices(running: hn).contains { $0.id == "fedcba9876543210" }, "its target is not known yet")
 
         let none = try await Harness(StoreModelTests.scenario(.firstRun))
         defer { Task { await none.tearDown() } }
-        #expect(none.model.store.device(for: hn, preferring: nil) == nil, "no device is paired")
+        #expect(none.model.store.devices(running: hn).isEmpty, "no device is paired")
     }
 
     @Test func aLinkWaitsForTheCore() async throws {

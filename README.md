@@ -82,22 +82,25 @@ declined.
 ## Applets
 
 **Store**, at the top of the sidebar, lists every applet of the store, with or
-without a device. Its buttons act on the device chosen in **Install on** in
-the toolbar: Install, Update when the device holds an older version, Open when
-it holds this one. **Details**, beside each applet, says which devices it runs
-on, what it needs of them and what it connects to.
+without a device; the toolbar narrows it to the applets for one kind of
+device. An applet's page says which devices it runs on, what it needs of them
+and what it connects to, and **Try It** runs it right there on sample data:
+nothing reaches a device or an account. **Install** asks which device when
+more than one can run the applet, and says what each holds: Install, Update
+when it holds an older version, Open when it holds this one.
 
 A device's **Applets** page lists what is installed on it. Each applet can be
 opened, updated when the store has a newer version, or deleted from its …
-menu; deleting an applet also deletes its data on the device. To install an
+menu, where **Details** opens its page in the Store; deleting an applet also
+deletes its data on the device. To install an
 applet you have as a file, drop the `.pocket` file on the page.
 
 The console's own store page lists the same applets and installs them through
 Pocket Hub.
 
 **A Tab5 installs its applets itself**: open **Mac** on its home screen, and it
-lists what Pocket Hub offers for it and installs from there. With the Tab5
-chosen, the Store shows what it holds and has no Install; its page opens and
+lists what Pocket Hub offers for it and installs from there. The Store on the
+Mac has no Install for it; its page opens and
 deletes its applets and takes no dropped file: the Tab5's software does not
 accept an applet sent from the computer.
 
