@@ -45,11 +45,11 @@ struct ServicesView: View {
                         .padding(.bottom, 8)
                     } else {
                         ForEach(services) { service in
-                            ServiceRow(service: service, perform: perform) { showOutput(of: service.id) }
+                            ServiceRow(service: service, perform: perform, installAgain: { importing = true }) { showOutput(of: service.id) }
                                 .contextMenu {
-                                    Button("Start") { perform(.start, service.id) }.disabled(service.state == .running)
+                                    Button("Start") { perform(.start, service.id) }.disabled(service.state == .running || service.isEarlier)
                                     Button("Stop") { perform(.stop, service.id) }.disabled(service.state == .stopped)
-                                    Button("Restart") { perform(.restart, service.id) }
+                                    Button("Restart") { perform(.restart, service.id) }.disabled(service.isEarlier)
                                     Divider()
                                     Button("Show Output") { showOutput(of: service.id) }
                                     Divider()
@@ -129,6 +129,9 @@ struct ServicesView: View {
 struct ServiceRow: View {
     let service: Service
     let perform: (ServiceAction, String) -> Void
+    /// Opens the install panel: what an earlier Pocket Hub installed is
+    /// installed again from its folder.
+    let installAgain: () -> Void
     let showOutput: () -> Void
 
     var body: some View {
@@ -141,19 +144,26 @@ struct ServiceRow: View {
                 Text(verbatim: service.id)
                 HStack(spacing: 6) {
                     Text(service.state.displayName)
-                    Text(verbatim: service.version)
+                    if let release = service.release {
+                        if release == "dev" { Text("Development release") } else { Text("Release \(release)") }
+                    }
                     if let pid = service.pid { Text("PID \(String(pid))") }
                     if service.channels > 0 { Text("\(service.channels) channels open") }
                     if let since = service.since { Text(since.date.formatted(.relative(presentation: .named))) }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                if let error = service.error {
+                if service.isEarlier {
+                    // The core's sentence is English; this one is the app's, in both languages.
+                    Text("Installed by an earlier Pocket Hub. Install it again.").font(.caption).foregroundStyle(.red)
+                } else if let error = service.error {
                     Text(verbatim: error).font(.caption).foregroundStyle(.red)
                 }
             }
             Spacer()
             switch service.state {
+            case _ where service.isEarlier:
+                Button("Install Again…", action: installAgain)
             case .running:
                 Button("Restart", systemImage: "arrow.clockwise") { perform(.restart, service.id) }
                     .labelStyle(.iconOnly).help("Restart")

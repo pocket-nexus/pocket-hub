@@ -464,13 +464,21 @@ pub struct LastExit {
 #[serde(rename_all = "camelCase")]
 pub struct Service {
     pub id: String,
-    pub version: String,
+    /// `dev` for a development install; None for one an earlier Pocket Hub
+    /// installed.
+    pub release: Option<String>,
+    /// The manifest's capabilities, sorted.
+    pub requires: Vec<String>,
+    /// The manifest's host entries, as written.
+    pub hosts: Vec<String>,
     pub state: ServiceState,
     pub pid: Option<u32>,
     pub since: Option<i64>,
     pub channels: u32,
     pub last_exit: Option<LastExit>,
     pub error: Option<String>,
+    /// `earlier` for one an earlier Pocket Hub installed; else None.
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -486,11 +494,17 @@ pub struct ServicePathParams {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServiceIdParams {
     pub id: String,
+    /// The installed release it must be, when given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServiceRemoveParams {
     pub id: String,
+    /// One release; every release without it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release: Option<String>,
     /// Remove the service's data folder too.
     #[serde(default)]
     pub purge: Option<bool>,
@@ -733,9 +747,9 @@ pub enum Event {
     #[serde(rename = "service.changed")]
     ServiceChanged { service: Service },
     #[serde(rename = "service.removed")]
-    ServiceRemoved { id: String },
+    ServiceRemoved { id: String, release: Option<String> },
     #[serde(rename = "service.log")]
-    ServiceLog { id: String, at: i64, stream: String, text: String },
+    ServiceLog { id: String, release: Option<String>, at: i64, stream: String, text: String },
     #[serde(rename = "hub.changed")]
     HubChanged { hub: HubInfo },
     /// The catalog Hub holds changed; a client calls `store.apps` again.

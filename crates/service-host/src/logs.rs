@@ -29,6 +29,9 @@ pub enum LogStream {
 #[serde(rename_all = "camelCase")]
 pub struct LogLine {
     pub app: String,
+    /// The release the line is about: the one the process runs, or the last
+    /// one started or installed for a line of the host's own.
+    pub release: Option<String>,
     /// Increases by one per line of this service, across its restarts.
     pub seq: u64,
     /// Epoch milliseconds.
@@ -42,13 +45,19 @@ pub struct LogLine {
 
 pub struct LogRing {
     app: String,
+    release: Mutex<Option<String>>,
     lines: Mutex<(u64, VecDeque<LogLine>)>,
     live: broadcast::Sender<LogLine>,
 }
 
 impl LogRing {
     pub fn new(app: &str, live: broadcast::Sender<LogLine>) -> Self {
-        Self { app: app.to_owned(), lines: Mutex::new((0, VecDeque::new())), live }
+        Self { app: app.to_owned(), release: Mutex::new(None), lines: Mutex::new((0, VecDeque::new())), live }
+    }
+
+    /// The release the following lines are about.
+    pub fn set_release(&self, release: Option<String>) {
+        *self.release.lock().expect("log ring") = release;
     }
 
     pub fn push(&self, stream: LogStream, text: &str, was_cut: bool) {
@@ -57,7 +66,8 @@ impl LogRing {
         let mut guard = self.lines.lock().expect("log ring");
         let (seq, lines) = &mut *guard;
         *seq += 1;
-        let line = LogLine { app: self.app.clone(), seq: *seq, at: epoch_ms(), stream, text: text.to_owned(), cut: was_cut };
+        let release = self.release.lock().expect("log ring").clone();
+        let line = LogLine { app: self.app.clone(), release, seq: *seq, at: epoch_ms(), stream, text: text.to_owned(), cut: was_cut };
         if lines.len() == RING_LINES {
             lines.pop_front();
         }

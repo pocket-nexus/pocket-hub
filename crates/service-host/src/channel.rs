@@ -24,8 +24,8 @@ use crate::supervisor::Inner;
 #[serde(rename_all = "camelCase")]
 pub struct ChannelInfo {
     pub app: String,
-    /// The service version the process runs.
-    pub version: String,
+    /// The release the process runs.
+    pub release: String,
     pub pid: u32,
     /// The supervisor's number for this channel, unique while Hub runs.
     pub channel: u64,

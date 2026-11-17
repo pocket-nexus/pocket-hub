@@ -21,8 +21,9 @@ pub use types::*;
 
 /// The protocol version a client names in `hub.hello` (CONTROL-API.md §1,
 /// Hello). 1 was Pocket Hub 0.2.2's and earlier, before services took their
-/// names; the core refuses it like any other version.
-pub const PROTOCOL: u32 = 2;
+/// names; 2 installed a service by its own version; 3 installs it as a
+/// release. The core refuses another like any other version.
+pub const PROTOCOL: u32 = 3;
 
 /// The methods of §3.
 pub mod methods {

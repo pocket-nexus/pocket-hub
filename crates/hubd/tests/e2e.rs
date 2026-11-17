@@ -135,7 +135,7 @@ async fn the_vertical_slice_through_the_binary() {
     let refused_transcript = Transcript::default();
     let refused = Client::connect_raw(&socket, Some(refused_transcript.clone())).await.unwrap();
     let error = rpc(refused.call(methods::HELLO, &HelloParams { protocol: 1, client: info(ClientKind::Gui, "Pocket Hub") }).await.unwrap_err());
-    assert_eq!((error.code, error.message.as_str()), (-32602, "This Hub speaks protocol 2, not 1."));
+    assert_eq!((error.code, error.message.as_str()), (-32602, "This Hub speaks protocol 3, not 1."));
     assert_eq!((error.refused_protocol(), error.data.as_ref().and_then(|data| data.protocol), error.kind()), (Some(PROTOCOL), Some(PROTOCOL), None));
     drop(refused);
 
@@ -340,13 +340,13 @@ async fn the_vertical_slice_through_the_binary() {
         install_stages.push(progress["stage"].as_str().unwrap().to_owned());
     }
     let service: Service = serde_json::from_value(install.finish().await.unwrap()).unwrap();
-    assert_eq!((service.id.as_str(), service.version.as_str(), service.state), (APP, "0.1.0", ServiceState::Stopped));
+    assert_eq!((service.id.as_str(), service.release.as_deref(), service.state), (APP, Some("dev"), ServiceState::Stopped));
     assert_eq!(install_stages, vec!["installing"]);
     // The service's kept lines at a moment whose content is known: the
     // examples file's `services.logs`.
     let kept: ServiceLogs = client.call_as(methods::SERVICES_LOGS, &ServiceLogsParams { id: APP.into(), tail: Some(1) }).await.unwrap();
-    assert_eq!(kept.lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>(), ["installed 0.1.0"]);
-    assert!(home.path().join(format!("services/{APP}/0.1.0/node_modules/@pocketjs/service")).is_symlink(), "Hub linked its SDK into the package");
+    assert_eq!(kept.lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>(), ["installed release dev"]);
+    assert!(home.path().join(format!("services/{APP}/dev/node_modules/@pocketjs/service")).is_symlink(), "Hub linked its SDK into the package");
 
     device.send(json!({"cmd": "open", "app": APP})).await;
     device.expect("channel-open").await;
@@ -410,12 +410,12 @@ async fn the_vertical_slice_through_the_binary() {
     assert!(gone(service_pid).await);
 
     // Its owner's start, restart and stop.
-    let started: Service = client.call_as(methods::SERVICES_START, &ServiceIdParams { id: APP.into() }).await.unwrap();
+    let started: Service = client.call_as(methods::SERVICES_START, &ServiceIdParams { id: APP.into(), release: None }).await.unwrap();
     assert_eq!(started.state, ServiceState::Running);
-    let restarted: Service = client.call_as(methods::SERVICES_RESTART, &ServiceIdParams { id: APP.into() }).await.unwrap();
+    let restarted: Service = client.call_as(methods::SERVICES_RESTART, &ServiceIdParams { id: APP.into(), release: None }).await.unwrap();
     assert_eq!(restarted.state, ServiceState::Running);
     assert_ne!(restarted.pid, started.pid);
-    let stopped: Service = client.call_as(methods::SERVICES_STOP, &ServiceIdParams { id: APP.into() }).await.unwrap();
+    let stopped: Service = client.call_as(methods::SERVICES_STOP, &ServiceIdParams { id: APP.into(), release: None }).await.unwrap();
     assert_eq!(stopped.state, ServiceState::Stopped);
     assert!(gone(restarted.pid.unwrap()).await);
 
@@ -517,21 +517,21 @@ async fn the_vertical_slice_through_the_binary() {
     assert_eq!((unlinked["id"].as_str(), unlinked["code"].as_str()), (Some(id.as_str()), Some("forgotten")));
     let removed = event(&client, |e| topic(e, "device.removed")).await;
     assert_eq!(removed["id"], id.as_str());
-    client.call(methods::SERVICES_REMOVE, &ServiceIdParams { id: APP.into() }).await.unwrap();
+    client.call(methods::SERVICES_REMOVE, &ServiceIdParams { id: APP.into(), release: None }).await.unwrap();
     event(&client, |e| topic(e, "service.removed")).await;
-    assert_eq!(kind_of(client.call(methods::SERVICES_START, &ServiceIdParams { id: APP.into() }).await.unwrap_err()), ErrorKind::NotFound);
+    assert_eq!(kind_of(client.call(methods::SERVICES_START, &ServiceIdParams { id: APP.into(), release: None }).await.unwrap_err()), ErrorKind::NotFound);
 
     // A service that cannot start is the error `service`; `purge` removes its data.
     let broken = work.path().join("broken");
     std::fs::create_dir_all(&broken).unwrap();
-    std::fs::write(broken.join("pocket.service.json"), r#"{"service":1,"id":"dev.test.broken","version":"1.0.0","entry":"service.ts"}"#).unwrap();
+    std::fs::write(broken.join("pocket.service.json"), r#"{"service":1,"id":"dev.test.broken","entry":"service.ts"}"#).unwrap();
     std::fs::write(broken.join("service.ts"), "process.exit(3);\n").unwrap();
     client.call(methods::SERVICES_INSTALL, &ServicePathParams { path: broken.display().to_string() }).await.unwrap();
-    let error = rpc(client.call(methods::SERVICES_START, &ServiceIdParams { id: "dev.test.broken".into() }).await.unwrap_err());
+    let error = rpc(client.call(methods::SERVICES_START, &ServiceIdParams { id: "dev.test.broken".into(), release: None }).await.unwrap_err());
     let data = error.data.unwrap();
     assert_eq!((data.kind.unwrap(), data.id.as_deref()), (ErrorKind::Service, Some("dev.test.broken")));
     assert!(home.path().join("service-data/dev.test.broken").is_dir());
-    client.call(methods::SERVICES_REMOVE, &ServiceRemoveParams { id: "dev.test.broken".into(), purge: Some(true) }).await.unwrap();
+    client.call(methods::SERVICES_REMOVE, &ServiceRemoveParams { id: "dev.test.broken".into(), release: None, purge: Some(true) }).await.unwrap();
     assert!(!home.path().join("service-data/dev.test.broken").exists());
 
     // The keys setup stored, to look for in the log afterwards.

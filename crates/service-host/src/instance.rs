@@ -66,7 +66,7 @@ impl StopReason {
         match self {
             Self::Idle => "stopped after its idle time",
             Self::Owner => "stopped by its owner",
-            Self::Upgrade => "stopped for a new version",
+            Self::Upgrade => "stopped for a new install",
             Self::Shutdown => "stopped as Pocket Hub quits",
         }
     }
@@ -131,17 +131,18 @@ pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledSe
     entry.status.state = ServiceState::Starting;
     entry.status.pid = Some(pid);
     entry.status.started_at = Some(epoch_ms());
-    entry.status.running_version = Some(service.version.clone());
+    entry.status.running_release = Some(service.release.clone());
+    entry.logs.set_release(Some(service.release.clone()));
     entry.status.channels = 0;
     entry.status.last_error = None;
     entry.status.retry_at = None;
-    entry.logs.push(LogStream::Hub, &format!("starting {} {} (pid {pid})", service.id, service.version), false);
+    entry.logs.push(LogStream::Hub, &format!("starting {} release {} (pid {pid})", service.id, service.release), false);
 
     let idle = inner.config.timings.idle_override.unwrap_or(Duration::from_secs(service.idle_seconds));
     let task = Task {
         inner: inner.clone(),
         app: service.id.clone(),
-        version: service.version.clone(),
+        release: service.release.clone(),
         data: service.data.clone(),
         serial,
         pid,
@@ -158,7 +159,7 @@ pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledSe
     Ok(Instance {
         serial,
         token,
-        version: service.version.clone(),
+        release: service.release.clone(),
         pid,
         phase: phase_rx,
         cmd: cmd_tx,
@@ -172,7 +173,8 @@ pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledSe
 struct Task {
     inner: Arc<Inner>,
     app: String,
-    version: String,
+    #[allow(dead_code)] // kept beside `app` for the process's logs and debugging
+    release: String,
     data: PathBuf,
     serial: u64,
     pid: u32,
@@ -432,7 +434,7 @@ impl Task {
             entry.status.pid = None;
             entry.status.channels = 0;
             entry.status.started_at = None;
-            entry.status.running_version = None;
+            entry.status.running_release = None;
             entry.status.last_exit = Some(exit_info(status));
             if crashed {
                 entry.status.crashes += 1;
@@ -456,18 +458,5 @@ impl Task {
             }
         });
         let _ = self.phase.send(Phase::Down(why));
-
-        // A version replaced while this process ran is removed now.
-        if let Some(current) = self.inner.registry.get(&self.app)
-            && current.version != self.version
-        {
-            let running: Vec<String> = {
-                let table = self.inner.lock();
-                table.services.get(&self.app).and_then(|entry| entry.instance.as_ref()).map(|instance| instance.version.clone()).into_iter().collect()
-            };
-            let mut keep = running;
-            keep.push(current.version);
-            self.inner.registry.prune(&self.app, &keep).await;
-        }
     }
 }

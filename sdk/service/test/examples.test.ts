@@ -18,7 +18,6 @@ const crc = (bytes: Uint8Array) => Bun.hash.crc32(bytes) >>> 0;
 interface Manifest {
   service: number;
   id: string;
-  version: string;
   entry: string;
   idleSeconds?: number;
 }

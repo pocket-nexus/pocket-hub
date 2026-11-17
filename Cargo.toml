@@ -71,6 +71,9 @@ tokio = { version = "1", features = ["full"] }
 tokio-rustls = "0.26"
 tracing = "0.1"
 url = "2"
+# The Public Suffix List's Unicode rules as ASCII names (the service host's
+# `hosts`); the version url already resolves to.
+idna = "1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi", "std"] }
 zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 

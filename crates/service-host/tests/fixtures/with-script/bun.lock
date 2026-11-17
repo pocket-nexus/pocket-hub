@@ -1,0 +1,18 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "with-script",
+      "dependencies": {
+        "tiny": "file:./tiny",
+      },
+    },
+  },
+  "trustedDependencies": [
+    "tiny",
+  ],
+  "packages": {
+    "tiny": ["tiny@file:tiny", {}],
+  }
+}

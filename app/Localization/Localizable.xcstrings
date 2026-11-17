@@ -1525,6 +1525,22 @@
         }
       }
     },
+    "Development release" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Development release"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开发版本"
+          }
+        }
+      }
+    },
     "Device" : {
       "localizations" : {
         "en" : {
@@ -1963,6 +1979,22 @@
         }
       }
     },
+    "Install Again…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install Again…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新安装…"
+          }
+        }
+      }
+    },
     "Install Applet…" : {
       "localizations" : {
         "en" : {
@@ -2053,6 +2085,22 @@
         }
       }
     },
+    "Install the service again from its folder, or remove it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install the service again from its folder, or remove it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请从它的文件夹重新安装这个服务，或将其移除。"
+          }
+        }
+      }
+    },
     "Install version %@" : {
       "localizations" : {
         "en" : {
@@ -2097,6 +2145,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已安装"
+          }
+        }
+      }
+    },
+    "Installed by an earlier Pocket Hub. Install it again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installed by an earlier Pocket Hub. Install it again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由较早版本的 Pocket Hub 安装。请重新安装。"
           }
         }
       }
@@ -2305,6 +2369,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "它在设备上的数据也会一并删除。"
+          }
+        }
+      }
+    },
+    "Its description file isn't one this Pocket Hub accepts. The details say which part." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Its description file isn't one this Pocket Hub accepts. The details say which part."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它的描述文件不是这个 Pocket Hub 能接受的。详细信息会说明是哪一部分。"
           }
         }
       }
@@ -3523,6 +3603,22 @@
         }
       }
     },
+    "Pocket Hub couldn't download what services need to run." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub couldn't download what services need to run."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub 无法下载服务运行所需的组件。"
+          }
+        }
+      }
+    },
     "Pocket Hub couldn't download what your 3DS needs." : {
       "localizations" : {
         "en" : {
@@ -3897,6 +3993,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刷新商店"
+          }
+        }
+      }
+    },
+    "Release %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Release %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发布版本 %@"
           }
         }
       }
@@ -5469,6 +5581,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这个服务还没有输出任何内容。"
+          }
+        }
+      }
+    },
+    "This service package can't be installed." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This service package can't be installed."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法安装这个服务包。"
           }
         }
       }

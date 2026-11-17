@@ -1559,6 +1559,7 @@ dependencies = [
  "bytes",
  "flate2",
  "hex",
+ "idna",
  "libc",
  "pocket-hub-api",
  "pocket-hub-core",

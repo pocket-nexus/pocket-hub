@@ -18,6 +18,31 @@ struct HubModelTests {
         #expect(h.model.bun?.installed == true)
     }
 
+    /// A service an earlier Pocket Hub installed (CONTROL-API.md §2 `Service`,
+    /// `reason: "earlier"`): listed without a release, not started, said in
+    /// words the owner can act on, and gone when the owner removes it.
+    @Test func aServiceAnEarlierHubInstalledIsListedAndSaid() async throws {
+        var scenario = MockScenario.demo
+        scenario.services.append(.earlier(id: "nexus.pocket.podcasts"))
+        let h = try await Harness(scenario)
+        defer { Task { await h.tearDown() } }
+        let earlier = try #require(h.model.services?.first { $0.id == "nexus.pocket.podcasts" })
+        #expect(earlier.isEarlier && earlier.release == nil && earlier.state == .failed)
+        #expect(h.model.services?.first { $0.id == "nexus.pocket.weather" }?.release == "dev")
+
+        await #expect(throws: HubError.self) { try await h.model.perform(.start, service: "nexus.pocket.podcasts") }
+        do {
+            try await h.model.perform(.start, service: "nexus.pocket.podcasts")
+        } catch {
+            let words = try #require(UserFacingError(error))
+            #expect(words.title == String(localized: "Installed by an earlier Pocket Hub. Install it again."))
+            #expect(words.advice == String(localized: "Install the service again from its folder, or remove it."))
+        }
+        try await h.model.removeService("nexus.pocket.podcasts")
+        await eventually("removed") { h.model.services?.contains { $0.id == "nexus.pocket.podcasts" } == false }
+        #expect(h.model.services?.count == 2)
+    }
+
     @Test func reactsToDeviceChangedAndUnlinked() async throws {
         let h = try await Harness(.demo)
         defer { Task { await h.tearDown() } }

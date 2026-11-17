@@ -12,6 +12,7 @@ name = "service_host"
 
 [dependencies]
 pocket-link.workspace = true
+idna.workspace = true
 pocket-hub-api.workspace = true
 pocket-hub-core.workspace = true
 bytes.workspace = true

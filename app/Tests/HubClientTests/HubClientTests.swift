@@ -249,7 +249,7 @@ struct HubClientTests {
         await client.start()
         let peer = await server.nextPeer()
         let hello = try await peer.next()
-        peer.write(#"{"jsonrpc":"2.0","id":\#(hello["id"]!.intValue!),"result":{"protocol":3,"hub":{"id":"h","name":"n","version":"9"}}}"# + "\n")
+        peer.write(#"{"jsonrpc":"2.0","id":\#(hello["id"]!.intValue!),"result":{"protocol":4,"hub":{"id":"h","name":"n","version":"9"}}}"# + "\n")
         await eventually("newer") {
             await log.states.contains(where: { if case .unreachable(.newerVersionRunning, _) = $0 { true } else { false } })
         }
@@ -271,7 +271,7 @@ struct HubClientTests {
         await client.start()
         let peer = await server.nextPeer()
         let hello = try await peer.next()
-        #expect(hello["params"]?["protocol"] == 2)
+        #expect(hello["params"]?["protocol"] == 3)
         peer.write(#"{"jsonrpc":"2.0","id":\#(hello["id"]!.intValue!),"error":{"code":-32602,"message":"This Hub speaks protocol 1, not 2."}}"# + "\n")
         await eventually("incompatible") {
             await log.states.contains(where: { if case .unreachable(.incompatible(hubProtocol: 1), _) = $0 { true } else { false } })

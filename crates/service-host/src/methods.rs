@@ -36,6 +36,8 @@ use tokio::task::JoinHandle;
 
 use crate::child::InheritNothing;
 use crate::connector::Connector;
+use crate::registry::Removed;
+use crate::supervisor::EARLIER_SENTENCE;
 use crate::{Config, InstallError, InstalledService, LogLine, LogStream, Progress, ServiceEvent, ServiceState, ServiceStatus, StartError, Supervisor};
 
 /// What the program that serves the methods gives them: its event broadcast
@@ -140,26 +142,29 @@ impl ServiceHost {
             methods::SERVICES_INSTALL => self.install(params(method, value)?, progress).await,
             methods::SERVICES_REMOVE => {
                 let p: ServiceRemoveParams = params(method, value)?;
-                let removed = self.supervisor.remove(&p.id, p.purge.unwrap_or(false)).await.map_err(|error| service_error(&p.id, format!("The service could not be removed: {error}.")))?;
-                if !removed {
-                    return Err(no_service(&p.id));
+                let removed = self.supervisor.remove(&p.id, p.release.as_deref(), p.purge.unwrap_or(false)).await.map_err(|error| service_error(&p.id, format!("The service could not be removed: {error}.")))?;
+                if removed == Removed::Nothing {
+                    return Err(no_release(&p.id, p.release.as_deref()));
                 }
                 ok(Empty {})
             }
             methods::SERVICES_START => {
                 let p: ServiceIdParams = params(method, value)?;
+                self.release_named(&p)?;
                 self.supervisor.start(&p.id).await.map_err(|error| start_error(&p.id, error))?;
                 self.service_now(&p.id)
             }
             methods::SERVICES_STOP => {
                 let p: ServiceIdParams = params(method, value)?;
                 self.installed(&p.id)?;
+                self.release_named(&p)?;
                 self.supervisor.stop(&p.id).await;
                 self.service_now(&p.id)
             }
             methods::SERVICES_RESTART => {
                 let p: ServiceIdParams = params(method, value)?;
                 self.installed(&p.id)?;
+                self.release_named(&p)?;
                 self.supervisor.restart(&p.id).await.map_err(|error| start_error(&p.id, error))?;
                 self.service_now(&p.id)
             }
@@ -215,6 +220,16 @@ impl ServiceHost {
         self.supervisor.status(id).map(|_| ()).ok_or_else(|| no_service(id))
     }
 
+    /// A `release` the call names must be the installed one. An id with no
+    /// release (one an earlier Pocket Hub installed) has none to name.
+    fn release_named(&self, p: &ServiceIdParams) -> Result<(), RpcError> {
+        let Some(release) = &p.release else { return Ok(()) };
+        match self.supervisor.registry().release(&p.id, release) {
+            Some(_) => Ok(()),
+            None => Err(no_release(&p.id, Some(release))),
+        }
+    }
+
     fn service_now(&self, id: &str) -> Result<Value, RpcError> {
         ok(self.service(id).ok_or_else(|| no_service(id))?)
     }
@@ -258,12 +273,21 @@ impl ServiceHost {
             }
         })
         .await
-        .map_err(|error| RpcError::op(ErrorKind::Service, error.message))?;
+        .map_err(|error| RpcError::op(ErrorKind::Service, error.message).with(|data| data.reason = Some("runtime".into())))?;
         send(progress, ServiceInstallProgress { stage: "installing".into(), message: format!("Installing the service package {}.", path.display()) });
         // A package that is not one is an unusable argument; a package that
         // could not be installed (its dependencies, the disk) is the service's.
+        // A package that is not one is an unusable argument; a manifest the
+        // host refuses is the service's (SERVICE-PROTOCOL.md §1), its field
+        // in `detail`; a package that could not be installed (its
+        // dependencies, the disk) is the service's too.
         let report = self.supervisor.install(&path).await.map_err(|error| match error {
-            InstallError::Source(_) | InstallError::Archive(_) | InstallError::Manifest(_) => RpcError::op(ErrorKind::Invalid, sentence(&error.to_string())),
+            InstallError::Source(_) | InstallError::Archive(_) => RpcError::op(ErrorKind::Invalid, sentence(&error.to_string())),
+            InstallError::Manifest(manifest) => RpcError::op(ErrorKind::Service, sentence(&manifest.to_string())).with(|data| {
+                data.reason = Some("manifest".into());
+                data.detail = manifest.field();
+            }),
+            InstallError::Runtime(runtime) => RpcError::op(ErrorKind::Service, sentence(&format!("{source} could not be installed: {runtime}"))).with(|data| data.reason = Some("runtime".into())),
             other => RpcError::op(ErrorKind::Service, sentence(&format!("{source} could not be installed: {other}"))),
         })?;
         self.service_now(&report.service.id)
@@ -300,12 +324,12 @@ async fn pump(host: Arc<ServiceHost>, mut states: broadcast::Receiver<ServiceEve
             event = states.recv() => match event {
                 Ok(ServiceEvent::State(status)) => host.publish_service(&*publisher, &status.id.clone(), Some(&status)),
                 Ok(ServiceEvent::Installed(service)) => host.publish_service(&*publisher, &service.id, None),
-                Ok(ServiceEvent::Removed { id }) => publisher.publish(Event::ServiceRemoved { id }),
+                Ok(ServiceEvent::Removed { id, release }) => publisher.publish(Event::ServiceRemoved { id, release }),
                 Err(RecvError::Lagged(_)) => publisher.resync(),
                 Err(RecvError::Closed) => return,
             },
             line = logs.recv() => match line {
-                Ok(line) => publisher.publish(Event::ServiceLog { id: line.app.clone(), at: line.at, stream: log_stream(line.stream).to_owned(), text: line.text }),
+                Ok(line) => publisher.publish(Event::ServiceLog { id: line.app.clone(), release: line.release.clone(), at: line.at, stream: log_stream(line.stream).to_owned(), text: line.text }),
                 Err(RecvError::Lagged(missed)) => tracing::warn!(missed, "service log lines were dropped from the control API"),
                 Err(RecvError::Closed) => return,
             },
@@ -325,6 +349,14 @@ fn no_service(id: &str) -> RpcError {
     RpcError::op(ErrorKind::NotFound, format!("No service {id} is installed."))
 }
 
+/// `not_found` for an id, or for one release of it.
+fn no_release(id: &str, release: Option<&str>) -> RpcError {
+    match release {
+        None => no_service(id),
+        Some(release) => RpcError::op(ErrorKind::NotFound, format!("No release {release} of the service {id} is installed.")),
+    }
+}
+
 /// The error `service` for `id`.
 fn service_error(id: &str, message: impl Into<String>) -> RpcError {
     let id = id.to_owned();
@@ -334,6 +366,7 @@ fn service_error(id: &str, message: impl Into<String>) -> RpcError {
 fn start_error(id: &str, error: StartError) -> RpcError {
     match error {
         StartError::NotInstalled(id) => no_service(&id),
+        StartError::Earlier(_) => service_error(id, EARLIER_SENTENCE).with(|data| data.reason = Some("earlier".into())),
         StartError::Failed(why) => service_error(id, sentence(&format!("the service did not start: {why}"))),
     }
 }
@@ -349,18 +382,22 @@ fn reported_version(bun: &Path) -> Option<String> {
 ///
 /// | contract | supervisor |
 /// | --- | --- |
-/// | `version` | the installed version, else the running process's |
+/// | `release` | the installed release, else the release a removed service still runs; null for an earlier one |
+/// | `requires`, `hosts` | the installed release's manifest; empty for an earlier one |
 /// | `state` | `state` (same five names) |
 /// | `since` | `since`; for a service that has not changed state since Hub started, its install time |
 /// | `lastExit.signal` | the signal number's name (`SIGTERM`) |
 /// | `error` | `last_error` while `failed`, else null |
+/// | `reason` | `earlier` for an id an earlier Pocket Hub installed |
 ///
-/// `running_version`, `started_at`, `restarts`, `crashes` and `retry_at`
-/// have no place in the contract.
+/// `started_at`, `restarts`, `crashes` and `retry_at` have no place in the
+/// contract.
 pub fn service(status: &ServiceStatus, installed: Option<&InstalledService>) -> api::Service {
     api::Service {
         id: status.id.clone(),
-        version: status.version.clone().or_else(|| installed.map(|service| service.version.clone())).or_else(|| status.running_version.clone()).unwrap_or_default(),
+        release: status.release.clone().or_else(|| installed.map(|service| service.release.clone())).or_else(|| status.running_release.clone()),
+        requires: installed.map(|service| service.requires.clone()).unwrap_or_default(),
+        hosts: installed.map(|service| service.hosts.clone()).unwrap_or_default(),
         state: match status.state {
             ServiceState::Stopped => api::ServiceState::Stopped,
             ServiceState::Starting => api::ServiceState::Starting,
@@ -373,6 +410,7 @@ pub fn service(status: &ServiceStatus, installed: Option<&InstalledService>) -> 
         channels: status.channels as u32,
         last_exit: status.last_exit.as_ref().map(|exit| api::LastExit { code: exit.code, signal: exit.signal.map(signal_name), at: exit.at }),
         error: if status.state == ServiceState::Failed { status.last_error.clone() } else { None },
+        reason: status.earlier.then(|| "earlier".to_owned()),
     }
 }
 

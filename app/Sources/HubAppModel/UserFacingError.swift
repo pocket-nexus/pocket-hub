@@ -80,6 +80,19 @@ public struct UserFacingError: Error, Identifiable, Sendable, Equatable {
                               advice: String(localized: "Check this Mac's internet connection, then try again."),
                               detail: detail)
                 }
+            case .service where operation.reason == "manifest":
+                // The package's pocket.service.json; Hub's sentence names the field.
+                self.init(title: String(localized: "This service package can't be installed."),
+                          advice: String(localized: "Its description file isn't one this Pocket Hub accepts. The details say which part."),
+                          detail: detail)
+            case .service where operation.reason == "earlier":
+                self.init(title: String(localized: "Installed by an earlier Pocket Hub. Install it again."),
+                          advice: String(localized: "Install the service again from its folder, or remove it."),
+                          detail: nil)
+            case .service where operation.reason == "runtime":
+                self.init(title: String(localized: "Pocket Hub couldn't download what services need to run."),
+                          advice: String(localized: "Check this Mac's internet connection, then try again."),
+                          detail: detail)
             case .service:
                 self.init(title: String(localized: "The service couldn't be installed, started or stopped."),
                           advice: String(localized: "Check its output in Advanced › Services, then try again."),
