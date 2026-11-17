@@ -51,6 +51,10 @@ struct MenuBarContent: View {
             }
         } else if case .startingCore = model.connection {
             Text("Starting Pocket Hub…")
+        } else if case .replacingCore = model.connection {
+            Text("Updating Pocket Hub…")
+        } else if case .unreachable(.newerVersionRunning, _) = model.connection {
+            Text("A newer Pocket Hub is running")
         } else {
             Text("Pocket Hub isn't responding")
         }

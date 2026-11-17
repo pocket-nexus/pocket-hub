@@ -39,6 +39,11 @@ app, leaves Pocket Hub running in the background so devices stay connected;
 **Quit and Stop Pocket Hub** in the menu bar item stops it altogether. Settings
 can open Pocket Hub at login.
 
+To update, drag the new Pocket Hub to Applications in place of the old one and
+open it: it takes over from the earlier version still running in the
+background, and your devices connect again by themselves. An older copy opened
+while a newer Pocket Hub runs says so and changes nothing.
+
 ## Set up a 3DS
 
 Choose **Add a Device…** (in the sidebar, or File › Add a Device…, ⌘N).

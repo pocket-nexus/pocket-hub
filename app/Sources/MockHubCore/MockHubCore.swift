@@ -373,8 +373,12 @@ public actor MockHubCore {
             return
         }
         if method == "hub.hello" {
-            sessions[id]?.helloed = true
-            sessions[id]?.client = params["client"] ?? .null
+            // A hello refused for its protocol leaves the session without one,
+            // as the real core does.
+            if params["protocol"]?.intValue == scenario.speaksProtocol {
+                sessions[id]?.helloed = true
+                sessions[id]?.client = params["client"] ?? .null
+            }
         }
         let task = Task {
             if let delay = self.scenario.responseDelays[method] { try? await Task.sleep(for: delay) }
@@ -437,10 +441,11 @@ public actor MockHubCore {
     private func perform(_ method: String, params: JSONValue, session id: Int, progress: Progress) async throws -> JSONValue {
         switch method {
         case "hub.hello":
-            guard params["protocol"]?.intValue == 2 else {
-                throw MockError.operation("invalid", "This Hub speaks protocol 2.", [:])
+            let asked = params["protocol"]?.intValue ?? 0
+            guard asked == scenario.speaksProtocol else {
+                throw MockError.otherProtocol(core: scenario.speaksProtocol, client: asked)
             }
-            return ["protocol": 2, "hub": hubIdentity]
+            return ["protocol": .number(Double(scenario.speaksProtocol)), "hub": hubIdentity]
         case "hub.status":
             return [
                 "id": .string(scenario.hubId), "name": .string(scenario.hubName), "version": .string(scenario.hubVersion),
@@ -463,6 +468,7 @@ public actor MockHubCore {
             }
             return [:]
         case "hub.shutdown":
+            guard scenario.stopsOnShutdown else { return [:] }
             Task {
                 try? await Task.sleep(for: .milliseconds(50))
                 self.shutdownNow()
@@ -1061,9 +1067,15 @@ enum MockError: Error {
     case operation(String, String, [String: JSONValue])
     case invalidParams(String)
     case methodNotFound(String)
+    /// A hello in another protocol than the core's (CONTROL-API.md §1, Hello).
+    case otherProtocol(core: Int, client: Int)
 
     var json: JSONValue {
         switch self {
+        case .otherProtocol(let core, let client):
+            var error: [String: JSONValue] = ["code": -32602, "message": .string("This Hub speaks protocol \(core), not \(client).")]
+            if core >= 2 { error["data"] = ["protocol": .number(Double(core))] }
+            return .object(error)
         case .operation(let kind, let message, var data):
             data["kind"] = .string(kind)
             return ["code": 1, "message": .string(message), "data": .object(data)]

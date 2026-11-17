@@ -30,8 +30,14 @@ public struct SequencedEvent: Sendable {
 ///
 /// It does not say hello or reconnect; `HubClient` does both.
 public actor HubConnection: HubCalling {
+    /// A call's answer as it came: its `result`, or its `error` object.
+    private enum Answer {
+        case result(JSONValue)
+        case error(JSONValue)
+    }
+
     private struct Pending {
-        var continuation: CheckedContinuation<(JSONValue, UInt64), any Error>
+        var continuation: CheckedContinuation<(Answer, UInt64), any Error>
         var progress: (@Sendable (JSONValue) -> Void)?
     }
 
@@ -67,6 +73,35 @@ public actor HubConnection: HubCalling {
     public func callSequenced(_ method: String, params: JSONValue? = nil,
                               progress: (@Sendable (JSONValue) -> Void)? = nil) async throws -> (result: JSONValue, sequence: UInt64)
     {
+        let (answer, sequence) = try await exchange(method, params: params, progress: progress)
+        switch answer {
+        case .result(let result): return (result, sequence)
+        case .error(let error): throw HubError(rpcError: error)
+        }
+    }
+
+    /// Says hello in `protocol` and returns what the core answered, its refusal
+    /// for the protocol included: `-32602` with `data.protocol`, the core's, or
+    /// without `data` from a core of Pocket Hub 0.2.1 and earlier, which speaks
+    /// protocol 1 (CONTROL-API.md §1, Hello). `hub.hello` is one of the two
+    /// methods every protocol keeps, so this is how a client meets a core of
+    /// any version. Any other error is thrown.
+    public func introduce(protocol version: Int, client: ClientIdentity) async throws -> HelloAnswer {
+        let params: JSONValue = ["protocol": .number(Double(version)), "client": try JSONValue(encoding: client)]
+        switch try await exchange("hub.hello", params: params, progress: nil).0 {
+        case .result(let result):
+            return .accepted(try result.decoded())
+        case .error(let error) where error["code"]?.intValue == -32602:
+            return .refused(coreProtocol: error["data"]?["protocol"]?.intValue ?? 1,
+                            message: error["message"]?.stringValue ?? "")
+        case .error(let error):
+            throw HubError(rpcError: error)
+        }
+    }
+
+    private func exchange(_ method: String, params: JSONValue?,
+                          progress: (@Sendable (JSONValue) -> Void)?) async throws -> (Answer, UInt64)
+    {
         if isClosed { throw HubError.disconnected }
         if Task.isCancelled { throw HubError.operation(.init(kind: .cancelled, message: "Cancelled.")) }
         let id = nextId
@@ -74,8 +109,8 @@ public actor HubConnection: HubCalling {
         var request: [String: JSONValue] = ["jsonrpc": "2.0", "id": .number(Double(id)), "method": .string(method)]
         if let params { request["params"] = params }
         let line = try JSONValue.object(request).encodedLine() + Data([0x0A])
-        let (result, sequence) = try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(JSONValue, UInt64), any Error>) in
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Answer, UInt64), any Error>) in
                 if isClosed {
                     continuation.resume(throwing: HubError.disconnected)
                     return
@@ -86,7 +121,6 @@ public actor HubConnection: HubCalling {
         } onCancel: {
             Task { await self.sendCancel(for: id) }
         }
-        return (result, sequence)
     }
 
     /// Sends a notification (no answer).
@@ -154,9 +188,9 @@ public actor HubConnection: HubCalling {
         }
         guard let id = message["id"]?.intValue, let entry = pending.removeValue(forKey: id) else { return }
         if let error = message["error"] {
-            entry.continuation.resume(throwing: HubError(rpcError: error))
+            entry.continuation.resume(returning: (.error(error), sequence))
         } else {
-            entry.continuation.resume(returning: (message["result"] ?? .null, sequence))
+            entry.continuation.resume(returning: (.result(message["result"] ?? .null), sequence))
         }
     }
 
