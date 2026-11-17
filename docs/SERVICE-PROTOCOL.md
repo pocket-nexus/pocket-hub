@@ -1,11 +1,22 @@
 # Services and the local service protocol
 
 A **service** is the computer side of one applet (PocketJS `docs/POCKET-LINK.md`
-§7.7): a Bun process that Pocket Hub starts when a device opens that applet's
-channel and stops when it is idle. An applet and its service agree on their own
-messages; Hub routes them and reads none of their content. A service gets no
-device operation (no push, no screenshot, no file access): it sees the channels
-of its own applet and nothing else.
+§7.7): a module whose default export Pocket Hub loads into a Bun process of
+its own when a device opens that applet's channel, and stops when it is idle.
+An applet and its service agree on their own messages; Hub routes them and
+reads none of their content. A service gets no device operation (no push, no
+screenshot, no file access): it sees the channels of its own applet, and asks
+its host for the capabilities its manifest requires (§6, §7), and nothing else
+reaches it through Hub.
+
+**A service runs with its owner's rights.** Its process is an ordinary
+program of the owner's account: it can read and write what the owner can,
+reach the network and start programs by its own means, Bun's included. The
+capabilities below are what Hub gives a service through its SDK and checks;
+they do not stop the service's own code from doing more, and the store's
+file, which only Hub opens, is protected from other users by its mode, not
+from the service's process. Install only a service you trust as you would any
+program.
 
 A service never learns which carrier a device is on. Wi-Fi, USB, UART and
 Bluetooth all end in the same channel connection described here.
@@ -20,8 +31,8 @@ This page is the contract between three parts of this repository:
 
 | Part | Where | Role |
 | --- | --- | --- |
-| The service SDK | `sdk/service` (TypeScript, runs on Bun) | what a service author imports |
-| The service host | `crates/service-host` | installs service packages, starts and stops their processes, owns the socket, matches tickets; answers the control API's service methods |
+| The service SDK | `sdk/service` (TypeScript, runs on Bun) | what a service author imports, and the bootstrap that loads a service (§2) |
+| The service host | `crates/service-host` | installs service packages, starts and stops their processes, owns the socket, matches tickets, answers a service's capability requests and keeps its store; answers the control API's service methods |
 | The channel relay | `crates/hub-core` | joins a device's applet channel to one channel connection |
 
 ## 1. The service package
@@ -32,7 +43,7 @@ folder or a file on this computer, it is a **development release**.
 
 ```
 pocket.service.json    the manifest
-service.ts             the entry (any name; the manifest names it)
+service.ts             the entry (any name; the manifest names it): its default export is the service (§2)
 package.json           optional
 bun.lock               optional (or bun.lockb); with package.json, Hub runs `bun install --frozen-lockfile --ignore-scripts`
 ```
@@ -50,8 +61,8 @@ when the package has a lockfile.
 | --- | --- | --- | --- |
 | `service` | integer | the manifest version, **1** | any other value is refused, with the version named, before any other field is read |
 | `id` | string | the applet's manifest id; a service serves exactly this applet | 1 to 128 bytes of `[A-Za-z0-9._-]`, not `.` or `..` |
-| `entry` | string | the file Bun runs | a relative path of normal components inside the package, at most 1,024 bytes, naming a regular file reached through no link |
-| `requires` | array of strings? | the capabilities the service uses | each of `net`, `store`, `image`, `text`, `media`, `native`; no repeats; order carries no meaning. **A name this host does not provide is refused**, so a service written for a capability is never run without it. **This host provides none yet**: only a service that requires nothing installs. Absent or empty: a service that only computes for its applet |
+| `entry` | string | the module the host loads (§2) | a relative path of normal components inside the package, at most 1,024 bytes, naming a regular file reached through no link |
+| `requires` | array of strings? | the capabilities the service uses | each of `net`, `store`, `image`, `text`, `media`, `native`; no repeats; order carries no meaning. **A name this host does not provide is refused**, so a service written for a capability is never run without it. **This host provides `store`** (§7). Absent or empty: a service that only computes for its applet |
 | `hosts` | array of strings? | the destinations the service's capabilities may reach | at most **32**, no repeats; each a host entry (below) |
 | `store` | object? | `{"maxBytes": <integer>}`, the size of the service's store | only with `store` in `requires`; `maxBytes` 1 to 268,435,456, default 16 MiB |
 | `idleSeconds` | integer? | how long the process stays up with no channel open | 1 to 86,400; default **30** |
@@ -100,8 +111,8 @@ platform. The host carries a dated copy of the list,
 and compares names as ASCII, the list's Unicode rules converted by IDNA. The
 copy changes with this repository, never at run time.
 
-This host gives a service no capability yet, so `hosts` admits nothing today:
-it is checked at install and shown in the control API's `Service`.
+No capability this host provides reaches a host, so `hosts` admits nothing
+today: it is checked at install and shown in the control API's `Service`.
 
 ### Dependencies
 
@@ -120,11 +131,12 @@ install succeeds; the service fails when it loads what is missing, with the
 dependency's own error in its log, and its state is `failed`. Such a package
 ships what the script makes, or does without the dependency.
 
-**Hub provides the SDK.** A service imports `@pocketjs/service` and declares no
-dependency for it: when a package's `node_modules` holds no `@pocketjs/service`
-of its own, Hub links the copy it ships there, so the SDK a service runs always
-speaks the protocol of the Hub that started it. A package that brings its own
-copy keeps it.
+**Hub provides the SDK, and its copy always wins.** A service imports
+`@pocketjs/service` and declares no dependency for it: Hub links the copy it
+ships at `node_modules/@pocketjs/service` at install and again before each
+start, replacing whatever the package brought there, so the SDK a service runs
+always speaks the protocol of the Hub that started it. Hub writes its copy to
+`<home>/sdk/service` at each of its own starts.
 
 ### Releases and folders
 
@@ -135,8 +147,10 @@ install. Hub keeps:
 | --- | --- |
 | a release, as installed | `<home>/services/<id>/<release>-<8 hex>/`, a folder name unique to that install |
 | the id's releases, each naming its folder | `<home>/services/<id>/releases.json` |
-| the service's own files, mode 0700, kept across installs | `<home>/service-data/<id>/` |
 | packages being installed | `<home>/services-staging/` |
+| a development release's store (§7) | `<home>/service-store/<id>@dev/` |
+| the store of the id's other releases (none installs yet) | `<home>/service-store/<id>/` |
+| the data folder an earlier Pocket Hub gave a service | `<home>/service-data/<id>/`: given to no process, kept until the owner removes the service with `purge` |
 
 `<release>` is `dev`, or 16 lower-case hex digits; nothing installs a release
 of the second form yet.
@@ -168,7 +182,7 @@ started from, and the new one applies at its next start.
 as one `Service` in state `failed` with `reason: "earlier"` and its sentence
 ("Installed by an earlier Pocket Hub; install it again."), and **nothing under
 it is read, run or deleted** until the owner removes it, or installs the id
-again, which replaces it. Its `service-data/<id>/` is kept as any other's.
+again, which replaces it. Its `service-data/<id>/` is kept until a `purge`.
 
 **Which release a channel starts.** A device's `channel.open {app, hash}`
 starts the `dev` release of `app` when one is installed; an id with none (or
@@ -176,35 +190,75 @@ an earlier one) is `no_daemon` (link specification §7.1).
 
 ## 2. The process
 
-Hub runs `bun --no-install run ./<entry>` with the package folder as the working
-directory: `./` keeps Bun from taking the name for a `package.json` script, and
-`--no-install` from fetching at run time a package the lockfile did not pin.
-The process gets these variables:
+Hub runs, with the release's folder as the working directory:
+
+```
+bun --no-install run <home>/sdk/service/src/boot.ts ./<entry>
+```
+
+`boot.ts` is the SDK's bootstrap: it reads the three variables below, opens
+the control connection (§4) and, after `service.ready`, the host connection
+(§6), imports the entry, calls its **default export** with the host and serves
+the service it returns. Service code calls none of this and reads no
+environment. `--no-install` keeps Bun from fetching at run time a package the
+lockfile did not pin.
+
+```ts
+// service.ts — the manifest's entry
+import type { ServiceFactory } from "@pocketjs/service";
+
+const service: ServiceFactory = (host) => ({
+  attach(channel, info) {
+    channel.on("visits", async () => {
+      const visits = ((await host.store.getJson<number>("visits")) ?? 0) + 1;
+      await host.store.setJson("visits", visits);
+      return { visits };
+    });
+  },
+});
+export default service;
+```
 
 | Variable | Content |
 | --- | --- |
 | `POCKET_SERVICE_SOCKET` | path of Hub's service socket (a Unix domain socket) |
 | `POCKET_SERVICE_TOKEN` | 32 lowercase hex digits, made for this process start |
 | `POCKET_SERVICE_ID` | the applet id |
-| `POCKET_SERVICE_DATA` | the service's data folder; `service.ready` repeats it (§4) |
 
-**Exit codes.** A service exits with 0 after `service.stop` and when its control
-connection closes, and with another code when it could not start or was
-refused.
+**The process gets these three, `TZ`, `LANG` and `LC_*`, and nothing else of
+Hub's environment**: no `PATH`, `HOME`, proxy or certificate variable. This
+does not confine the service (it runs with its owner's rights, above); it
+keeps Hub's environment out of code Hub did not write.
 
-**The rest of the environment is not Hub's own.** Beside the four, the process
-gets `PATH` (Bun's folder first), `HOME`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`,
-`TZ`, `LANG`, `LANGUAGE`, `LC_*`, the proxy variables in either case, and
-`SSL_CERT_FILE`, `SSL_CERT_DIR` and `NODE_EXTRA_CA_CERTS`.
+**The SDK's surface** (`sdk/service/src/index.ts`): the default export is a
+`ServiceFactory`, `(host: Host) => Service | Promise<Service>`. `Host` has
+`id` (the applet id), `log(line)` (a line of the service's log), and the
+capabilities: **`store`** (§7) and `net` and `native`; an `AppletChannel` has,
+beside its channel calls (§5), `image`, `text` and `media`. **Every member
+exists whatever the manifest says**, so code that reads `host.net` does not
+crash: on this host `net`, `native`, `image`, `text` and `media` are not
+provided, no manifest can require them (§1), and every call of theirs fails
+with `ServiceError` `not_required`. `Service` has `attach(channel, info)` (one
+call per accepted channel), `stop()` (the host stops the service; the channels
+close after it returns) and `ready` (when present, the channels offered before
+it resolves are attached once it does). `LinkError` of the reference is
+`ServiceError`: `code`, `message` and `extra`, for channel calls and capability
+calls alike.
+
+**Exit codes.** A service exits with 0 after `service.stop` and when its lease
+ends, and with another code when it could not start or was refused: an entry
+that cannot be loaded, a default export that is not a function, a factory that
+throws.
 
 The process's standard output and error are its log: Hub captures both, line by
 line. **A service that exits is not restarted in a loop**: the next `channel.open`
 starts it again, and a device that was refused `busy` retries after 2 s doubling
 to 60 s (§7.1 of the link specification). **A process that ends without Hub
-asking, before `service.ready` or within 10 s of its start, is a failed start**:
-Hub holds further starts off for 2 s, doubling to 60 s, and answers an open
-inside the hold with `busy` at once, without a spawn. An install of the package
-or its owner's own start clears the hold.
+asking, before `service.ready` or within 10 s of its start, is a failed start**,
+and so is one that attaches no host connection within 10 s of `service.ready`
+(§6): Hub holds further starts off for 2 s, doubling to 60 s, and answers an
+open inside the hold with `busy` at once, without a spawn. An install of the
+package or its owner's own start clears the hold.
 
 ## 3. Frames
 
@@ -216,13 +270,14 @@ header and the frame types of §4.2 and §4.3 of the link specification, in the
 - a `REQUEST` may carry `BODY` (0x04) by itself;
 - a `HANDSHAKE` frame (0x04, id 0, one JSON object of at most 1,024 bytes) is
   valid at any time and is used for the opening exchange of each connection;
-  after `service.ready` or `channel.ready` a receiver ignores one;
+  after `service.ready`, `channel.ready` or `host.ready` a receiver ignores one;
 - there is no preamble, no `PING`/`PONG` and no `CLOSE` frame: a side that is
   done closes the socket.
 
-The payload limit is **16,384** on the control connection, and the device
-link's negotiated limit on a channel connection (`payloadLimit` below), so Hub
-forwards `DATA` frames in either direction without cutting them again.
+The payload limit is **16,384** on the control connection, the device link's
+negotiated limit on a channel connection (`payloadLimit` below), so Hub
+forwards `DATA` frames in either direction without cutting them again, and
+**65,536** on the host connection (§6).
 
 ## 4. The control connection
 
@@ -238,11 +293,14 @@ service                                           Hub
 
 | Message | Direction | Object |
 | --- | --- | --- |
-| `service.hello` | service to Hub, `HANDSHAKE` | `{"t":"service.hello","protocol":2,"token":<POCKET_SERVICE_TOKEN>,"app":<applet id>}` |
-| `service.ready` | Hub to service, `HANDSHAKE` | `{"t":"service.ready","app":<applet id>,"data":<data folder>}` |
-| `service.refused` | Hub to service, `HANDSHAKE` | `{"t":"service.refused","message":<text>}`: an unknown token, or a `protocol` other than **2** (1 is the exchange of Pocket Hub 0.2.2 and earlier). Hub closes |
+| `service.hello` | service to Hub, `HANDSHAKE` | `{"t":"service.hello","protocol":3,"token":<POCKET_SERVICE_TOKEN>,"app":<applet id>}` |
+| `service.ready` | Hub to service, `HANDSHAKE` | `{"t":"service.ready","app":<applet id>,"release":<release>,"host":<ticket>}`: `release` is the release the process runs (§1); `host` is 32 lowercase hex digits, good for one `host.attach` (§6) |
+| `service.refused` | Hub to service, `HANDSHAKE` | `{"t":"service.refused","message":<text>}`: an unknown token, or a `protocol` other than **3** (1 is the exchange of Pocket Hub 0.2.2 and earlier; 2 had `service.ready` carry a data folder and no host connection). Hub closes |
 | `channel.offer` | Hub to service, `EVENT` id 0 | below |
 | `service.stop` | Hub to service, `EVENT` id 0 | `{"t":"service.stop"}`: finish and exit |
+
+A protocol mismatch does not happen in practice: Hub links its own SDK into
+every package before each start (§1).
 
 `channel.offer`:
 
@@ -259,10 +317,11 @@ service                                           Hub
 - **`service.hello` arrives within 8 s of the process's start, and the first
   frame of any connection within 10 s of its accept**; Hub closes a connection
   that sends neither.
-- **The service opens a channel connection for each offer within 10 s.** Hub
-  holds the device's `channel.open` meanwhile and answers `busy` at 20 s in all
-  (§7.1). A device that cancels its open leaves the process running; it stops
-  at its idle time like any other.
+- **Offers start once the host connection is attached (§6).** The service opens
+  a channel connection for each offer within 10 s. Hub holds the device's
+  `channel.open` meanwhile and answers `busy` at 20 s in all (§7.1). A device
+  that cancels its open leaves the process running; it stops at its idle time
+  like any other.
 - **The service sends nothing on the control connection after its hello.** Hub
   ignores a valid frame there, and a malformed one ends the lease.
 - **Hub sends `service.stop` when the process has had no channel for
@@ -272,11 +331,12 @@ service                                           Hub
   each of them `channel.close` `stop` (§5) at the same moment as `service.stop`.
   The two can arrive in either order; the device is told `daemon` (the
   link's close reason, §5).
-- **The control connection is the process's lease.** When it closes, Hub closes
-  the process's channels at once (the device is told `daemon`) and ends the
-  process without a `service.stop`: `SIGTERM`, and `SIGKILL` 5 s later. A service
-  whose control connection closes exits. **Hub signals the process group**, so
-  a service's own children end with it.
+- **The control connection and the host connection are the process's lease.**
+  When either closes, Hub closes the process's channels at once (the device is
+  told `daemon`) and ends the process without a `service.stop`: `SIGTERM`, and
+  `SIGKILL` 5 s later. A service whose control or host connection closes
+  exits. **Hub signals the process group**, so a service's own children end
+  with it.
 
 ## 5. A channel connection
 
@@ -377,3 +437,162 @@ socket after it. From Hub the reason is the device's (`exit`, `reset`,
 broken). **Hub sends one close notice per channel, never two, and nothing of the
 channel after it.** A service that closes a channel sends `channel.close` with
 any reason, or closes the socket; the device is told `daemon` either way.
+
+## 6. The host connection
+
+One per process, opened right after `service.ready`: on it the service asks
+its host for a capability. **The service is the requester here**, as a device
+is on its link; the host reads every frame, and nothing on it reaches a
+device. It is a connection of its own so that a channel connection stays the
+applet's, relayed with the device's limits, and the control connection stays
+free for `channel.offer`.
+
+```
+service                                           Hub
+  | -- HANDSHAKE host.attach -------------------> |
+  | <-------------------- HANDSHAKE host.ready    |   or host.refused, then close
+  |   requests, their bodies and responses        |
+```
+
+| Message | Direction | Object |
+| --- | --- | --- |
+| `host.attach` | service to Hub, `HANDSHAKE` | `{"t":"host.attach","ticket":<the host ticket of service.ready>}` |
+| `host.ready` | Hub to service, `HANDSHAKE` | `{"t":"host.ready","payloadLimit":65536,"requires":[…],"provides":["store"]}`: the manifest's `requires`, and what this host provides |
+| `host.refused` | Hub to service, `HANDSHAKE` | `{"t":"host.refused","message":<text>}`: an unknown ticket, or a used one (a second host connection for the process). Hub closes |
+
+**After `host.attach` the service sends nothing until it has read
+`host.ready`.** A process that sends no `host.attach` within 10 s of
+`service.ready` is ended as a failed start (§2). **The host connection is
+part of the lease** (§4).
+
+**The SDK refuses locally** a capability `requires` does not name, with
+`ServiceError` `not_required`, before a frame leaves; the host refuses it
+again, since the SDK is code inside the process.
+
+| Rule | Value |
+| --- | --- |
+| Payload limit | **65,536** bytes; one JSON object fits one frame |
+| Ids of the service's requests | **`1`–`0x7fffffff`**, from one counter that only increases: an id at or below the last one ends the connection |
+| Open requests of the service | at most **64** on the connection, and each capability's own bound (§7); one more is answered `busy` at once |
+| Streams | at most one per request in each direction: the request's body toward the host, the response toward the service |
+| Event units | none on this connection |
+| Requests from the host | none in this version; a service answers one with `ERROR` |
+
+**Credit, both ways, as §5.6 of the link specification.** Every stream starts
+at credit 0 in its direction.
+
+- **The response toward the service** exists from its head event on (the head
+  step of §7.2): an `EVENT` on the request's id, then `DATA`. The SDK grants a
+  window of **256 KiB** while it reads and refills it as it takes bytes.
+- **The request's body toward the host** is granted by the host as it takes
+  the bytes, **256 KiB** outstanding at most and never past the count the
+  request declares; the last `DATA` carries `END`, and a body of 0 bytes is
+  one empty `DATA` with `END`, which needs no credit.
+- **`DATA` past the receiver's credit, a reused id, a `REPLY` (the host asks
+  nothing), a `PING`, `PONG` or `CLOSE`, or a malformed frame ends the host
+  connection**, and with it the process: a service whose SDK breaks the
+  protocol is not trusted with the rest of it. `DATA` already in flight for a
+  request that ended is dropped, within the credit it had.
+
+**How a request ends.** `t` names the operation; the object's other members
+are its arguments. **Every request ends with exactly one `REPLY`** unless the
+connection closes first: `{…}` or, with `ERROR`, `{code, message}` (`message`
+at most 240 bytes, a sentence for the service's log). The host checks, in
+this order: the object's shape (`invalid`), the capability in `requires`
+(`not_required`), the bounds (`busy`), the limits (`too_large`). **A store
+call ends at 30 s** (`timeout`), unless its body is complete, when its commit
+decides the reply; the SDK runs no timer of its own. **`CANCEL` from the
+service** stops the work: a stream of the request still open gets `RESET`
+`cancelled`, and the reply is `ERROR` `cancelled` at once, except for a write
+that has started (§7). A `RESET` from the service on its body or on the value
+it reads ends the request `cancelled` the same way.
+
+A call of a capability this host does not provide (`net.fetch`,
+`net.websocket`, `image.render`, `text.atlas`, `media.open`, `media.seek`,
+`media.close`) is answered `not_required`; any other unknown `t`, `invalid`.
+
+**The host logs each request on one line** (its log, not the service's): the
+service, `t`, the outcome and the time. Never a key or a value.
+
+## 7. `store`
+
+```ts
+type Opt = { signal?: AbortSignal };
+
+interface Store {
+  get(key: string, options?: Opt): Promise<Uint8Array | null>;
+  getText(key: string, options?: Opt): Promise<string | null>;
+  getJson<T = unknown>(key: string, options?: Opt): Promise<T | null>;
+  set(key: string, value: ByteSource, options?: Opt & { bytes?: number }): Promise<void>;
+  setJson(key: string, value: unknown, options?: Opt): Promise<void>;
+  delete(key: string, options?: Opt): Promise<boolean>;        // whether it existed
+  list(options?: Opt & { prefix?: string; after?: string; limit?: number }): Promise<{ keys: string[]; more: boolean }>;
+  usage(options?: Opt): Promise<{ bytes: number; keys: number; maxBytes: number }>;
+}
+type ByteSource = Uint8Array | string | AsyncIterable<Uint8Array>; // an iterable needs `bytes`
+```
+
+**One store per release kind of an id**: a development release's
+(`<id>@dev/`) and, once releases come from the store, the one their releases
+share (`<id>/`). It is kept across installs and removals, deleted only when
+the owner removes the service with `purge`. **A `set` is atomic and durable
+before it resolves**: a reader sees the old value or the new one, never a
+part, and a crash after the resolve keeps the new one. The last `set` of a
+key wins; there is no transaction across keys. A missing key is no error:
+`get` resolves `null`.
+
+| Limit | Value |
+| --- | --- |
+| Key | 1 to **256** bytes of UTF-8, no control character. **A key with a lone surrogate is refused by the SDK** (`invalid`) before it is encoded, since it would encode to the bytes of another key; the host refuses a key that is not valid UTF-8 (`invalid`) |
+| Value | at most **4 MiB** (`too_large`) |
+| Whole store | `maxBytes`: the manifest's `store.maxBytes` of the release installed (default **16 MiB**, at most **256 MiB**). A write that would take `meta.bytes` past it is `quota`, and nothing is written |
+| `list` page | at most **1,000** keys (the default), in byte order of the key |
+| Open | **8** store calls per connection (`busy`) |
+
+| `t` | Arguments | Body (service → host) | Head event, then the response stream (host → service) | Reply |
+| --- | --- | --- | --- | --- |
+| `store.get` | `{key}` | | `store.head` `{bytes}`, then the value; nothing when the key is absent | `{bytes}`, or `{absent:true}` |
+| `store.set` | `{key, bytes}`, with `BODY` | `bytes` bytes | | `{}` once durable |
+| `store.delete` | `{key}` | | | `{existed}` |
+| `store.list` | `{prefix?, after?, limit?}` | | | `{keys, more}` |
+| `store.usage` | `{}` | | | `{bytes, keys, maxBytes}` |
+
+Errors beside §6's: `quota` (the write would pass the limit; nothing was
+written) and `store_format` (below).
+
+**On disk.** The format is kept across upgrades:
+
+| Point | Rule |
+| --- | --- |
+| The file | one SQLite database per store, `store.sqlite` in the store's folder, made by exactly the statements below, in this order. A key is bytes (`/` included), so no key is mapped to a file name |
+| Who writes | **only Hub's process**, through one connection per store guarded by one lock; two processes writing at once are two requests Hub serializes, so the quota is exact |
+| A `set` | the value's whole body is received first; then one transaction replaces the row and updates `meta`, the quota checked inside it against `meta.bytes`; the reply follows the commit, which `synchronous = FULL` makes only once the write-ahead log is synced |
+| The folder | mode 0700, the file 0600; the folder is synced (`fsync`) after the database and its write-ahead log are made |
+| `list` | `after` is the last key returned (exclusive), keys in byte order; `more` says whether a later key exists at that moment; keys added or removed between pages show or not by their order |
+| `CANCEL` | **before the body's last byte**: nothing is written and the reply is `cancelled`; **after it**: the transaction completes and the `set`'s own reply is sent. A `delete` is never cancelled once received |
+| Disk use | `maxBytes` bounds **`meta.bytes`**, the sum of every key's and value's length, not the file: pages and the write-ahead log add to it. Hub keeps both small: `PRAGMA incremental_vacuum` after a commit that leaves more than a quarter of the pages free, `PRAGMA wal_checkpoint(TRUNCATE)` after one that leaves the log over 4 MiB. The control API's `Service.store` shows the file's size beside `bytes` |
+| A limit below the usage | when a release's `maxBytes` is below `meta.bytes`, nothing is deleted: a `set` that would raise `meta.bytes` fails `quota`; a `set` that lowers it or leaves it as it is, and a `delete`, succeed |
+| A newer format | a store whose `user_version` is above **1** was written by a newer Pocket Hub: a store call gets `ERROR` `store_format`, the control API lists the service with `reason: "store_format"` and refuses its owner's start with the error `service`, `reason: "store_format"`. The file is not touched: its header is read before it is opened |
+
+```sql
+PRAGMA auto_vacuum = INCREMENTAL;        -- before any table exists
+PRAGMA journal_mode = WAL;
+BEGIN;
+CREATE TABLE entries (
+  key   BLOB PRIMARY KEY NOT NULL,       -- the key's UTF-8 bytes, 1 to 256
+  value BLOB NOT NULL                    -- at most 4 MiB
+) WITHOUT ROWID;
+CREATE TABLE meta (
+  one   INTEGER PRIMARY KEY CHECK (one = 1),   -- exactly one row
+  bytes INTEGER NOT NULL CHECK (bytes >= 0),   -- sum of length(key) + length(value)
+  keys  INTEGER NOT NULL CHECK (keys >= 0)     -- count of entries
+);
+INSERT INTO meta (one, bytes, keys) VALUES (1, 0, 0);
+PRAGMA user_version = 1;
+COMMIT;
+```
+
+Each connection then sets `PRAGMA synchronous = FULL`. A `set` or `delete`
+changes `entries` and the one `meta` row in one transaction. Values are not
+encrypted beyond the file's mode, and **the service's own process can read
+the file** (it runs with its owner's rights); other users cannot.
