@@ -1,362 +1,262 @@
 # Open questions
 
-Proposal (see `README.md`). Everything the direction leaves undecided, and
-every place where it meets existing code or the specification and does not
-fit as written. Each question has the options found and a recommendation; an
-assumption not listed here is a bug to report against this page. **Conflict**
-marks a place where the accepted direction does not survive contact with the
-code or the specification as it stands.
+Proposal (see `README.md`). What is left open, with options and a
+recommendation each. **Conflict** marks a place where a decision or the
+direction does not fit the code or the specification as it stands.
 
-**Order.** §1 blocks the first implementation steps (`MIGRATION.md` steps 1
-to 3: the rename, the host connection with `store` and the enclosure, `net`);
-§2 blocks a later step; §3 can wait for the step named.
+## Decided
 
-**Changed in this revision** (the owner's four decisions and an independent
-review): the numbers are new again. **Decided and removed**: whether Omarchy
-Pocket and the Tab5 keep `companion.pocket` (no: Omarchy Pocket becomes a
-host, the Tab5 moves to Pocket Link 2); the LAN attacker without the key
-(accepted until link encryption, `TRUST.md` §9); a helper process for
-decoding (no: decoding is performance-first, in the host). **New**: Q2 (who
-implements Omarchy Pocket's host), Q5 (the Linux enclosure), Q6 (sign-in on
-Omarchy Pocket), Q8 and Q9 (the Tab5), Q42 (installs on Omarchy Pocket), Q43
-(Spotify). **Changed recommendations**: Q3 (one answer for all three
-devices: `data.fs` on Omarchy Pocket), Q4 (the control socket closed in this
-work, from step 2), Q11 (firmware without `hash`, the package index), Q12
-(the Public Suffix List), Q13 (where owner-named origins live), Q14 (the
-frame and the pattern dialect), Q15 (`text.atlas` body and `omitted`), Q17
-(sound alone, the media listener), Q18 (which size limit applies), Q19 (a
-development install's own store), Q20 (pins for every id, lost keys), Q22
-(console installs of a release with a service), Q23 (the applet-hosts line
-is for display), Q24 (the enclosure from step 2), Q26 (what remains possible
-without the enclosure), Q29 (vendor tools), Q31 (smaller limits).
+**On 2026-11-17, by the owner:**
 
-## 1. First rank: blocks the first implementation steps
+- **Names**: `service`, `host`, `@pocketjs/service`, `service.channel` and the
+  names derived from them (`README.md` §3). Not decided: the three names that
+  keep "link" (Q1).
+- **Omarchy Pocket's host is Hub's host, factored out** into
+  `crates/pocket-host` and run there as `pocket-hostd`; there is no second
+  implementation (`DEVICES.md` §4).
+- **Consent to an unrestricted service is the owner's own click in Pocket
+  Hub's app** (in the shell on Omarchy Pocket); never the command line, a
+  remote client or a `pocket-hub:` link (`TRUST.md` §2).
+- **A device with no measured enclosure** runs services of the official key
+  unenclosed and does not run a third-party portable service that requires
+  `store`; measuring each device is an implementation step (`DEVICES.md` §6).
+- **`signin` is not a capability.** A release ships a setup guide that a
+  coding agent on the host's machine follows with the owner, outside the
+  host; six capabilities remain (`SETUP.md`).
 
-**Q1. The names of `README.md` §3.** Every row there is a proposal. Two rows
-keep "link": the capability `link.companion`, `globalThis.link` and
-`@pocketjs/framework/link` are the console's link itself (pairing, status,
-catalog, installs), where "link" names the thing and not where an applet's
-code runs. Options: keep them; rename them with the rest.
-*Recommendation*: the proposed column, and keep the three "link" names;
-decide before step 1, since every later diff uses the result.
+**Found answered on `1bc2074`**: this repository is public under
+GPL-3.0-or-later, so the host crate's visibility is settled
+(`DEVICES.md` §4 on Omarchy Pocket's MIT); the Tab5 already speaks Pocket
+Link 2 and pairs by a code it shows, so the earlier questions about its
+pairing and its move to version 2 are gone.
 
-**Q2. Who implements the host on Omarchy Pocket.** (A) Hub's host parts
-factored into `crates/pocket-host`, which `pocket-hubd` embeds and Omarchy
-Pocket runs as `pocket-hostd` on Linux aarch64; (B) omarchy-pocketd
-implements the contract again in TypeScript. Costs in `DEVICES.md` §4: (A)
-needs a Linux enclosure, portable capability implementations (pure-Rust image
-decoders, PocketJS's Rust text engine, media per platform) and Linux CI;
-(B) is a second implementation of every rule, kept equal by tests.
-*Recommendation*: **(A)**, as a separate process from omarchy-pocket-host;
-it decides how steps 2 to 4 are written (the host parts land in a crate of
-their own from step 2).
+**Earlier, on 2026-11-12**: Omarchy Pocket becomes a host and every device
+takes the new path; the control socket is closed in this work; the LAN
+attacker without the key is accepted until link encryption; decoding is
+performance-first.
 
-**Q3. Where an applet without a service keeps its state.** The direction
-gives `store` to services only; GitHub's token and Weather's places belong to
-applets without one. The 3DS and the Tab5 provide `data.fs`; Omarchy
-Pocket's host contract does not. Options: (a) **Omarchy Pocket gains
-`data.fs`** and every device keeps the state there; (b) a framework form of
-`store` over the system channel (the state then lives with the host: on the
-Mac for a 3DS, which a device paired with another Mac does not see); (c) a
-small service for each such applet. *Recommendation*: **(a)**. Cost: the
-Omarchy host program implements `contracts/spec/fs.ts` (it can compile
-PocketJS's `engine/host-services/fs.c`), and on the 3DS a token lies on the SD
-card in plain text (it crosses Hub in every request header anyway).
-`DEVICES.md` §7.
+## 1. First rank
 
-**Q4. Closing the control socket's exposure. Conflict** (today any daemon can
-call every control method, `README.md`'s rule "a daemon gets no device
-operation" notwithstanding). Proposed, in this work and before the first
-capability that holds anything (`TRUST.md` §2):
-- (a) **the OS enclosure for portable services from step 2**, the step in
-  which `store` first exists: a sandboxed service cannot reach `hubd.sock`,
-  files or the network;
-- (b) **in `pocket-hubd`, on each accept, the peer's process**
-  (`LOCAL_PEERPID` on macOS, `SO_PEERCRED` on Linux): a control connection
-  from a process Hub started as a service, or from one of its descendants,
-  is refused; and **the privileged methods** (finishing a sign-in, consent
-  to an unrestricted release, installing a development release) are taken
-  only from a client Hub identifies as its own app (on macOS, the peer's code
-  signature matches `hubd`'s own; on Linux, an executable owned by root in
-  the host's installed path), **never from a `remote` client**;
-- (c) a development release has its own store.
+**Q1. Can "link" leave the JavaScript surface?** `@pocketjs/framework/link`,
+`globalThis.link` and the capability `link.companion` bundle four concerns:
 
-What remains, said plainly: without (a), a determined process of the owner's
-user can read every store (files of that user) and call the unprivileged
-methods; (b) does not stop a process that controls the app itself (a
-debugger on an app without the hardened runtime). **A native service is
-unsandboxed by definition**: it can detach from Hub's process tree, read
-every store and drive the control API's unprivileged methods; that is what
-its disclosure says. *Recommendation*: (a), (b) and (c) as written.
+| Concern | Exports today | Who uses it |
+| --- | --- | --- |
+| a wall clock to trust | `companionNow()`, `linkStatus().clock` | **applets, and only this**: `lib/net.ts` and `kit/platform.tsx` re-export it; `hn/app.tsx`, `weather/model.ts`, `x/app.tsx`, `podcasts/views.tsx`, `spotify/model.ts`, `spotify/signin.tsx` call it |
+| the applet catalog, install, remove | `requestCatalog`, `installApp`, `removeApp`, `onLinkEvent` (catalog and install events), `LinkCatalogApp` | the launcher (pocket-shell `shells/3ds/shell/system.ts`, `store.tsx`) for the 3DS and the Tab5; **Omarchy Pocket's Store applet does the same through another API** (`companion.pocket/appstore`) |
+| whether the service host is reachable, its name | `linkStatus().state`, `.companion`, `.features`, `linkHost()` | the launcher (`system.ts`, `pages.tsx`); the applets' "not linked" words (`ui/companion.ts`) |
+| pairing with a computer | `pairCompanion`, `forgetCompanion`, `isPairingUri`, and the Tab5's `pairOpen`, `pairAsk`, `pairClose` (link §3.11), `linkStatus().paired`, `.pairing`, `.device` | the launcher (`system.ts`, `scanner.tsx`) |
 
-**Q5. The enclosure on Linux.** On Omarchy Pocket: bubblewrap where
-unprivileged user namespaces are allowed, Landlock and seccomp where not; on
-the AYN Thor, where the root runs under proot, neither is measured
-(`DEVICES.md` §6). Options there: (a) do not run portable services that
-require `store` or `signin` until a mechanism is measured; (b) run them
-unenclosed with a notice; (c) seccomp alone. *Recommendation*: measure on the
-RG DS Plus and the uConsole before step 2 ships there, and (a) on the Thor:
-(b) would be the fallback the owner's rules forbid.
+Three of the four hold on a device with no link. **Proposed split**:
 
-**Q6. `signin` on Omarchy Pocket. Conflict.** The direction lists `signin` for
-every host, and the device has no web view (its shell is a PocketJS program
-on GBM/EGL; Omarchy's desktop session is not installed). `form` can be drawn
-by the shell; `web` cannot today. Options: (a) a WPE WebKit view on EGL in
-the shell (untried on the Mali-G52); (b) the host provides `form` alone, and
-a service that needs `web` (X) states it, so its manifest can be refused
-there (`requires` would name `signin.web` and `signin.form` apart); (c) sign
-in on a Mac and copy the session, as owners do today (`docs/omarchy-pocket.md`
-"Companion services"). *Recommendation*: (b) now, with the two names, so a
-host can provide one; try (a) before X's release on Omarchy Pocket.
+| Concern | Module, host namespace, capability | 3DS | Tab5 | Omarchy Pocket |
+| --- | --- | --- | --- | --- |
+| clock | `wallClock()` in `@pocketjs/framework/clock` → `{utc, offsetMinutes, source}`; no capability (every runtime has a best source) | the paired Hub's clock (`ready.clock`) | Hub's, or SNTP | the system clock |
+| catalog | `@pocketjs/framework/apps`, `globalThis.apps`, capability `system.apps` (launchers only) | the link's `catalog` and `install` (§6.4) | the same | its service host over the local connection, with the same two groups (link §7.11) |
+| service host | `serviceHost()` in `@pocketjs/framework/service` → `{state, local, name}`; comes with `service.channel` | the link's state, Hub's name | the same | `local: true` while `pocket-hostd` runs |
+| pairing | `@pocketjs/framework/pairing`, `globalThis.pairing`, capability `system.pairing` (launchers only): `paired()`, `forget(id)`, and **the device-initiated way** `open()`, `ask(hub)`, `close()`, `state()` | list and forget (Hub pairs it over ftpd or the card, outside the link) | list, forget, and the code of §3.11 | **not provided** |
 
-**Q7. Where the device states what it takes. Conflict.** `channel.open`
-carries `{app, hash}` and nothing about the device, and a host cannot know
-from a model name whether a 3DS has the H.264 decoder or whether its sound
-starts. Options: (a) an `EVENT device.accepts` per connection (link §7.9);
+Pairing by a code (§3.11) is the one part that is the device's own act, and it
+is the strongest reason for a `pairing` module of its own: it has a state
+(the code, its time, its tries, the Hubs heard) that the other three concerns
+never need.
+
+**What stays "link"**: the protocol's name and its page, `contracts/spec/link2.ts`,
+the C client (`engine/host-services/link2*.c`, `products/3ds/src/link2_host.c`),
+the labels of §3.5 (`pocket-link/2/…`), the pairing folder on a card
+(`link/companions/`). None is seen by an applet's author or an owner.
+Version 1's `globalThis.link` stays for programs on version 1.
+
+**Blast radius**: PocketJS `framework/src/link.ts` (split into `apps.ts`,
+`pairing.ts`; `clock.ts` and `service.ts` gain one export each),
+`contracts/spec/link.ts` (version 2's types move to `apps.ts` and
+`pairing.ts`), `engine/host-services/link2_guest.{c,h}` (two namespaces and
+the clock), `products/3ds/src/qjs.c`, `contracts/spec/{platform-types,applet}.ts`
+(`link.companion` becomes `system.apps` and `system.pairing`; the applet
+module list drops `link`), `tools/applet-check.ts`, `hosts/3ds-dev/pocket.host.json`,
+`docs/APPLETS.md`, `docs/POCKET-LINK.md` §7.10; pocket-shell
+`shells/3ds/shell/{system.ts,store.tsx,pages.tsx,scanner.tsx}`; pocket-m5
+`components/pocket_system/src/qjs.c` (its `pairOpen`, `pairAsk`, `pairClose`)
+and `pocket.host.json`; omarchy-pocket `host/pocket.host.json` and the Store
+applet; applets `lib/net.ts`, `kit/platform.tsx`, the six callers above,
+`appstore/`, `ui/companion.ts`.
+
+*Recommendation*: **split**, with these names. Omarchy Pocket's Store applet
+and pocket-shell then share one catalog API, an applet asks for a clock
+without naming a transport, and the one transport-specific piece says what it
+is. Not decided.
+
+**Q2. Two meanings of "host".** PocketJS uses "host" for the device's native
+runtime: the host contract (`hosts/3ds-dev/pocket.host.json`), `hostAbi` in
+`hello`, the host namespace (`globalThis.link.channel`), "the host hands the
+guest…" throughout link §7.3. This proposal uses it for what runs services,
+and `docs/OFFLOAD.md` calls that role a "provider". **Proposed**: `host` stays
+the SDK's identifier (`host.net`, `host.store`), where a service has no other
+host to confuse it with; in PocketJS's specification and code "host" alone
+keeps the runtime's meaning and the other side is written **"service host"**
+(applied in link §7.9 to §7.11); in these pages "host" is the service host
+and the device's program is its "runtime", with "host contract" and "host
+namespace" written in full. **Where these pages were ambiguous** before this
+revision: `README.md`'s naming row "the guest's host namespace";
+`DEVICES.md`'s "Host contract" rows and "its host contract states raster
+density 1"; `CAPABILITIES.md` §11's "host contract" for a worker's limits;
+`WALKTHROUGH.md` "Needs Bun on its host"; link §7.9 and §7.11 as first
+drafted ("the host keeps no table of models", "A host on the device"). Each
+now says which. *Recommendation*: as proposed.
+
+**Q3. The setup guide's risk rule.** A guide is instructions an agent follows
+with the owner's rights, as powerful as `native` (`SETUP.md` §4). Options:
+(a) treat a guide from a non-official key as `native`: the store's editor
+reads it, the install sheet names it and the publisher, and the owner's click
+is required; (b) disclose it on the install sheet and nothing more; (c) allow
+guides from the official key alone. *Recommendation*: (a).
+
+**Q4. Granting a private origin is consent-class.** `services.grantOrigin`
+widens what an enclosed service can reach (a Home Assistant at
+`http://192.168.1.20:8123`); the agent asks with `services.requestOrigin`, and
+the owner clicks in the app (`SETUP.md` §3). Options: consent-class, as
+proposed; any non-service client, like `services.setup`. *Recommendation*:
+consent-class. Not ruled on.
+
+**Q5. The control socket's other privileged methods.** Consent is decided.
+Still proposed (`TRUST.md` §2): the peer check refusing services and their
+descendants; `services.install` of a development release from identified
+clients only; `pairing.answer` (which gives a device a link key) is open to
+any local client today and could join the identified class. *Recommendation*:
+the peer check and identified development installs; leave `pairing.answer`
+open, since the owner types the code the device shows.
+
+**Q6. Where the device states what it takes.** `channel.open` says nothing
+about the device, and only the device knows whether a 3DS has the H.264
+decoder. Options: (a) `EVENT device.accepts` per connection (link §7.9);
 (b) the same object in every `channel.open`; (c) a table of targets in the
-host. *Recommendation*: (a). (c) puts device knowledge in the wrong place.
+host. *Recommendation*: (a).
 
-**Q8. Who applies `applet.hosts` on the Tab5.** Its worker's HTTP goes
-through the firmware's own stack, which Hub never sees. Options: (a) the
-firmware applies `applet.hosts` and link §6.5's destination policy in its
-HTTP node, reading the hosts from the package it runs; (b) the Tab5 sends
-its HTTP over the link as the 3DS does (`net.http`), so Hub applies them,
-at the cost of every request crossing the Mac. *Recommendation*: (a); the
-policy is a PocketJS rule each host applies where the request is performed.
+**Q7. Versions, and what an existing home meets.** Pocket Hub 0.2.1 is
+released, so homes with `<home>/daemons/`, `<home>/daemon-data/` and
+`daemon.sock` exist, and a resident core of that version may be running when
+a newer app starts. Proposed (`MIGRATION.md` §3): `protocol` 2 for both the
+control API and the local protocol; the first core of step 1 moves
+`daemons/` and `daemon-data/` to their new names once, logged; from step 2 a
+package installed under the old manifest is listed `failed` ("installed by an
+earlier Pocket Hub; install it again") and kept until the owner removes it; a
+newer app that meets an older core (refused at `hub.hello`) asks it to shut
+down with the old protocol's `hub.shutdown` and starts its own. *Recommendation*:
+as proposed.
 
-**Q9. The Tab5's pairing and first install.** It has no ftpd; its firmware is
-flashed with `idf.py` today. Options for the pairing: (a) Hub's card setup
-(`setup.card`), since the Tab5 keeps `data.fs` on a microSD card; (b) over
-USB. For the first install: (c) a `tab5` installer in Hub's setup that flashes
-a pocket-m5 release over USB through the ESP32-P4's ROM bootloader; for
-updates afterwards, (d) an OTA path in the firmware for
-`runtime.native.install` or (e) USB again. *Recommendation*: (a), (c) and (d),
-designed in pocket-m5 and `crates/hub-setup` (`DEVICES.md` §8).
+**Q8. `data.fs` on Omarchy Pocket**, so an applet without a service keeps its
+state the same way on all three devices (`DEVICES.md` §7). *Recommendation*:
+yes.
 
-**Q10. Protocol versions.** The local protocol's `protocol` becomes 2 with the
-renamed handshake (`HOST-PROTOCOL.md` §3). The control API's methods are
-renamed too: with `hub.hello` at protocol 1, a client from before the rename
-gets "method not found" instead of a refusal that says why.
-*Recommendation*: both at 2 in step 1; an older client is refused at
-`hub.hello` with `-32602` and a sentence.
+**Q9. The setup inlet.** `services.setup` is open to any client that is not a
+service (`SETUP.md` §2): the agent works through the command line. So any
+program of the owner's user can hand a service a session of its choosing (X
+signed in to another account). Options: as proposed (a same-user program can
+already read the stores); make it consent-class (the agent's flow then stops
+for a click). *Recommendation*: as proposed.
+
+**Q10. Who applies `applet.hosts` on the Tab5.** Its worker's HTTP goes
+through its own stack. Options: (a) the firmware applies `applet.hosts` and
+the destination policy in its HTTP node; (b) it sends every request to Hub as
+`net.http`. *Recommendation*: (a).
 
 ## 2. Second rank: blocks a later step
 
-**Q11. How Hub applies an applet's hosts to `net.http`. Conflict.** Blocks
-step 7. Hub's per-applet seam (`AppPolicy` in `crates/hub-net`) allows every
-public destination today; to apply `applet.hosts` Hub must know the package,
-and `net.http` carries `app` but not `hash`.
-- Add `hash` to `net.http` (link §6.5 as proposed).
-- **The index**: Hub keeps `<home>/packages.json`, `(app, footer hash) →
-  {version, hosts, source}`, written when it pushes a package
-  (`devices.push`, `store.install`, a console's `install`) or verifies one in
-  its store cache; it survives restarts. The host on Omarchy Pocket keeps the
-  same for the packages it installs.
-- **A package not in the index**: (i) refuse with a sentence saying to install
-  the applet from this Mac; (ii) every public destination, as today.
-- **A request without `hash`** (a 3DS program from before the change): (iii)
-  refuse with "Update the 3DS's software in Pocket Hub"; (iv) treat it as (ii).
+**Q11. `applet.hosts` for `net.http` on Hub.** Add `hash` to `net.http` (link
+§6.5 as proposed); Hub keeps `<home>/packages.json`, `(app, footer hash) →
+{version, hosts, source}`, written when it pushes or installs a package or
+verifies one in its cache. A package not in it is refused with a sentence
+saying to install the applet from this Mac; a request without `hash` (an
+older 3DS program) with one saying to update the 3DS's software. Options
+(ii) and (iv) of the earlier revision (every public destination) are the
+fallback the owner's rules forbid. *Recommendation*: as proposed.
 
-*Recommendation*: `hash` with (i) and (iii); (ii) and (iv) are the fallback
-the owner's rules forbid.
+**Q12. Host lists that cannot be written in advance.** Suffix wildcards
+`*.name`, refused when `name` is a public suffix (Public Suffix List, private
+section included); an entry for any public host, shown as "Can reach any
+website", for Podcasts if the owner wants it; private addresses only by Q4.
+*Recommendation*: wildcards now; decide "any host" with Podcasts.
 
-**Q12. Host lists that cannot be written down in advance. Conflict.** YouTube's
-media addresses are per-server names under `googlevideo.com`; Podcasts
-fetches from wherever each podcast lives; Home Assistant talks to the owner's
-own instance. Options: (a) suffix wildcards `*.name`, **refused when `name` is
-a public suffix of the Public Suffix List, its private section included**
-(`*.co.uk`, `*.github.io`, `*.workers.dev`); (b) an entry meaning any public
-host, shown as "Can reach any website"; (c) owner-named origins (Q13); (d)
-make these services `native`. *Recommendation*: (a) and (c); for Podcasts,
-(b) with its disclosure if the owner wants (b) at all. Hosts and the store
-carry a dated copy of the list.
+**Q13. Text.** `text.atlas` takes its codepoints as a body and returns
+`omitted`; `channel.text` for services is named and not implemented until a
+service needs it. *Recommendation*: as written.
 
-**Q13. Owner-named origins.** A `signin.form` field of kind `origin` adds the
-origin the owner typed to the service's destinations. Proposed: kept by the
-host (`<home>/services/<id>/origins.json` on Hub), never in the service's
-store; a scheme, a host (name or address literal) and a port, so
-`http://192.168.1.20:8123` is expressible; **private addresses allowed for
-it, loopback, link-local (169.254.0.0/16, fe80::/10), unspecified and
-multicast never**; a name is pinned to the addresses it resolved to when
-saved and checked again at each connect, so DNS rebinding to 127.0.0.1 is
-refused; listed for the owner to remove, and removed with the service's data.
-*Recommendation*: as proposed; meaningful only with Q4(b) (the form's values
-must come from the host's own app).
+**Q14. When the system channel opens, and the glyph capability.** Before boot
+when the plan has `image.url`, `text.glyphs.deferred` or `media.url`; a new id
+`text.glyphs.deferred` rather than `text.glyphs.streamed` or
+`text.glyphs.runtime`. *Recommendation*: as written.
 
-**Q14. `signin.form`, and the frame of every sign-in.** The service writes
-`title`, `help`, `label` and `link`, so it could ask for "your Mac password".
-Proposed: the host frames every window and form with the applet's name, icon
-and publisher ("Development" for a development install) and, under a secret
-field, "This goes to X, not to Pocket Hub or macOS"; `link.url` and `web.url`
-are `https:` only; `pattern` uses the Rust `regex` crate's syntax (no
-backreferences or lookaround, linear time), checked by the host's core, not
-by the app. When no copy of the app is running, a sign-in fails with
-`unavailable`; the host does not start the app. *Recommendation*: as proposed.
+**Q15. Media.** AVFoundation and VideoToolbox on a Mac (one slice per frame
+not verified), ffmpeg on Linux; `video: false` and `durationMs` for Podcasts;
+sound and picture apart (format 18 for the pilot); the side connection's
+listener on a port the OS assigns, a failed bind stopping the start; no
+pass-through form. *Recommendation*: as written.
 
-**Q15. Text.** `text.atlas` sends its codepoints as a request body (up to
-4,096, which do not fit LINK_APP_MSG) and returns `omitted` for those that
-did not fit the atlas. `channel.text` for services stays among the seven
-names and is not implemented until a service needs it; a release that
-requires it is refused at install until then. The other PocketJS text
-contracts over `io.offload` move later, unchanged in name and object.
+**Q16. Two releases at once, and the store's size.** One process per release
+sharing the id's store, whose limit is the newest release's; a release that
+raises it says so in its update's text. *Recommendation*: as written.
+
+**Q17. A development install** serves every hash of its id, takes precedence
+while installed, has its own store, and receives `services.setup` with
+`release: "dev"`. *Recommendation*: as written.
+
+**Q18. Key pins and lost keys.** Pins for every id; a rotation statement
+signed by the old key; removal for a lost key. *Recommendation*: as written.
+
+**Q19. The store release's form**: bundled, no install at the host.
 *Recommendation*: as written.
 
-**Q16. When the device opens the system channel, and the glyph capability.**
-(a) before boot when the plan has `image.url`, `text.glyphs.deferred` or
-`media.url`; (b) at the framework's first use. And (c) a new id
-`text.glyphs.deferred`; (d) give `text.glyphs.streamed` (a font archive's
-cells over `io.offload`) this meaning; (e) serve `text.glyphs.runtime` (the
-host extends atlases as text renders, no state the applet sees).
-*Recommendation*: (a) and (c).
+**Q20. Installs from a console.** A release with a service installed from a
+device's store page gets its service first; an unrestricted one is held until
+the owner allows it in the app, `channel.open` answering `consent` meanwhile,
+with a catalog row field marking such applets. *Recommendation*: as written.
 
-**Q17. Media.** The transcoder per platform (a Mac: AVFoundation and
-VideoToolbox, whose one-slice-per-frame output is not verified, or ffmpeg;
-Linux: ffmpeg); sound alone (`video: false`) and a `durationMs` hint, for
-Podcasts (proposed); inputs with sound and picture apart (most YouTube
-formats above 360p: not covered with the `feed` dropped; options: a second
-input to `media.open`, format 18 only); **the side connection's listener**:
-bound at the host's start on a port the OS assigns, carried in the source, so
-no fixed port conflicts; a bind that fails stops the start with one line; it
-serves TCP only, so a device on another carrier states no `media`; a
-pass-through form for a device that plays the source itself is not proposed.
-*Recommendation*: AVFoundation and VideoToolbox on a Mac, measured first;
-format 18 for the YouTube pilot; the listener as proposed.
+**Q21. The second signature** keeps the first for Omarchy Pocket's current
+devices and adds the service package's hash, `requires`, both host lists and
+whether a setup guide is present. *Recommendation*: as written; the store's
+owner decides the prefix.
 
-**Q18. Two releases at once, and the store's size.** (a) one process per
-release, sharing the id's store (proposed); (b) one release at a time. The
-store's limit is the newest installed release's `store.maxBytes`. **A release
-that raises it**: (c) silently; (d) shown in the update's text ("Keeps up to
-64 MB on this Mac"). *Recommendation*: (a) and (d).
+**Q22. The macOS enclosure**: `sandbox-exec` (measured, deprecated), with an
+embedded JavaScript engine as its planned replacement. *Recommendation*: as
+written.
 
-**Q19. A development install.** Serves every hash of its id, takes
-precedence over store releases while installed, and **has a store of its
-own** (`<id>@dev`), so one under X's id cannot read X's session; installing
-it is a privileged method (Q4). *Recommendation*: as proposed.
+**Q23. The source check's allowed globals** (`crypto.subtle`,
+`structuredClone`, `console`). *Recommendation*: as written.
 
-**Q20. Key pins and lost keys.** The host pins the key of the first signed
-release it installs **for every id, with or without a service**. Open: a
-publisher who loses or rotates a key. Options: the pin blocks until the owner
-removes the applet; a rotation statement signed by the old key naming the
-new; the official key countersigns a rotation. *Recommendation*: the rotation
-statement, removal for a lost key.
+**Q24. What a same-user program can still do** with the enclosure in place:
+read the stores, call unprivileged control methods, call `services.setup`.
+Listed so the enclosure is not read as covering more than services.
 
-**Q21. The store release's package form.** (a) bundled, no install at the
-host; (b) a lockfile with `bun install --frozen-lockfile --ignore-scripts`.
-*Recommendation*: (a).
+**Q25. The guest's hand-over budget with two channels. Conflict.** Link §7.3's
+budgets are each channel's in the C client. *Recommendation*: one budget per
+guest, in the specification change.
 
-**Q22. Installs from a console.** (1) A release with a service installed from
-the console's store page (link §6.4): Hub installs the service before it
-streams the applet, as `store.install` does. (2) An unrestricted one: no
-window on the Mac at that moment. Options: (a) install, hold the service
-until the owner allows it in Pocket Hub, and refuse `channel.open` with
-`consent` meanwhile; (b) refuse the install with a sentence; (c) a catalog
-row field so the console's store page marks such applets. *Recommendation*:
-(1); (a) with (c).
+**Q26. Secrets in the store**: files of mode 0600 now; the Keychain or the
+Secret Service later.
 
-**Q23. The second signature.** Releases with a service keep `signature`
-(version 1) and add `signature2`, so Omarchy Pocket's devices keep verifying
-until their host checks the second. The applet package's SHA-256 already
-covers its manifest and `applet.hosts`; the second message's applet-hosts
-line is for showing them before a download, and the host checks it against
-the package. *Recommendation*: as proposed; the store's owner decides the
-prefix.
+**Q27. A native service's files and vendor tools.** `host.native.files`;
+`docs/APPLETS.md`'s vendor tool (terms, SHA-256 pin, refresh) named in the
+manifest and kept by a `host.native.tool` call. *Recommendation*: before
+YouTube or Spotify is released.
 
-**Q24. The enclosure on macOS, and its place.** `sandbox-exec` (measured,
-deprecated), App Sandbox (not tried), an embedded JavaScript engine with no
-host interface. **From step 2**, the first step with a capability.
-*Recommendation*: `sandbox-exec` from step 2; the embedded engine as its
-planned replacement, which also fits a weak device that hosts services.
+**Q28. YouTube's manifest**: `["image", "media", "native"]`.
 
-**Q25. The source check.** Where it runs and its list of allowed globals are
-part of the portability contract. Open: `crypto.subtle` and `structuredClone`
-in the list; `console` or `host.log` only. *Recommendation*: the list as
-written; every host runs it at install.
-
-**Q26. What a same-user process can still do.** With Q4 in place: a native
-service or any other program of the owner's user can read every store (files
-of that user), call the control API's unprivileged methods (devices
-included), and attach to the app if its hardened runtime allows. Listed so
-that nobody reads the enclosure as covering more than services.
-
-**Q27. The guest's hand-over budget with two channels. Conflict.** Link §7.3's
-per-frame budgets are each channel's in the C client today; with two
-channels a frame could take twice as much. *Recommendation*: one budget per
-guest, shared in turn, in the specification change.
-
-**Q28. Secrets in the store.** Files of mode 0600 in the host's 0700 folder.
-Options: as proposed; the macOS Keychain or the Secret Service on Linux.
-*Recommendation*: as proposed now.
-
-**Q29. A native service's files and vendor tools.** Proposed:
-`host.native.files`, a 0700 folder. `docs/APPLETS.md`'s **Vendor tool** (the
-owner consents to the vendor's terms; a SHA-256 pin; a refresh schedule)
-would otherwise become the service's own business. Options: leave it there; a
-`host.native.tool({url, sha256, terms})` call that shows the vendor's terms
-in the host's frame and keeps the tool; the tool named in the manifest for
-the store's editor. *Recommendation*: the manifest entry and the host call,
-before YouTube or Spotify is released.
-
-**Q30. YouTube's manifest.** The direction writes `["media", "native"]`;
-thumbnails need `image` too. *Recommendation*: `["image", "media", "native"]`.
-
-**Q31. Limits sized to the applets**: `net` body 256 KiB, response 4 MiB
-(1 MiB default), WebSocket message 64 KiB sent and 1 MiB received, URL
-16 KiB; store value 4 MiB, 16 MiB per store by default, 256 MiB at most;
-image source 16 MiB and 50 megapixels; atlas 4,096 glyphs and 1 MiB; media
-paused 10 minutes; host connection payload 65,536. None measured.
-*Recommendation*: keep them until a pilot meets one.
+**Q29. Limits sized to the applets**, none measured (`CAPABILITIES.md`).
 
 ## 3. Can wait for the step named
 
-**Q32. `applet.services` and the store's `services` member** (step 9). Removed
-from the applet contract; an applet declares `service.channel` exactly when
-its release has a service; `APPLET_MODULES` admits the service, image and
-glyph modules (it lists no channel module today).
-
-**Q33. How GitHub signs in without a service** (step 6): its device flow from
-the worker (an OAuth app registered by Pocket Nexus), rather than a token
-typed on a console.
-
-**Q34. Discord's gateway and the idle stop.** A service stops 30 s after its
-last channel closes, its WebSocket with it. *Recommendation*: as is.
-
-**Q35. Maps' `/locate`.** No capability gives a position. *Recommendation*:
-IP geolocation through `net`; an eighth capability needs the owner.
-
-**Q36. The SDK examples** (step 2). `sample` uses `Bun.hash.crc32`,
-`link-channel` starts `Bun.serve`. *Recommendation*: rewrite `sample`; move
-the HTTP fixture into the test harness.
-
-**Q37. New `channel.open` refusals**: `no_service`, `capability` (with
-`missing`), `consent`. An older C client takes any as "not during this applet
-run". *Recommendation*: all three.
-
-**Q38. A host on a weak device** (later than Omarchy Pocket): how a device
-chooses between its own host and a remote one (its own when it provides
-every capability the release requires), and how it learns `requires` before
-it opens (the signed catalog members). Nothing in the wire or the SDK names
-Hub.
-
-**Q39. The role name `companion`** in the link's fields stays.
-
-**Q40. Error words for the owner**, in English and Simplified Chinese, as
-each control API kind lands.
-
-**Q41. Program releases for the pin move** (step 5). The specification's
-implementation reaches a 3DS through a release of its program; a console on
-an older program keeps one channel (no system channel, no `device.accepts`)
-and Pocket Hub offers the update. The Tab5 has no version-2 firmware at all
-until pocket-m5 builds one. *Recommendation*: move the pin with a 3DS program
-release.
-
-**Q42. Installs on Omarchy Pocket** (step 8). The Store applet installs
-packages through omarchy-pocketd's `appstore` service today. Under Q2(A) the
-host on the device installs releases (applet and service, the checks of
-`TRUST.md` §7), and the Store applet becomes a client of it, with the native
-disclosure in the shell. *Recommendation*: as described, the store client
-factored with the host.
-
-**Q43. Spotify on Omarchy Pocket** (step 10). Its service runs a Rust program
-(`omarchy-pocket-spotify`) that plays through PipeWire: an unrestricted
-service there, with a vendor tool (Soloist) under Q29. *Recommendation*: port
-it after YouTube.
+**Q30. `applet.services` and the store's `services` member** leave with
+step 9. **Q31.** GitHub signs in by its device flow. **Q32.** Discord's gateway
+stops with its service. **Q33.** Maps' `/locate` by IP geolocation through
+`net`. **Q34.** The SDK examples rewritten without Bun's interfaces.
+**Q35.** `channel.open` refusals `no_service`, `capability` (with `missing`),
+`consent`; an older C client takes each as "not during this applet run".
+**Q36.** A service host on a weak device: chooses its own host when it provides
+every capability a release requires. **Q37.** The role name `companion` in
+the link's fields stays. **Q38.** Owner-facing words for each new control API
+kind, in English and Simplified Chinese. **Q39.** The pin move ships with a
+3DS program release. **Q40.** Omarchy Pocket's Store applet becomes a client
+of its service host (and of `system.apps` under Q1). **Q41.** Spotify becomes
+an unrestricted service on Omarchy Pocket. **Q42.** Whether Hub ever installs
+a Tab5's software (`Device.supports` has no `program` today), which decides how
+a Tab5 gets the firmware with channels.

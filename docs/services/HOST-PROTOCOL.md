@@ -111,7 +111,8 @@ frame types of L§4.2 and L§4.3, no `APP` flag and no channel id, `REQUEST` wit
 | Rule | Value | Reason |
 | --- | --- | --- |
 | Payload limit | **65,536** bytes; one JSON object fits one frame | a request names a URL of up to 16 KiB and headers of up to 16 KiB (`CAPABILITIES.md` §4); the device's 16 KiB comes from its memory, not from a Unix socket |
-| Ids of the service's requests | **`1`–`0x7fffffff`**, from one counter per connection, never reused on it | the service is the requester here, as a device is on the link; the host sends no request in this version |
+| Ids of the service's requests | **`1`–`0x7fffffff`**, from one counter per connection, never reused on it | the service is the requester here, as a device is on the link |
+| Ids of the host's requests | **`0x80000001`–`0xffffffff`**: the host sends one kind, `setup` (§6) | |
 | The host's standalone events | id **0** | |
 | Open requests of the service | at most **64** on the connection, and each capability's bound (`CAPABILITIES.md`); one more is answered `busy` at once | |
 | Streams | at most one per request in each direction: the request's body toward the host, the response toward the service | |
@@ -136,9 +137,8 @@ direction.
 ## 6. The requests
 
 `t` names the operation; the object's other members are its arguments.
-**There is no stall timer on this connection, on either side** (§7): a
-progress event here tells the SDK what a long call is waiting for
-(`signin.wait`), and nothing times out for want of one.
+**There is no stall timer on this connection, on either side** (§7); no
+request here sends progress events.
 
 | `t` | Arguments | Body (service → host) | Head event, then the response stream (host → service) | Reply |
 | --- | --- | --- | --- | --- |
@@ -149,13 +149,18 @@ progress event here tells the SDK what a long call is waiting for
 | `store.delete` | `{key}` | | | `{existed}` |
 | `store.list` | `{prefix?, after?, limit?}` | | | `{keys, more}` |
 | `store.usage` | `{}` | | | `{bytes, keys, maxBytes}` |
-| `signin.web` | `{title, url, until, timeoutMs}` | | progress `signin.wait` `{}` while the window is open | `{cookies}` or `{url}` |
-| `signin.form` | `{title, help?, link?, fields, timeoutMs}` | | progress `signin.wait` `{}` | `{values}` |
 | `image.render` | `{channel, url, headers?, width, height, fit?, round?, background?}` | | `image.head` `{width, height, contentWidth, contentHeight, format, bytes}`, then the IMG entry | `{bytes}` |
 | `text.atlas` (for services once one needs it, `CAPABILITIES.md` §8) | `{channel, px, bold?, bytes}` | the codepoints as UTF-8, at most 16 KiB | `text.head` `{bytes, glyphs, missing, omitted}`, then the atlas | `{bytes}` |
 | `media.open` | `{channel, url, headers?, at?, video?, durationMs?}` | | | `{session, source:{host, port, token}, codec, width, height, fps, durationMs, audio}` |
 | `media.seek` | `{session, at}` | | | as `media.open`, with a new `source` |
 | `media.close` | `{session}` | | | `{}` |
+
+**The one request the host sends**: `REQUEST` **`setup`**, host to service,
+`{"t":"setup","message":<the agent's JSON object, at most 32 KiB>}`, when an
+agent calls `services.setup` (`SETUP.md` §2). The SDK calls `Service.setup`
+and replies with its return value, or `ERROR` `unknown_setup` /
+`invalid_setup`; a service without a handler is answered `unknown_setup` by
+the SDK. The host waits 30 s for the reply.
 
 | Event | Direction | Object |
 | --- | --- | --- |
@@ -180,14 +185,13 @@ Every request is attributed to the process, its release and its applet id
 (§8). Before it does anything the host checks, in order: the object's shape
 (`invalid`), the capability in the manifest's `requires` (`not_required`),
 the `channel` (`closed`), the bound (`busy`), the destination against the
-manifest's `hosts`, the owner-named origins and the destination policy
+manifest's `hosts`, the origins granted to the service and the destination policy
 (`denied`), the limits (`too_large`), the device's statement for a channel
 capability (`not_accepted`). The checks and the codes are `CAPABILITIES.md`'s.
 
 - **Every request ends with exactly one `REPLY`** unless the connection
   closes first. The host ends a request at its capability's own time limit
-  (`net.fetch`'s `timeoutMs`, a sign-in's 15 minutes), at 30 s for a store
-  call, and **never for a request that lasts until it is closed**: a
+  (`net.fetch`'s `timeoutMs`), at 30 s for a store call, and **never for a request that lasts until it is closed**: a
   WebSocket ends when either side closes it. The SDK runs no timer of its
   own, as for a daemon's channel requests today (D§5). The 30 s stall of
   L§5.5 belongs to the channel between the service and its applet, which a
@@ -215,7 +219,8 @@ The layout is the host's; a service sees none of it. On each host:
 | one installed release's package | `<home>/services/<id>/<release>/` | `~/.local/share/omarchy-pocket/host/services/<id>/<release>/` |
 | the installed releases | `<home>/services/<id>/releases.json` | the same, under the host's folder |
 | the pinned publisher key (`TRUST.md` §7) | `<home>/services/<id>/owner.json` | the same |
-| owner-named origins (`CAPABILITIES.md` §6) | `<home>/services/<id>/origins.json` | the same |
+| granted origins (`SETUP.md` §3) | `<home>/services/<id>/origins.json` | the same |
+| a release's setup guide, read-only (`SETUP.md` §1) | `<home>/services/<id>/<release>/setup/` | the same |
 | the store, shared by the id's store releases | `<home>/service-store/<id>/` | the same |
 | a development release's own store (`TRUST.md` §8) | `<home>/service-store/<id>@dev/` | the same |
 | a native service's folder | `<home>/service-files/<id>/` | the same |
@@ -228,7 +233,7 @@ hex, what `channel.open` carries), or `dev` for a development install.
 **One process per running release**: a device on version 3 of an applet and
 another on version 4 each get their own release's service at the same time,
 both with the id's one store, whose limit is the newest installed release's
-`store.maxBytes` (`QUESTIONS.md` Q18). The host keeps a release while a
+`store.maxBytes` (`QUESTIONS.md` Q16). The host keeps a release while a
 device it serves runs or holds its hash (`runtime.apps` on the link; the
 installed packages on the device itself) and removes the others.
 `channel.open {app, hash}` starts the release whose folder is `hash`, or the
@@ -240,7 +245,7 @@ installed packages on the device itself) and removes the others.
 
 | Today | Why |
 | --- | --- |
-| `POCKET_HUB_DAEMON_DATA`, `daemon.ready`'s `data`, `DaemonContext.data`, `<home>/daemon-data/<id>/` | replaced by `store` (`CAPABILITIES.md` §5); a portable service writes no file. No data is migrated: no daemon outside this repository's examples exists |
+| `POCKET_HUB_DAEMON_DATA`, `daemon.ready`'s `data`, `DaemonContext.data`, `<home>/daemon-data/<id>/` | replaced by `store` (`CAPABILITIES.md` §5); a portable service writes no file. An existing home's folders meet the rule of `MIGRATION.md` §3: kept, listed, never read as a store |
 | the manifest's `version` and `<home>/daemons/<id>/<version>/`, `current.json` | releases (§8): the version is the applet's |
 | `bun install --frozen-lockfile` for every package with a lockfile | a store release is bundled; a local install runs it with `--ignore-scripts` (`MANIFEST.md` §3) |
 | "a package that brings its own copy [of the SDK] keeps it" | the host's copy always (`MANIFEST.md` §3) |

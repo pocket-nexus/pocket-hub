@@ -35,16 +35,18 @@ readable by any other service.
 Today a daemon runs as the owner's user and can connect to `hubd.sock` and
 call every method, `devices.installProgram` included, although "a daemon gets
 no device operation" is a rule of this repository. The owner decided to close
-this as part of this work. Three layers:
+this as part of this work. Four layers:
 
 | Layer | Mechanism | What it stops |
 | --- | --- | --- |
 | **(a) the enclosure** (§5) | a portable service can connect to the service socket alone; on macOS the profile names one socket path, on Linux the service sees no other socket | every portable service, from step 2: it cannot reach `hubd.sock`, any file or the network |
-| **(b) the peer check in `pocket-hubd`** | on each accept, the peer's process id (`LOCAL_PEERPID` on macOS, `SO_PEERCRED` on Linux); **a control connection from a process the host started as a service, or from one of its descendants, is refused**. The privileged methods (`signin.claim`, `signin.finish`, `services.consent`, `consent` on an install, `services.install` of a development release) are taken **only from a client the host identifies as its own app**: on macOS, the peer's code signature carries the same identity as `hubd`'s own (the team identifier of a signed build; for a local build, an executable in the same bundle); on Linux, an executable owned by root in the host's installed path. **Never from a client of kind `remote`** | a service that escaped (a); any other local program finishing a sign-in with values of its choosing, granting itself private-network reach through an `origin`, consenting to native code, or installing a development release under another applet's id |
-| **(c) a development release's own store** (§8) | `<id>@dev` | a development install under X's id reading X's session |
+| **(b) the peer check in `pocket-hubd`** | on each accept, the peer's process id (`LOCAL_PEERPID` on macOS, `SO_PEERCRED` on Linux); **a control connection from a process the host started as a service, or from one of its descendants, is refused** | a service that escaped (a) driving the control API |
+| **(c) consent-class methods: the owner's own click** | **decided on 2026-11-17 for consent to an unrestricted service** (`services.consent`, and `consent` on an install); proposed for granting a private origin (`services.grantOrigin`, `QUESTIONS.md` Q4). Taken only from Pocket Hub's app itself: on macOS the peer's code signature carries `hubd`'s team identifier **and the app's own signing identifier**, which the command line in the same bundle does not have; on Omarchy Pocket, the shell's program (an executable owned by root in the installed path). **Never from the command line, a `remote` client or a `pocket-hub:` link** (`docs/DEEP-LINKS.md`: a link shows, it never changes a device) | an agent, a script or a remote client consenting to native code or widening a service's reach on the owner's behalf |
+| **(d) a development release's own store** (§8) | `<id>@dev`; installing one is proposed for identified clients (the app or the command line, `QUESTIONS.md` Q5) | a development install under X's id reading X's session |
 
 **What a determined process of the owner's user can still do** without (a),
-and what (b) does not stop: read every store (they are files of that user),
+and what (b) to (d) do not stop: hand a service a setup message of its
+choosing (`SETUP.md` §2, `QUESTIONS.md` Q9), read every store (they are files of that user),
 call the unprivileged control methods (the devices' operations included), and
 control the app itself where its hardened runtime allows a debugger. **A
 native service is unsandboxed by definition**: it can leave the host's
@@ -87,15 +89,15 @@ exit status 1. **It does not catch** a global reached without its name
 A release whose manifest requires `native` runs **with the owner's rights and
 outside the enclosure**, on a host that provides `native`: Hub, and the host
 on Omarchy Pocket (`DEVICES.md` §5). **The host says so before installing it,
-and installs nothing without the owner's yes**, given through the host's own
-app (§2 (b)).
+and installs nothing without the owner's yes**, given by the owner's own click
+in the host's app (§2 (c)).
 
 | Where | What the owner sees |
 | --- | --- |
 | Pocket Hub's store page | a mark: "Runs its own programs on your Mac" |
 | Installing, in Pocket Hub | title "**YouTube runs its own programs on this Mac**", text "Other applets can do only what Pocket Hub allows. YouTube runs programs of its own, with the same access to your files, accounts and network that you have, and Pocket Hub cannot limit or watch what they do. Install it only if you trust Pocket Nexus, who published it." Buttons "Install" and "Cancel" |
 | Installing on Omarchy Pocket | the same text with "on this device", in the shell |
-| Installing from a console's store page | the applet installs; its programs wait until the owner allows them in Pocket Hub on the Mac, and the console says "Allow YouTube in Pocket Hub on your Mac" (`QUESTIONS.md` Q22) |
+| Installing from a console's store page | the applet installs; its programs wait until the owner allows them in Pocket Hub on the Mac, and the console says "Allow YouTube in Pocket Hub on your Mac" (`QUESTIONS.md` Q20) |
 | A development install that requires `native` | the same dialog with "This applet is not from the store" in place of the publisher |
 | A host without `native` | the applet says it needs a computer (`channel.open` error `capability`) |
 
@@ -157,13 +159,16 @@ of Bun signed by the host, the socket in an app group container; not tried);
 `deno_core`, or JavaScriptCore), where the enclosure is the absence of
 interfaces and which would fit a weak device that hosts services.
 *Recommendation*: `sandbox-exec` from step 2, the embedded engine as its
-planned replacement (`QUESTIONS.md` Q24).
+planned replacement (`QUESTIONS.md` Q22).
 
 **Linux (Omarchy Pocket).** bubblewrap where unprivileged user namespaces are
 allowed (an empty network namespace, read-only binds of Bun, the package, the
 SDK and the system libraries, the service socket bound in); Landlock and
-seccomp where not; on the AYN Thor, under proot, neither is measured
-(`DEVICES.md` §6, `QUESTIONS.md` Q5).
+seccomp where not; measured on each device as an implementation step. **On a
+device with no measured enclosure** (decided on 2026-11-17): services of the
+official key run unenclosed; a third-party portable service that requires
+`store` does not run, and its applet says the device does not support it yet
+(`DEVICES.md` §6).
 
 ## 6. The signed release
 
@@ -203,6 +208,7 @@ omarchy-pocket-store/2
 <service package sha256>
 <service requires, sorted, joined by ",">
 <service hosts, sorted, joined by ",">
+<1 if the service package carries a setup guide (SETUP.md), else 0>
 ```
 
 - **The service package's SHA-256 binds the code to the applet**; its
@@ -252,7 +258,7 @@ no defence against a peer that lies (§9).
 with or without a service** (`<home>/services/<id>/owner.json` on Hub), and
 refuses a release of that id from another key (control API error `store`,
 `reason: "key"`). The pin goes when the owner removes the applet with its
-data. A lost or rotated key is `QUESTIONS.md` Q20.
+data. A lost or rotated key is `QUESTIONS.md` Q18.
 
 **The store's changes**, for pocket-nexus/applets (`store/`), not code:
 
@@ -265,11 +271,13 @@ data. A lost or rotated key is `QUESTIONS.md` Q20.
 4. The publisher's tools (`store/admin.ts`, `pocket-applet publish` on Omarchy
    Pocket) sign the second message; the Worker verifies both.
 5. No line break in any field of either message.
-6. A version whose service requires `native`, from a non-official key, waits
+6. A version whose service requires `native`, or that carries a setup guide
+   (`SETUP.md` §4), from a non-official key, waits
    for an editor who reads its code: `store/admin.ts` fetches and unpacks a
    service package; the pending list marks native versions.
 7. The app's page shows the capabilities in words, both host lists, the
-   native mark.
+   native mark, and that the applet comes with setup instructions for an
+   agent, from whom.
 8. `services` (companion services) is dropped once `applet.services` leaves
    the applet contract.
 9. `backfill` sets `service: null` on existing versions.
@@ -282,7 +290,7 @@ id's **development** release: unsigned, labelled "Development", serving every
 package hash of its id while installed, taking precedence over the id's store
 releases, and **with a store of its own** (`<home>/service-store/<id>@dev/`),
 so a development install under X's id cannot read X's session. Installing one
-is a privileged method (§2 (b)). The source check runs for it as for any
+is proposed for identified clients (§2 (d)). The source check runs for it as for any
 portable service.
 
 ## 9. What is covered, and what is not
@@ -291,12 +299,14 @@ portable service.
 | --- | --- |
 | A store applet reaching hosts it did not declare | the host's checks (R3); the signed host lists |
 | A portable service reading files, starting programs, opening sockets, calling the control API | the enclosure, from step 2 (§5), and the peer check (§2) |
-| Another local program finishing a sign-in, granting an origin, consenting to native code, installing a development release | the privileged methods' client identification (§2 (b)) |
+| Another local program, the command line, a remote client or a link consenting to native code or granting an origin | consent-class methods taken from the app alone (§2 (c)) |
+| A setup guide from an untrusted publisher | it runs only when the owner starts an agent on it; a non-official guide is reviewed by the store's editor and needs the owner's click at install (`SETUP.md` §4, `QUESTIONS.md` Q3). An agent that follows a guide acts with the owner's rights |
+| A local program handing a service a session of its choosing | not covered: `services.setup` is open to the command line (`QUESTIONS.md` Q9) |
 | A development install under another applet's id reading its session | its own store (§8) |
 | The store changing an applet's code, hosts or capabilities | the publisher's signature (§6) |
 | The store handing an id to another key | the host's pin on a host that installed it before (§7) |
 | **An active attacker on the LAN without the key** | **not covered in phase one, by decision.** After a real handshake it can open applet channels asserting any applet id (link §3.9): it can drive X's, Discord's or Home Assistant's service **with the owner's stored session** (read the timeline, post, send messages, call the house's services), make a service ask for a sign-in, and fetch within any applet's hosts through the system channel. Link encryption (§3.10) is the remedy, later. Omarchy Pocket's local connection does not cross the LAN |
 | A device that holds the link key and lies about `app` or `hash` | not covered: it holds the pairing (link §3.9) |
-| A same-user program that is not a service | not covered beyond §2 (b): it can read the stores and call unprivileged methods (`QUESTIONS.md` Q26) |
+| A same-user program that is not a service | not covered beyond §2 (b) to (d): it can read the stores and call unprivileged methods (`QUESTIONS.md` Q24) |
 | A native service | not covered: disclosed (§4) |
 | A malformed picture or stream from the network | decoded in the host's own process (the owner's decision: decoding is performance-first, `CAPABILITIES.md` §1); memory-safe decoders where they cost nothing (`DEVICES.md` §3) |

@@ -10,9 +10,10 @@ Omarchy Pocket).
   "service": 1,
   "id": "dev.pocket-nexus.x",
   "entry": "service.js",
-  "requires": ["image", "net", "signin", "store"],
+  "requires": ["image", "net", "store"],
   "hosts": ["abs.twimg.com", "api.x.com", "pbs.twimg.com", "x.com"],
-  "store": { "maxBytes": 16777216 }
+  "store": { "maxBytes": 16777216 },
+  "setup": "setup/SKILL.md"
 }
 ```
 
@@ -23,10 +24,11 @@ Omarchy Pocket).
 | `service` | integer | the manifest version, **1** | any other value: refused, with the version named, before any other field is read (as `pocket.daemon.json`'s `daemon` today) |
 | `id` | string | the applet's manifest id | 1 to 128 bytes of `[A-Za-z0-9._-]`, not `.` or `..` (the folder rule of today); **equal to the `id` of the applet package of the same release** (`TRUST.md` §6) |
 | `entry` | string | the module the host loads; its default export is the service (`CAPABILITIES.md` §2) | a relative path of normal components inside the package, at most 1,024 bytes, naming a regular file reached through no link (today's rule) |
-| `requires` | array of strings | the capabilities the service uses | each of `net`, `store`, `signin`, `image`, `text`, `media`, `native`; no repeats; order carries no meaning (the host sorts it where it signs or shows it). **A name the host does not know, or does not provide, is refused**, so a service written for a later capability is not run without it; `text` is refused until hosts implement it for services (`CAPABILITIES.md` §8). May be empty: a service that only computes for its applet |
-| `hosts` | array of strings | the destinations the service's `net`, `signin`, and URL sources of `image` and `media` may reach | at most **32**; each a lower-case DNS name as `applet.hosts` writes them (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`, at most 253 bytes), or such a name behind `*.` (§2); no repeats; no address, no port, no scheme. **Required non-empty when `requires` names `net` or `signin`** |
-| `store` | object? | `{ "maxBytes": <integer> }`: the store's size | only with `store` in `requires`; 1 to 268,435,456 (256 MiB); default 16 MiB. The id's releases share one store, whose limit is the newest installed release's (`QUESTIONS.md` Q18) |
+| `requires` | array of strings | the capabilities the service uses | each of `net`, `store`, `image`, `text`, `media`, `native` (six; `signin` is not one, `SETUP.md`); no repeats; order carries no meaning (the host sorts it where it signs or shows it). **A name the host does not know, or does not provide, is refused**, so a service written for a later capability is not run without it; `text` is refused until hosts implement it for services (`CAPABILITIES.md` §8). May be empty: a service that only computes for its applet |
+| `hosts` | array of strings | the destinations the service's `net` and the URL sources of its `image` and `media` may reach | at most **32**; each a lower-case DNS name as `applet.hosts` writes them (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`, at most 253 bytes), or such a name behind `*.` (§2); no repeats; no address, no port, no scheme. **May be empty**: a service with `net` and no hosts reaches only the origins the owner grants it (`SETUP.md` §3; Home Assistant) |
+| `store` | object? | `{ "maxBytes": <integer> }`: the store's size | only with `store` in `requires`; 1 to 268,435,456 (256 MiB); default 16 MiB. The id's releases share one store, whose limit is the newest installed release's (`QUESTIONS.md` Q16) |
 | `idleSeconds` | integer? | how long a process stays up with no channel open | 1 to 86,400; default **30** (unchanged) |
+| `setup` | string? | the setup guide's entry, `setup/SKILL.md` (`SETUP.md` §1) | a relative path inside the package to a regular file named `SKILL.md`; its folder holds at most 64 files and 1 MiB; the host never runs it |
 
 **A manifest with a field this table does not name is refused**, and so is
 one over **16 KiB** (both as today): a field the host does not know may change what
@@ -50,9 +52,9 @@ as `net.http` allows it today. **The destination policy applies after the
 match**: a name that resolves to a private address is refused whatever the
 manifest says. A destination the manifest cannot express (a Home Assistant
 instance at `http://192.168.1.20:8123`: an address literal, a port, a private
-address) is reachable only as an **origin the owner named** in a
-`signin.form` field of kind `origin`, which the host keeps outside the manifest
-and the service's store (`CAPABILITIES.md` §6, `QUESTIONS.md` Q13).
+address) is reachable only as an **origin the owner granted** by a click in
+Pocket Hub's app, which the host keeps outside the manifest and the service's
+store (`SETUP.md` §3, `QUESTIONS.md` Q4).
 
 The wildcard is this proposal's addition (`QUESTIONS.md` Q12): YouTube's media
 addresses are on per-server names under `googlevideo.com`, and without it a
@@ -71,7 +73,7 @@ copy of the Public Suffix List.
 A store release is bundled because **the host would otherwise run a dependency's
 install scripts outside any sandbox at install time**, and because the
 source check (`TRUST.md` §3) then reads one module graph that the signature
-covers whole (`QUESTIONS.md` Q21). The bundler is not a check: tried with Bun
+covers whole (`QUESTIONS.md` Q19). The bundler is not a check: tried with Bun
 1.4.2, `--target=browser` replaced `node:fs` with an empty object and bundled a
 polyfill of `node:path` without a warning, so a forbidden import is caught by
 the source check, not by the build. A native service builds with

@@ -1,6 +1,7 @@
 # The capabilities, as an API
 
-Proposal (see `README.md`). Seven capabilities, each with the SDK surface a
+Proposal (see `README.md`). Six capabilities (decided on 2026-11-17: `signin`
+is not one; `SETUP.md`), each with the SDK surface a
 service imports from `@pocketjs/service`, what it does, its limits, what the host
 checks on every call, what "the framework uses it without a service" means,
 and which existing applet needs each call. §11 lists the existing applets'
@@ -18,16 +19,15 @@ host, the section says so.
 | --- | --- | --- | --- | --- |
 | `net` | `host.net` | the result does not depend on the device | services | all |
 | `store` | `host.store` | idem; the store belongs to the service, not to a device | services | all |
-| `signin` | `host.signin` | idem; the window opens on the host's machine | services | all |
 | `image` | `channel.image` | the output is the format **the device at the other end of that channel** takes | services; applets through the framework | all |
-| `text` | `channel.text` | the atlas is drawn at that device's density, in the atlas format it loads | applets through the framework; services once implemented (Q15) | all |
+| `text` | `channel.text` | the atlas is drawn at that device's density, in the atlas format it loads | applets through the framework; services once implemented (Q13) | all |
 | `media` | `channel.media` | the stream is in a codec and size **that device** plays (H.264 on a New 3DS, PAL8 on an Old 3DS) | services; applets through the framework | all, for a device that can open a TCP connection to its host (§9) |
 | `native` | `host.native` | arbitrary code: Bun's own interfaces, external programs | services | general-purpose computers the owner controls: Hub, Omarchy Pocket (`DEVICES.md` §5) |
 
 A channel capability knows its device from the device's own statement
 (`EVENT device.accepts`, link specification §7.9 as proposed): the formats,
 codecs and density the device takes. **No host keeps a table of device models**
-(`QUESTIONS.md` Q7).
+(`QUESTIONS.md` Q6).
 
 **Decoding happens in the host's own process.** A host may itself be a weak
 device, and a helper process per picture would cost it (the owner's
@@ -62,6 +62,11 @@ export interface Service {
   attach(channel: AppletChannel, info: ChannelInfo): void | Promise<void>;
   /** The host stops the service. The channels close after it returns. */
   stop?(): void | Promise<void>;
+  /** One setup message an agent delivered through the host (SETUP.md §2).
+   *  Check it, write the store, return the reply; throw
+   *  ServiceError("unknown_setup") or ServiceError("invalid_setup") to refuse.
+   *  `channels` are the channels open now, to tell their applets. */
+  setup?(message: Json, channels: AppletChannel[]): Json | void | Promise<Json | void>;
 }
 
 export interface ChannelInfo {
@@ -81,7 +86,6 @@ export interface Host {
   log(line: string): void;
   readonly net: Net;
   readonly store: Store;
-  readonly signin: SignIn;
   /** null unless the manifest requires "native". */
   readonly native: Native | null;
 }
@@ -146,11 +150,11 @@ Common error codes, each with one meaning (each capability adds its own):
 | Code | Meaning |
 | --- | --- |
 | `not_required` | the manifest's `requires` does not name the capability |
-| `denied` | the destination is refused: its host matches no entry of the manifest's `hosts` (nor an owner-named origin), or the destination policy refuses its address |
+| `denied` | the destination is refused: its host matches no entry of the manifest's `hosts` (nor an origin granted to the service, `SETUP.md` §3), or the destination policy refuses its address |
 | `invalid` | an argument is malformed |
 | `too_large` | an argument or a result is over its limit |
 | `busy` | a bound of the tables below is reached; nothing was started |
-| `unavailable` | the host lacks something now that a later call may find: no copy of Pocket Hub's app to show a window, no link to the device |
+| `unavailable` | the host lacks something now that a later call may find: the device's link is down, the media listener is not bound |
 | `not_accepted` | the device's `device.accepts` names nothing of this kind (or the device has stated nothing) |
 | `closed` | the channel the call named has closed |
 | `timeout` | the call's own time limit passed |
@@ -211,8 +215,8 @@ export interface NetSocket {
 does `net.http` for a device (link specification §6.5), under **one
 destination policy shared with the applet's `net.http`**: every hop resolved
 and its address checked (no loopback, private, link-local, CGNAT, multicast,
-unique-local or reserved address, except an owner-named origin's private
-address, §6), redirects followed by the host, the system's proxy settings. The
+unique-local or reserved address, except a granted origin's private
+address, `SETUP.md` §3), redirects followed by the host, the system's proxy settings. The
 difference between the two surfaces is whose host list applies: the
 service's manifest `hosts` here, the applet's `applet.hosts` for `net.http`.
 The host keeps no cookie jar: a service that holds a session sends its `cookie`
@@ -220,7 +224,7 @@ header itself, from its store. **A WebSocket lasts until either side closes
 it**, with no time limit; its ping and pong are the host's, and the service sees
 messages and the close.
 
-Limits are sized to what the applets send (`QUESTIONS.md` Q31): no applet
+Limits are sized to what the applets send (`QUESTIONS.md` Q29): no applet
 uploads a file; X's and Discord's posts and Home Assistant's calls are small
 JSON; the largest answers are X's timeline pages.
 
@@ -236,7 +240,7 @@ JSON; the largest answers are X's timeline pages.
 | WebSocket message | at most **64 KiB** sent, **1 MiB** received | a gateway's first message for a bot in a few servers; not measured |
 
 **The host checks**: `net` in `requires`; the URL's host matches an entry of the
-manifest's `hosts` (`MANIFEST.md` §2) or an owner-named origin, at the first
+manifest's `hosts` (`MANIFEST.md` §2) or a granted origin, at the first
 hop and at every redirect hop; the destination policy at every connect; the
 limits. Errors: the `NET_ERROR` codes of `contracts/spec/net.ts` (`dns`,
 `connect`, `tls`, `timeout`, `redirect`, `response_too_large`, `protocol`,
@@ -251,7 +255,7 @@ from its worker (`io.http`), under the same policy with `applet.hosts`.
 Discord (discord.com and its gateway, over `websocket`), Home Assistant (the
 owner's own instance, over HTTP and its WebSocket API), Maps (a tile server
 and a geocoder), Podcasts (a directory search and any feed's host), Spotify
-on Omarchy Pocket (Q43).
+on Omarchy Pocket (Q41).
 
 ## 5. `store`: the service's own key-value storage
 
@@ -278,14 +282,13 @@ own** (`TRUST.md` §8). **A `set` is atomic and durable before it resolves**: a
 reader sees the old value or the new one, never a part, and a crash after the
 resolve keeps the new one. The last `set` of a key wins; there are no
 transactions across keys. Tokens and sessions live here: X's `auth_token`
-and `ct0`, Discord's bot token, Home Assistant's token (its origin is the host's,
-§6).
+and `ct0`, Discord's bot token, Home Assistant's token (its address is a granted origin, `SETUP.md` §3).
 
 | Limit | Value |
 | --- | --- |
 | Key | 1 to **256** bytes of UTF-8, no control character |
 | Value | at most **4 MiB** |
-| Whole store | the `store.maxBytes` of **the newest release installed**, which every running release of the id writes under: default **16 MiB**, at most **256 MiB** (`QUESTIONS.md` Q18) |
+| Whole store | the `store.maxBytes` of **the newest release installed**, which every running release of the id writes under: default **16 MiB**, at most **256 MiB** (`QUESTIONS.md` Q16) |
 | `list` page | at most **1,000** keys, in byte order of the key |
 | Open | **8** calls per service |
 
@@ -297,107 +300,27 @@ would pass the limit, and nothing was written. A missing key is no error:
 the host's own folder, `DEVICES.md`), mode 0700, files
 0600, in Hub's home, which an enclosed service cannot read (`TRUST.md` §5).
 A native service and any other process of the owner's user can read it
-(`TRUST.md` §2, `QUESTIONS.md` Q26). Values are not encrypted beyond the
-file mode (`QUESTIONS.md` Q28).
+(`TRUST.md` §2, `QUESTIONS.md` Q24). Values are not encrypted beyond the
+file mode (`QUESTIONS.md` Q26).
 
 **The framework does not use `store`.** An applet without a service keeps its
 state on the device (`data.fs`), GitHub's token and Weather's places among it
-(`QUESTIONS.md` Q3, which records that the direction's table does not cover
+(`QUESTIONS.md` Q8, which records that the direction's table does not cover
 these two applets and what this costs on Omarchy Pocket).
 
 **Who needs it**: X, Discord, Home Assistant, Maps (the saved view could stay
 on the device), Podcasts (subscriptions and positions).
 
-## 6. `signin`: the host asks the owner
+## 6. Sign-in is not a capability
 
-```ts
-export interface SignIn {
-  /** Opens a window on the host's machine at `url` and waits until the
-   *  condition holds, the owner closes it, or the time runs out. */
-  web(options: {
-    title: string;                     // "Sign in to X": the window's title, under the host's frame
-    url: string;                       // https:; its host in the manifest's hosts
-    until:
-      | { cookies: { host: string; names: string[] } }   // these cookies are set for host
-      | { redirect: string };                             // a navigation starts with this https: URL
-    timeoutMs?: number;                // default and at most 15 minutes
-    signal?: AbortSignal;
-  }): Promise<{ cookies: Record<string, string> } | { url: string }>;
-
-  /** Asks the owner for values in a form on the host's machine. */
-  form(options: {
-    title: string;                     // "Set up Discord"
-    help?: string;                     // one paragraph shown above the fields
-    link?: { label: string; url: string };   // https: only
-    fields: Array<{
-      name: string;
-      label: string;
-      kind: "text" | "secret" | "origin";
-      pattern?: string;                // Rust regex syntax, checked by hubd (Q14)
-      maxLength?: number;              // default 512; at most 4,096
-    }>;
-    timeoutMs?: number;
-    signal?: AbortSignal;
-  }): Promise<Record<string, string>>;
-}
-```
-
-**Semantics.** A sign-in happens where the host runs. **On Hub, a window on
-the Mac, shown by Pocket Hub's app**, a client of the control API that Hub
-identifies as its own by the peer's code signature (`TRUST.md` §2,
-`QUESTIONS.md` Q4): `hubd` has no window of its own, and no other client can
-claim or finish a sign-in. **On Omarchy Pocket, in the shell on the device**:
-a form there; a web view does not exist on the device today
-(`DEVICES.md` §3, `QUESTIONS.md` Q6).
-
-**The host frames every window and form**: the applet's name, icon and
-publisher from the signed entry ("Development" for a development install),
-and under each secret field "This goes to X, not to
-Pocket Hub or macOS". The service's `title`, `help`, `label` and `link` sit
-inside that frame. `web` uses a fresh web data store for each sign-in that
-shares nothing with Safari or another service, shows the page's host, and
-hands the service only what `until` names: the named cookies' values, or
-the URL of the redirect (which is not loaded). `form` shows the fields and
-`hubd` checks each `pattern` in linear time.
-
-A field of kind `origin` takes a URL whose origin (scheme, host, port; an
-address literal allowed) becomes a destination this service may reach,
-**kept by the host, not in the service's store**, with **private addresses
-allowed for it and loopback and link-local addresses never**, pinned
-against DNS rebinding, and listed for the owner to remove (in Pocket Hub, or in the shell on
-Omarchy Pocket)
-(`QUESTIONS.md` Q13). A Home Assistant instance is the case.
-
-The device shows the waiting state. The applet asks its service to sign in;
-the service calls `signin.web`; the applet says, in the owner's words, "Sign
-in to X on your Mac". The service keeps the applet's request alive with
-progress events (the link's 30 s stall, L§5.5, applies to the channel).
-
-| Limit | Value |
-| --- | --- |
-| Time | at most **15 minutes** (X's sign-in window today) |
-| At once | **one** sign-in per host machine; another call waits up to 10 s, then `busy` |
-| Cookies | at most **8** names; each value at most **4 KiB** |
-| Form | at most **8** fields; `title` 64 characters, `help` 512, `label` 64, `pattern` 256 bytes |
-
-**The host checks**: `signin` in `requires`; `url`, `link.url` and the cookie
-`host` against the manifest's `hosts` and `https:`; the patterns compile.
-Errors: `declined` (the owner closed the window or the form), `timeout`,
-`unavailable` (**no copy of Pocket Hub's app is running**: Hub does not fall
-back to anything; the sentence says to open Pocket Hub), `busy`.
-
-`form` is this proposal's addition to the direction's `signin`
-(`QUESTIONS.md` Q14): a Discord bot token is 70 characters and a Home
-Assistant token over 180, and the alternative is typing them on a 3DS's
-keyboard.
-
-**The framework does not use `signin`.** An applet without a service that
-needs an account uses a flow it can run with `net.http` and its own screen
-(GitHub's device flow, `QUESTIONS.md` Q33).
-
-**Who needs it**: X (`web`, cookies `auth_token` and `ct0` on `x.com`),
-Discord (`form`: the bot token), Home Assistant (`form`: an `origin` and a
-token). Spotify does not: its pairing code is shown by the applet.
+**Decided on 2026-11-17.** A service that needs an account or a token gets it
+from **a setup guide** its release ships: a coding agent on the service host's
+machine follows it with the owner, outside the host, and hands the result to
+the service through the host's **setup inlet**, which calls the service's
+`setup` handler (§2). A private address the service must reach (a Home
+Assistant instance) is **granted by the owner's click** as an origin. All
+three are in `SETUP.md`. An applet whose setup nobody has done says so: "Not
+signed in to X. Set it up on your Mac."
 
 ## 7. `image`: a network image in this device's texture format
 
@@ -477,7 +400,7 @@ its CDN), YouTube (thumbnails from i.ytimg.com, 128 × 64 today), Maps (tiles,
 ## 8. `text`: glyphs the device lacks
 
 **Through the framework now; for services, named and not implemented until a
-service needs it** (no existing service lays out text; `QUESTIONS.md` Q15).
+service needs it** (no existing service lays out text; `QUESTIONS.md` Q13).
 A manifest that requires `text` is refused at install until then
 (`MANIFEST.md` §6). The surface it will have:
 
@@ -508,7 +431,7 @@ depends on this today.
 
 **The framework uses it without a service.** An applet declares
 `text.glyphs.deferred` (not `text.glyphs.runtime` or `text.glyphs.streamed`,
-whose meanings differ: `QUESTIONS.md` Q16); the framework's glyph module
+whose meanings differ: `QUESTIONS.md` Q14); the framework's glyph module
 asks the system service (`text.atlas`, its codepoints as the request's body,
 since 4,096 of them do not fit LINK_APP_MSG) and loads the atlas into the
 applet's slot, with the state of `ui/glyphs.ts` (which codepoints a loaded
@@ -566,7 +489,7 @@ channel.** The host's listener for it binds at start on a port the OS assigns
 (the source carries it), so there is no fixed port to conflict and nothing to
 fall back from; a bind that fails stops the host's start with one line. It exists
 on the TCP carrier alone, so a device on another carrier states no `media`
-and gets `not_accepted` (`QUESTIONS.md` Q17).
+and gets `not_accepted` (`QUESTIONS.md` Q15).
 
 | Limit | Value |
 | --- | --- |
@@ -609,7 +532,7 @@ owner is told at install. **Device-dependent work still goes through the
 channel**: YouTube resolves an address with `yt-dlp` and hands it to
 `channel.media`, so the service never encodes for a device. How a vendor's
 program (`yt-dlp`) is fetched, consented to and pinned is
-`QUESTIONS.md` Q29.
+`QUESTIONS.md` Q27.
 
 **Hosts that provide it**: general-purpose computers the owner controls:
 Hub and Omarchy Pocket (`DEVICES.md` §5). A host without it refuses the channel
@@ -628,16 +551,16 @@ means the applet uses the capability with no service.
 | Applet | Uses today | Becomes | Calls under this proposal |
 | --- | --- | --- | --- |
 | Hacker News | no service; `net.http` to hacker-news.firebaseio.com | no service | `net.http` only |
-| Weather | `store` `/get`, `/set` (places) | no service | `net.http` to open-meteo; places in `data.fs` (Q3) |
-| GitHub | `store` (token), `images` `/fetch?url&w&h&round` (avatars), `glyphs` `/atlas` | no service | `net.http` to api.github.com; `image.url` (avatars); `text.glyphs.deferred`; token in `data.fs` (Q3), sign-in by device flow (Q33) |
-| X | `x` `/timeline?kind&cursor`, `/post/<id>`, `/{like,repost,…}?id`, `/reply`, `/avatar?u`, `/media?u&w&h`; `glyphs` | portable service | service: `net.fetch` (x.com, api.x.com, the scripts' host), `store` (session, operation ids), `signin.web` (cookies), `channel.image.render` (avatars, media); applet: `text.glyphs.deferred` |
-| Discord | `discord` `/guilds`, `/guilds/<id>/channels`, `/channels/<id>/messages?before`, `?after&wait` (long poll), POST messages, `/<kind>/<owner>/<hash>` (pictures); `glyphs` | portable service | service: `net.fetch` and `net.websocket` (gateway), `store` (token), `signin.form` (token), `channel.image.render`; the long poll becomes events the service emits; applet: `text.glyphs.deferred` |
-| Home Assistant | `homeassistant` `/setup` (URL and token sent from the device), `/states`, `/call`, `/forget` | portable service | service: `signin.form` (an `origin` and a token), `store`, `net.fetch` to that origin (a private address, Q13) |
-| Maps | `maps` `/tile?z&x&y` (256 × 256 RGB565), `/geocode?q`, `/locate`; `store` (view) | portable service | service: `net.fetch` (a tile server, a geocoder), `channel.image.render` (tiles); `/locate` has no capability (Q35); the view in `data.fs` |
+| Weather | `store` `/get`, `/set` (places) | no service | `net.http` to open-meteo; places in `data.fs` (Q8) |
+| GitHub | `store` (token), `images` `/fetch?url&w&h&round` (avatars), `glyphs` `/atlas` | no service | `net.http` to api.github.com; `image.url` (avatars); `text.glyphs.deferred`; token in `data.fs` (Q8), sign-in by device flow (Q31) |
+| X | `x` `/timeline?kind&cursor`, `/post/<id>`, `/{like,repost,…}?id`, `/reply`, `/avatar?u`, `/media?u&w&h`; `glyphs` | portable service | service: `net.fetch` (x.com, api.x.com, the scripts' host), `store` (session, operation ids), the setup inlet (the session's cookies, `SETUP.md`), `channel.image.render` (avatars, media); applet: `text.glyphs.deferred` |
+| Discord | `discord` `/guilds`, `/guilds/<id>/channels`, `/channels/<id>/messages?before`, `?after&wait` (long poll), POST messages, `/<kind>/<owner>/<hash>` (pictures); `glyphs` | portable service | service: `net.fetch` and `net.websocket` (gateway), `store` (token), the setup inlet (the bot token), `channel.image.render`; the long poll becomes events the service emits; applet: `text.glyphs.deferred` |
+| Home Assistant | `homeassistant` `/setup` (URL and token sent from the device), `/states`, `/call`, `/forget` | portable service | service: the setup inlet (a token) and a granted origin (`SETUP.md` §3), `store`, `net.fetch` to that origin (a private address, Q4) |
+| Maps | `maps` `/tile?z&x&y` (256 × 256 RGB565), `/geocode?q`, `/locate`; `store` (view) | portable service | service: `net.fetch` (a tile server, a geocoder), `channel.image.render` (tiles); `/locate` has no capability (Q33); the view in `data.fs` |
 | Podcasts | `podcasts` `/search?q`, `/episodes?feed`, `/play?url&at&duration&codec`, `/stop`, `/art?url&size`; `store` | portable service with any host (Q12) | service: `net.fetch`, `channel.media.open` (`video: false`, `durationMs`), `channel.image.render`, `store`; the codec is no longer the applet's choice |
 | YouTube | `youtube` `/feed?topic`, `/search?q`, `/play?id&codec&at`, `/stop`, `/thumb?id` | unrestricted service | service: `native` (yt-dlp), `channel.media.open`, `channel.image.render`; the codec is no longer the applet's choice |
-| Spotify | `spotify` (sign-in by a pairing code, player, library; a Rust program of its own that is the device's Spotify Connect speaker), `images`, `glyphs`; built for Omarchy Pocket alone | **unrestricted service on Omarchy Pocket's host** (it runs a program and plays through PipeWire) | service: `native`, `net.fetch`, `store`, `channel.image.render`; applet: `text.glyphs.deferred` (Q43) |
-| App Store | `appstore` (Omarchy Pocket's own store client) | Omarchy Pocket's host installs releases on the device (Q42) | on Hub, a device's store page is the link's `catalog` and `install` (link §6.4) |
+| Spotify | `spotify` (sign-in by a pairing code, player, library; a Rust program of its own that is the device's Spotify Connect speaker), `images`, `glyphs`; built for Omarchy Pocket alone | **unrestricted service on Omarchy Pocket's host** (it runs a program and plays through PipeWire) | service: `native`, `net.fetch`, `store`, `channel.image.render`; applet: `text.glyphs.deferred` (Q41) |
+| App Store | `appstore` (Omarchy Pocket's own store client) | Omarchy Pocket's host installs releases on the device (Q40) | on Hub, a device's store page is the link's `catalog` and `install` (link §6.4) |
 | Camera, Photos, Notes | nothing | no service | unchanged |
 
 Two applets today pass a codec in their request (`youtube` `codec=h264|pal8`,
@@ -657,6 +580,6 @@ The applets declaring the `glyphs` service are GitHub, X, Discord and Spotify
 | `ui.loadFontAtlas` format, carried by `agent.glyphs` (link §6.6); the applets' `ui/glyphs.ts` request `{px, bold, slot, density, text}` | `text.atlas` | density comes from the device's statement; the codepoints travel as a body; `omitted` reports what did not fit |
 | IMG entry (`uploadImgEntry`, `framework/compiler/pak.ts`): power-of-two sides at most TEX_MAX_DIM | `image.render` output | the content size travels beside it, since the picture sits in a padded texture |
 | `framework/src/resource-state.ts`, `resource.ts` (`ResourceState`, `ResourceImage`), `resource-cache.ts` (`createResourceScheduler`) | the framework's three states | "unavailable" is `ResourceState`'s `error` with a code; no fourth shape |
-| `contracts/spec/text.ts`, `docs/TEXT-OFFLOAD.md`, `docs/DYNAMIC_TEXT.md` (over `io.offload`) | not in this phase | Q15 |
+| `contracts/spec/text.ts`, `docs/TEXT-OFFLOAD.md`, `docs/DYNAMIC_TEXT.md` (over `io.offload`) | not in this phase | Q13 |
 | `docs/OFFLOAD.md` `httpResources`, `sqliteQueries` | not reused | a service uses `net` and `store` |
-| `docs/APPLETS.md` "A service's owner setup" (Field, Vendor tool, Prompt; `/_setup`) | Field → `signin.form`; Prompt → the applet's own screen; Vendor tool → open (`QUESTIONS.md` Q29) | the `/_setup` HTTP shape goes with `companion.pocket` |
+| `docs/APPLETS.md` "A service's owner setup" (Field, Vendor tool, Prompt; `/_setup`) | Field and Prompt → the setup guide and its inlet (`SETUP.md`); Vendor tool → open (`QUESTIONS.md` Q27) | the `/_setup` HTTP shape goes with `companion.pocket` |
