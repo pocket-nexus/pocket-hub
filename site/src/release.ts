@@ -2,9 +2,11 @@
 // read when the page is built (vite.config.ts hands it to the page as the
 // module virtual:release). A release is what docs/CONTRIBUTING.md
 // "Releasing" makes: a tag v<version> and an archive for each platform Hub is
-// built for, named as PLATFORMS says. Today that is macOS alone,
-// Pocket-Hub-<version>-arm64.zip, as app/scripts/package.sh names it; a
-// platform is added here with its archive's name, and in the page's words.
+// built for, named as PLATFORMS says. Today that is macOS alone: the disk
+// image Pocket-Hub-<version>-arm64.dmg, as app/scripts/package.sh names it
+// (the zip beside it is for what unpacks the app by itself, not for a
+// visitor). A platform is added here with its archive's name, and in the
+// page's words.
 //
 // The page links each archive itself, so a visitor's click is the download.
 // GitHub's /releases/latest/download/<name> would follow the latest release
@@ -19,7 +21,7 @@ export const REPOSITORY = "pocket-nexus/pocket-hub";
 /** The platforms Hub is built for, each with its archive's name in a release
  *  of `version`. Every release carries every one of them. */
 export const PLATFORMS = {
-  macos: (version: string) => `Pocket-Hub-${version}-arm64.zip`,
+  macos: (version: string) => `Pocket-Hub-${version}-arm64.dmg`,
 } as const;
 
 export type Platform = keyof typeof PLATFORMS;
@@ -27,7 +29,7 @@ export type Platform = keyof typeof PLATFORMS;
 /** One platform's archive, every value checked. */
 export interface Download {
   platform: Platform;
-  /** The archive's own name: "Pocket-Hub-0.1.0-arm64.zip". */
+  /** The archive's own name: "Pocket-Hub-0.2.0-arm64.dmg". */
   archive: string;
   /** The archive itself, on GitHub. */
   url: string;
@@ -39,7 +41,7 @@ export interface Download {
 
 /** What the page says about the release. */
 export interface Release {
-  /** "0.1.0" */
+  /** "0.2.0" */
   version: string;
   /** The release's page on GitHub: its notes. */
   notes: string;

@@ -237,8 +237,9 @@ again (`.github/workflows/site.yml`): its Download button links the release's
 archive itself, so the page names the version, the size and the SHA-256 of the
 one it offers. The page's build takes the latest release that is not a
 pre-release, and refuses one whose tag is not `v<version>` or that lacks the
-archive of a platform `site/src/release.ts` lists (today macOS alone,
-`Pocket-Hub-<version>-arm64.zip`); the page that is live then stays as it was.
+archive of a platform `site/src/release.ts` lists (today macOS alone, the
+disk image `Pocket-Hub-<version>-arm64.dmg`); the page that is live then stays
+as it was.
 
 ## The download page
 
