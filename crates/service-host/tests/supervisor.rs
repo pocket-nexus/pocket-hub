@@ -438,11 +438,11 @@ async fn shutdown_leaves_no_process_behind() {
     let supervisor = supervisor_with(home.path(), bun, &services, |_| {}).await;
     let parent = supervisor.open_channel(offer("app.parent")).await.unwrap();
     let plain = supervisor.open_channel(offer("app.plain")).await.unwrap();
-    let child: u32 = log_texts(&supervisor, "app.parent")
-        .iter()
-        .find_map(|line| line.strip_prefix("child pid ").map(|pid| pid.parse().unwrap()))
-        .expect("the fixture's child");
-    let pids = [parent.info.pid, plain.info.pid, child];
+    // The enclosure starts no program, so the group is the service's own
+    // process; the shutdown ends it with the others.
+    assert!(eventually(Duration::from_secs(2), || logged(&supervisor, "app.parent", "child refused")).await, "{:?}", log_texts(&supervisor, "app.parent"));
+    assert!(!logged(&supervisor, "app.parent", "child pid "));
+    let pids = [parent.info.pid, plain.info.pid];
     assert!(pids.iter().all(|&pid| process_exists(pid)));
     let mut stop = parent.stop.clone();
 

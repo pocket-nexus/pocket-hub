@@ -41,15 +41,31 @@ function readFrames(socket, onFrame) {
 console.log(`fixture start app=${env.POCKET_SERVICE_ID}`);
 console.log(`env ${Object.keys(env).sort().join(",")}`);
 for (let i = 0; i < (cfg.logLines ?? 0); i++) console.log(`line ${i}`);
-// The descriptors this process holds (the listing's own included).
-if (cfg.listFds) console.log(`fds ${fs.readdirSync("/dev/fd").join(",")}`);
+// The descriptors this process holds, by fstat of each number: the
+// enclosure gives no read of /dev/fd, and fstat names no path.
+if (cfg.listFds) {
+  const held = [];
+  for (let fd = 0; fd < 256; fd++) {
+    try {
+      fs.fstatSync(fd);
+      held.push(fd);
+    } catch {}
+  }
+  console.log(`fds ${held.join(",")}`);
+}
 if (cfg.mode === "exitAtStart") {
   console.error("boom: exiting at start");
   process.exit(3);
 }
 if (cfg.spawnChild) {
-  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
-  console.log(`child pid ${child.pid}`);
+  // Inside the enclosure no program starts (SERVICE-PROTOCOL.md §2).
+  try {
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    child.on("error", (error) => console.log(`child refused: ${error.code ?? error.message}`));
+    if (child.pid !== undefined) console.log(`child pid ${child.pid}`);
+  } catch (error) {
+    console.log(`child refused: ${error.code ?? error.message}`);
+  }
 }
 if (cfg.ignoreTerm) {
   process.on("SIGTERM", () => console.log("ignoring SIGTERM"));

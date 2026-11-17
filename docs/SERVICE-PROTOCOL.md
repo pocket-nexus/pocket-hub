@@ -9,14 +9,11 @@ screenshot, no file access): it sees the channels of its own applet, and asks
 its host for the capabilities its manifest requires (§6, §7), and nothing else
 reaches it through Hub.
 
-**A service runs with its owner's rights.** Its process is an ordinary
-program of the owner's account: it can read and write what the owner can,
-reach the network and start programs by its own means, Bun's included. The
-capabilities below are what Hub gives a service through its SDK and checks;
-they do not stop the service's own code from doing more, and the store's
-file, which only Hub opens, is protected from other users by its mode, not
-from the service's process. Install only a service you trust as you would any
-program.
+**A service runs inside an enclosure** (§2): its process reads its own
+package and Hub's SDK, connects to Hub's service socket, and nothing else of
+the machine; the capabilities below are its only way out, and Hub checks
+each call. The enclosure stops a service; it does not stop a hostile program
+the owner runs, which needs no Hub.
 
 A service never learns which carrier a device is on. Wi-Fi, USB, UART and
 Bluetooth all end in the same channel connection described here.
@@ -190,7 +187,8 @@ an earlier one) is `no_daemon` (link specification §7.1).
 
 ## 2. The process
 
-Hub runs, with the release's folder as the working directory:
+Hub runs, with the release's folder as the working directory and inside
+the enclosure (below):
 
 ```
 bun --no-install run <home>/sdk/service/src/boot.ts ./<entry>
@@ -226,9 +224,8 @@ export default service;
 | `POCKET_SERVICE_ID` | the applet id |
 
 **The process gets these three, `TZ`, `LANG` and `LC_*`, and nothing else of
-Hub's environment**: no `PATH`, `HOME`, proxy or certificate variable. This
-does not confine the service (it runs with its owner's rights, above); it
-keeps Hub's environment out of code Hub did not write.
+Hub's environment**: no `PATH`, `HOME`, proxy or certificate variable, since
+it reaches no network, file or program of its own (below).
 
 **The SDK's surface** (`sdk/service/src/index.ts`): the default export is a
 `ServiceFactory`, `(host: Host) => Service | Promise<Service>`. `Host` has
@@ -259,6 +256,94 @@ and so is one that attaches no host connection within 10 s of `service.ready`
 (§6): Hub holds further starts off for 2 s, doubling to 60 s, and answers an
 open inside the hold with `busy` at once, without a spawn. An install of the
 package or its owner's own start clears the hold.
+
+### The enclosure
+
+**Every service process runs inside the enclosure, and nothing runs a
+service outside it.** On macOS Hub starts the process as
+
+```
+/usr/bin/sandbox-exec -p <profile> <bun> --no-install run <sdk>/src/boot.ts ./<entry>
+```
+
+`sandbox-exec` applies the profile to itself and `exec`s Bun, so the process
+Hub supervises, signals and stops (with its process group) is Bun's. The
+profile is made for each start from **canonical** paths (a home reached
+through a symbolic link, or with a space in its path, is named by its real
+path; the socket path in `POCKET_SERVICE_SOCKET` is the canonical one, since
+the profile names that path): Bun's executable, the release's folder, Hub's
+copy of the SDK and the service socket, and nothing else of the home.
+`<…>` marks what is generated:
+
+```
+(version 1)
+(deny default)
+(allow process-exec (literal <bun>))
+(allow file-read* (literal <bun>))
+(allow file-read* (subpath <release folder>) (subpath <sdk>))
+(allow file-read-metadata (literal "/") <(literal …) for each folder above bun, the release folder, the sdk and the socket>)
+(allow file-read-data (literal "/"))
+(allow file-read* (subpath "/usr/lib") (subpath "/System/Library")
+  (subpath "/usr/share/zoneinfo") (subpath "/usr/share/icu")
+  (subpath "/private/var/db/timezone") (literal "/private/etc/localtime")
+  (literal "/dev/urandom") (literal "/dev/random") (literal "/dev/null"))
+(allow sysctl-read (sysctl-name-prefix "hw.") (sysctl-name-prefix "machdep.")
+  (sysctl-name-prefix "kern.os") (sysctl-name "kern.version") (sysctl-name "kern.boottime")
+  (sysctl-name "kern.argmax") (sysctl-name "kern.hostname") (sysctl-name "kern.maxfilesperproc")
+  (sysctl-name "kern.usrstack64") (sysctl-name "sysctl.proc_translated")
+  (sysctl-name "kern.secure_kernel") (sysctl-name "vm.footprint_suspend"))
+(deny process-info* (target others))
+(allow network-outbound (remote unix-socket (path-literal <service socket>)))
+```
+
+Paths are written as the profile language's strings, `"` and `\` escaped.
+
+| A service can | A service cannot |
+| --- | --- |
+| read its own release's files (its `node_modules` included) and Hub's copy of the SDK | read, list or `stat` anything else of the home or the owner's folders: another service's package, any store's file, its own included (it reaches its store through the host connection only, §7) |
+| connect to the service socket: its control, host and channel connections | connect to any other socket: Hub's control socket (`hubd.sock`), another Unix socket, TCP; resolve a name |
+| use timers, `Intl` with a time zone, `crypto.subtle`, write its log (standard output and error, which Hub holds) | write any file, its own package included |
+| call native code through `bun:ffi` (below) | start a program, by `spawn`, `exec` or `fork` |
+| | list the machine's processes, or read another process's command line |
+
+**Accepted leaks**, kept because the profile cannot close them without
+breaking Bun, and asserted by the escape test (`tests/enclosure.rs`) so a
+change in Bun or macOS that widens or closes one is seen:
+
+- **a system library through `bun:ffi`**: native calls run, and every system
+  call they make still meets the profile;
+- **the command lines of the host and of its ancestors that run as the
+  owner** (`KERN_PROCARGS2`), which the profile does not deny: the
+  proposal measured them readable from a process started in its starter's
+  process group. Measured here on macOS 27.2 with Bun 1.4.4: a process in a
+  process group of its own, as Hub starts every service, reads none of them,
+  its ancestors' included; the escape test asserts that, so a change that
+  opens it is seen;
+- the machine's name and its hardware and system version (`kern.hostname`,
+  `hw.*`, `kern.os*`), and the metadata of the folders above Bun, the release,
+  the SDK and the socket (that they exist).
+
+**What it is for, and what not.** It stops a portable service, a package
+that may come from someone the owner does not know, from reaching the
+owner's files, the network, other programs and Pocket Hub's control socket.
+**It does not stop a hostile program the owner runs**: such a program needs
+no Hub to run code, and can read every store, which are files of the
+owner's user. `sandbox-exec` is an interface Apple marks deprecated; it
+remains in macOS 27.2, and the escape test would fail on the day it changes.
+
+**When the enclosure cannot be set up** (no `sandbox-exec`, a path a profile
+cannot name, `sandbox-exec` refusing the profile or unable to start Bun, which
+it says on standard error before anything of the service's), nothing runs:
+the owner's start is the control API's error `service` with
+`reason: "enclosure"` and one sentence, a device's open is answered `busy`,
+and the service is listed `failed` with that sentence. **No flag, variable or
+build setting runs a service outside it.** On a system other than macOS no
+enclosure is built yet, and no service starts there, with the same reason.
+
+**The install is not enclosed.** The dependencies of a development package
+are installed by `bun install --frozen-lockfile --ignore-scripts` run as Hub,
+outside the enclosure, with the network: no install script runs, and what it
+fetches is what the lockfile pins (§1).
 
 ## 3. Frames
 
@@ -615,5 +700,6 @@ macOS pragmas do not apply. **The cost, measured** on an Apple-silicon Mac
 5.4 ms with `F_FULLFSYNC` (99th percentile 0.44 ms and 12.0 ms); a 64 KiB one
 0.15 ms and 6.3 ms (0.72 ms and 17.8 ms). The store holds sign-in state,
 written rarely: it pays the 5 ms. Values are not
-encrypted beyond the file's mode, and **the service's own process can read
-the file** (it runs with its owner's rights); other users cannot.
+encrypted beyond the file's mode. **The service's process cannot read the
+file** (the enclosure, §2); other users cannot either; a program the owner
+runs can.

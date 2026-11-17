@@ -14,8 +14,10 @@ its own copy into every package it starts: a service declares no dependency on
 it. The channel's names mirror the PocketJS reference service API
 (`tools/pocket-link/v2/peer.ts`) with its `LinkError` as `ServiceError`.
 
-**A service runs with its owner's rights**: it is a program of the owner's
-account, and what the SDK gives it does not limit what its own code can do.
+**A service runs inside an enclosure**: it reads its own package and this
+SDK and connects to Hub's service socket, nothing else. No file of the
+owner's, no network, no program; what it needs from outside it asks its host
+for (`docs/SERVICE-PROTOCOL.md` §2).
 
 ## A minimal service
 

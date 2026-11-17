@@ -76,6 +76,10 @@ pub enum StartError {
     /// is refused, the store untouched.
     #[error("{0}'s store was written by a newer Pocket Hub")]
     StoreFormat(String),
+    /// Its process could not be started inside the enclosure (§2): nothing
+    /// was run.
+    #[error("{0}")]
+    Enclosure(String),
     #[error("{0}")]
     Failed(String),
 }
@@ -729,7 +733,7 @@ impl Supervisor {
                         return Err(format!("{why}; Hub starts it again in {:.1} s", (until - now).as_secs_f32()));
                     }
                 }
-                let instance = instance::spawn(inner, entry, service, &bun).map_err(|error| format!("starting the service: {error}"))?;
+                let instance = instance::spawn(inner, entry, service, &bun)?;
                 let claimed = Next::Claimed(instance.serial, instance.phase.clone(), instance.cmd.clone());
                 entry.instance = Some(instance);
                 if let Some(instance) = entry.instance.as_mut() {
@@ -760,13 +764,13 @@ impl Supervisor {
                 return Err(StartError::StoreFormat(id.to_owned()));
             }
         }
-        let (serial, mut phase, _) = self.claim(&service, true).await.map_err(StartError::Failed)?;
+        let (serial, mut phase, _) = self.claim(&service, true).await.map_err(start_failed)?;
         let pending = Pending { inner: &self.inner, app: id.to_owned(), serial };
         let ready = phase.wait_for(|phase| !matches!(phase, Phase::Starting)).await.map(|phase| phase.clone());
         drop(pending);
         match ready {
             Ok(Phase::Running) => Ok(self.status(id).expect("installed")),
-            Ok(Phase::Stopping(why) | Phase::Down(why)) => Err(StartError::Failed(why)),
+            Ok(Phase::Stopping(why) | Phase::Down(why)) => Err(start_failed(why)),
             _ => Err(StartError::Failed("the service ended".into())),
         }
     }
@@ -963,6 +967,11 @@ async fn host_attach(inner: &Arc<Inner>, stream: UnixStream, ticket: &str) {
     if let Err(stream) = claimed.tx.send(stream) {
         refuse(stream, "host.refused", "the process is no longer expected").await;
     }
+}
+
+/// A start that failed, with the reason `enclosure` when that is why.
+fn start_failed(why: String) -> StartError {
+    if why.starts_with(instance::ENCLOSURE_WHY) { StartError::Enclosure(why) } else { StartError::Failed(why) }
 }
 
 pub(crate) fn backoff(timings: &crate::config::Timings, failures: u32) -> Duration {

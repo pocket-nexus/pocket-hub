@@ -1,0 +1,6 @@
+{
+  "service": 1,
+  "id": "dev.test.probe",
+  "entry": "service.ts",
+  "requires": ["store"]
+}

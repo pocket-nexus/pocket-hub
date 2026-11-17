@@ -84,31 +84,48 @@ struct Outcome {
     requested: Option<StopReason>,
 }
 
+/// The start of the reason a process that could not be enclosed ended with:
+/// the supervisor answers it with the reason `enclosure`.
+pub(crate) const ENCLOSURE_WHY: &str = "its enclosure could not be set up";
+
 /// Spawns the bootstrap for `service` (§2), `bun --no-install run
-/// <sdk>/src/boot.ts ./<entry>`, in its own process group and starts its
-/// task. Called with the supervisor's table locked; `entry` is the service's.
-pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledService, bun: &Path) -> std::io::Result<Instance> {
-    let sdk = inner.config.sdk.clone().ok_or_else(|| std::io::Error::other("the host has no service SDK to start a service with"))?;
+/// <sdk>/src/boot.ts ./<entry>`, inside the enclosure (`enclosure.rs`), in
+/// its own process group, and starts its task. Called with the supervisor's
+/// table locked; `entry` is the service's. An enclosure that cannot be set
+/// up starts nothing: the error begins with `ENCLOSURE_WHY`, and the service
+/// is `failed` with it.
+pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledService, bun: &Path) -> Result<Instance, String> {
+    let sdk = inner.config.sdk.clone().ok_or_else(|| "the host has no service SDK to start a service with".to_owned())?;
     // At each start: the host's copy always wins (§1), and the link made at
     // install may be gone.
     if let Err(error) = crate::registry::link_sdk(&service.dir, &sdk) {
         tracing::warn!(app = %service.id, %error, "the service SDK could not be linked into the package");
     }
-    let token = random_hex();
-    let mut command = Command::new(bun);
     // `--no-install` keeps Bun from fetching packages the lockfile did not
-    // pin; `./` makes the entry a path, not a package name. The process gets
-    // the three variables and the locale, and nothing else of Hub's
-    // environment (§2).
+    // pin; `./` makes the entry a path, not a package name.
+    let boot = std::fs::canonicalize(&sdk).map(|sdk| sdk.join("src").join("boot.ts")).unwrap_or_else(|_| sdk.join("src").join("boot.ts"));
+    let args: Vec<std::ffi::OsString> = vec!["--no-install".into(), "run".into(), boot.into_os_string(), format!("./{}", service.entry).into()];
+    let enclosed = match crate::enclosure::enclose(bun, &service.dir, &sdk, &inner.config.socket, &args) {
+        Ok(enclosed) => enclosed,
+        Err(error) => {
+            let why = format!("{ENCLOSURE_WHY}: {error}");
+            entry.logs.push(LogStream::Hub, &why, false);
+            entry.status.state = ServiceState::Failed;
+            entry.status.last_error = Some(why.clone());
+            return Err(why);
+        }
+    };
+    let token = random_hex();
+    let mut command = Command::new(&enclosed.program);
+    // The process gets the three variables and the locale, and nothing else
+    // of Hub's environment (§2); the socket by its canonical path, the one
+    // the enclosure names.
     command
-        .arg("--no-install")
-        .arg("run")
-        .arg(sdk.join("src").join("boot.ts"))
-        .arg(format!("./{}", service.entry))
-        .current_dir(&service.dir)
+        .args(&enclosed.args)
+        .current_dir(&enclosed.package)
         .env_clear()
         .envs(locale_env())
-        .env("POCKET_SERVICE_SOCKET", &inner.config.socket)
+        .env("POCKET_SERVICE_SOCKET", &enclosed.socket)
         .env("POCKET_SERVICE_TOKEN", &token)
         .env("POCKET_SERVICE_ID", &service.id)
         .stdin(Stdio::null())
@@ -118,8 +135,9 @@ pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledSe
         .kill_on_drop(true)
         // No descriptor of Hub's: a service is code Hub did not write.
         .inherit_nothing();
-    let mut child = command.spawn()?;
-    let pid = child.id().ok_or_else(|| std::io::Error::other("the process ended at once"))?;
+    let first_line = entry.logs.lines(None).last().map(|line| line.seq);
+    let mut child = command.spawn().map_err(|error| format!("starting the service: {error}"))?;
+    let pid = child.id().ok_or_else(|| "starting the service: the process ended at once".to_owned())?;
     let pumps = vec![
         tokio::spawn(pump(child.stdout.take().expect("piped"), entry.logs.clone(), LogStream::Stdout)),
         tokio::spawn(pump(child.stderr.take().expect("piped"), entry.logs.clone(), LogStream::Stderr)),
@@ -149,6 +167,7 @@ pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledSe
         requires: service.requires.clone(),
         store_max_bytes: service.store_max_bytes,
         host_task: None,
+        first_line,
         serial,
         pid,
         child,
@@ -183,6 +202,9 @@ struct Task {
     store_max_bytes: Option<u64>,
     /// The host connection's task, once the service attached it.
     host_task: Option<JoinHandle<String>>,
+    /// The log's last line before this start: the launcher's own line, if it
+    /// failed, comes after it.
+    first_line: Option<u64>,
     serial: u64,
     pid: u32,
     child: Child,
@@ -497,6 +519,16 @@ impl Task {
         for pump in self.pumps.drain(..) {
             let _ = tokio::time::timeout(Duration::from_secs(1), pump).await;
         }
+        // The launcher could not apply the profile or exec Bun: it said so
+        // on standard error before anything of the service's (§2).
+        let launcher = (!self.running)
+            .then(|| self.inner.lock().services.get(&self.app).map(|entry| entry.logs.lines(self.first_line)))
+            .flatten()
+            .and_then(|lines| lines.into_iter().find(|line| line.stream == LogStream::Stderr && line.text.starts_with(crate::enclosure::LAUNCHER_PREFIX)));
+        let outcome = match launcher {
+            Some(line) => Outcome { why: format!("{ENCLOSURE_WHY}: {}", line.text), ..outcome },
+            None => outcome,
+        };
         let ended = match outcome.status {
             Some(status) => match (status.code(), status.signal()) {
                 (Some(code), _) => format!("exited with code {code}"),
