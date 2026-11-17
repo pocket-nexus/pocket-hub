@@ -78,13 +78,13 @@ device is on.
 | --- | --- |
 | `crates/pocket-link` | The Pocket Link 2 wire: beacon, preamble, frames and their streaming decoder, handshake proofs, pairing files and the setup as a plan of storage operations, the messages and HMACs of a pairing by a code. No I/O |
 | `crates/hub-store` | Hub's own files: its identity, one record per paired device, the channel generation |
-| `crates/hub-core` | The link endpoint: carriers, beacons, the handshake, a device's request to be paired by the code it shows, requests, streams and credit, runtime operations, the device mutex, applet channels relayed to services; the device families and what each takes (`family.rs`) |
+| `crates/hub-core` | The link endpoint: carriers, beacons, the handshake, a device's request to be paired by the code it shows, requests, streams and credit, runtime operations, the device mutex, applet channels relayed to services through the `ServiceConnector` trait; the device families and what each takes (`family.rs`) |
 | `crates/hub-setup` | The first install of a 3DS: finding a console's ftpd, its software and the pairing written onto its storage, software releases |
-| `crates/hub-services` | The Bun runtime (downloaded on demand), service packages, their processes and the service socket |
 | `crates/hub-net` | `net.http`: a device's HTTP requests performed by Hub, with the destination policy |
 | `crates/hub-applet-store` | The applet store's client (the catalog, verified packages, icons, and an app's details as the store reads them out of its package), and the link's `catalog` and `install` served from it |
 | `crates/hub-api` | The control API's types and client, shared by the two binaries |
-| `crates/hubd` | `pocket-hubd`, the resident core and the control API's server |
+| `crates/service-host` | The service host (`pocket-service-host`): the Bun runtime (downloaded on demand), service packages, their processes and the service socket, the `ServiceConnector` a relay hands channels to, the service SDK written into the home, and the control API's service methods (`services.*`) and events as a library. It depends on `hub-core` and `hub-api`, never on `hubd`, and holds nothing of devices, setup or the store pages, so another program can serve services from it |
+| `crates/hubd` | `pocket-hubd`, the resident core and the control API's server; it mounts the service host's methods and holds no service logic of its own |
 | `crates/hub-cli` | `pocket-hub`, the command line |
 | `sdk/service` | The TypeScript SDK a service is written with; Hub ships it to every service |
 | `app` | The macOS app: `PocketHub.xcodeproj` (the app target, sources in `app/PocketHub`) and a Swift package with its libraries, a mock core and the tests |

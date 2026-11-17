@@ -21,7 +21,7 @@ This page is the contract between three parts of this repository:
 | Part | Where | Role |
 | --- | --- | --- |
 | The service SDK | `sdk/service` (TypeScript, runs on Bun) | what a service author imports |
-| The supervisor | `crates/hub-services` | installs service packages, starts and stops their processes, owns the socket, matches tickets |
+| The service host | `crates/service-host` | installs service packages, starts and stops their processes, owns the socket, matches tickets; answers the control API's service methods |
 | The channel relay | `crates/hub-core` | joins a device's applet channel to one channel connection |
 
 ## 1. The service package
