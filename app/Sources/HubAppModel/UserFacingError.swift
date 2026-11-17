@@ -93,6 +93,12 @@ public struct UserFacingError: Error, Identifiable, Sendable, Equatable {
                 self.init(title: String(localized: "Pocket Hub couldn't download what services need to run."),
                           advice: String(localized: "Check this Mac's internet connection, then try again."),
                           detail: detail)
+            case .service where operation.reason == "store_format":
+                // CONTROL-API.md §1 Errors: its store was written by a newer
+                // Pocket Hub, which this one leaves as it is.
+                self.init(title: String(localized: "This service's data was saved by a newer Pocket Hub."),
+                          advice: String(localized: "Update Pocket Hub to start it. Its data is kept as it is."),
+                          detail: detail)
             case .service where operation.reason == "dependencies":
                 // CONTROL-API.md §1 Errors: `bun install` refused the
                 // package's dependencies; `data.detail` is the end of its

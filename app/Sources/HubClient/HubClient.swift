@@ -73,7 +73,7 @@ public enum HubClientUpdate: Sendable {
 /// events, and reconnects when the connection drops, starting the core when
 /// nothing answers. Calls go to the current connection.
 public actor HubClient: HubCalling {
-    public static let protocolVersion = 3
+    public static let protocolVersion = 4
     static let log = Logger(subsystem: "nexus.pocket.hub", category: "client")
 
     public struct Configuration: Sendable {

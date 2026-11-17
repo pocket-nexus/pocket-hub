@@ -215,6 +215,8 @@ public struct MockService: Sendable {
     public var error: String?
     /// `earlier` for one an earlier Pocket Hub installed.
     public var reason: String?
+    /// `Service.store`: null without `store` in `requires`.
+    public var store: JSONValue = .null
     public var log: [JSONValue] = []
 
     public init(id: String, release: String? = "dev") {
@@ -239,7 +241,7 @@ public struct MockService: Sendable {
             "requires": .array(requires.map(JSONValue.string)), "hosts": .array(hosts.map(JSONValue.string)), "state": .string(state),
             "pid": pid.map { .number(Double($0)) } ?? .null, "since": since.map { .number(Double($0)) } ?? .null,
             "channels": .number(Double(channels)), "lastExit": lastExit, "error": error.map(JSONValue.string) ?? .null,
-            "reason": reason.map(JSONValue.string) ?? .null,
+            "reason": reason.map(JSONValue.string) ?? .null, "store": store,
         ]
     }
 }
@@ -413,7 +415,7 @@ public struct MockScenario: Sendable {
     /// The control API protocol this core speaks (CONTROL-API.md §1, Hello).
     /// A hello in another is refused with `-32602` and `data: {protocol}`; a
     /// core of protocol 1 answers as Pocket Hub 0.2.2 and earlier, without `data`.
-    public var speaksProtocol = 3
+    public var speaksProtocol = 4
     /// Whether `hub.shutdown` stops it. False stands for a core that answers
     /// and keeps running.
     public var stopsOnShutdown = true
@@ -506,6 +508,8 @@ public struct MockScenario: Sendable {
         weather.pid = 48211
         weather.since = MockClock.now() - 60_000
         weather.channels = 1
+        weather.requires = ["store"]
+        weather.store = ["bytes": 18_432, "maxBytes": 16_777_216, "fileBytes": 45_056]
         weather.log = [
             ["at": .number(Double(MockClock.now() - 59_000)), "stream": "stdout", "text": "weather service 0.3.1 ready"],
             ["at": .number(Double(MockClock.now() - 30_000)), "stream": "stdout", "text": "forecast refreshed for 1 channel"],

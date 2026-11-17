@@ -355,10 +355,21 @@ pub fn services(services: &[Service]) -> String {
                 (state, _) => serde_json::to_value(state).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default(),
             };
             let release = d.release.clone().unwrap_or_else(|| "-".into());
-            vec![d.id.clone(), release, state, d.pid.map(|p| p.to_string()).unwrap_or_else(|| "-".into()), d.channels.to_string()]
+            vec![d.id.clone(), release, state, d.pid.map(|p| p.to_string()).unwrap_or_else(|| "-".into()), d.channels.to_string(), store_use(d)]
         })
         .collect();
-    table(&["ID", "RELEASE", "STATE", "PID", "CHANNELS"], rows)
+    table(&["ID", "RELEASE", "STATE", "PID", "CHANNELS", "STORE"], rows)
+}
+
+/// `Service.store` as a column: what it holds of its limit, and the file's
+/// size when that is larger; `-` for a service without a store.
+fn store_use(service: &Service) -> String {
+    let Some(store) = &service.store else { return "-".into() };
+    let used = match store.bytes {
+        Some(bytes) => format!("{} of {}", size(bytes), size(store.max_bytes)),
+        None => "written by a newer Pocket Hub".into(),
+    };
+    if store.file_bytes > store.bytes.unwrap_or(0) { format!("{used} ({} on disk)", size(store.file_bytes)) } else { used }
 }
 
 /// A free-form object (a device's runtime status) as `key: value` lines.

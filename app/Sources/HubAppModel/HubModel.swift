@@ -376,7 +376,7 @@ public final class HubModel {
         apply(.serviceChanged(service))
     }
 
-    /// Removes a service; with `purge` its data folder goes too.
+    /// Removes a service; with `purge` its stored data goes too.
     public func removeService(_ id: String, purge: Bool = false) async throws {
         try await client.removeService(id: id, purge: purge)
     }

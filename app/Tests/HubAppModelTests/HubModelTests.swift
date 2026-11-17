@@ -174,6 +174,24 @@ struct HubModelTests {
         #expect(UserFacingError(cancelled) == nil, "a cancellation needs no message")
     }
 
+    /// CONTROL-API.md §1 Errors: a store a newer Pocket Hub wrote refuses the
+    /// owner's start with `reason: "store_format"`, said in the app's words.
+    @Test func aStoreOfANewerPocketHubIsSaidPlainly() async throws {
+        let h = try await Harness(.demo)
+        defer { Task { await h.tearDown() } }
+        await h.core.failNext("services.start", with: .init(kind: "service", message: "Its stored data was written by a newer Pocket Hub, and is kept as it is; update Pocket Hub to use it.",
+                                                            data: ["reason": "store_format", "id": "nexus.pocket.weather"]))
+        do {
+            try await h.model.perform(.start, service: "nexus.pocket.weather")
+            Issue.record("expected service")
+        } catch {
+            let message = try #require(UserFacingError(error))
+            #expect(message.title == String(localized: "This service's data was saved by a newer Pocket Hub."))
+            #expect(message.advice == String(localized: "Update Pocket Hub to start it. Its data is kept as it is."))
+        }
+        #expect(h.model.services?.first { $0.id == "nexus.pocket.weather" }?.store == ServiceStore(bytes: 18_432, maxBytes: 16_777_216, fileBytes: 45_056))
+    }
+
     /// CONTROL-API.md §1 Errors: dependencies that would not install are
     /// `service` with `reason: "dependencies"`; the app words its own sentence
     /// and shows the end of `bun install`'s output after Hub's.
