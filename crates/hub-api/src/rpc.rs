@@ -167,3 +167,39 @@ impl RpcError {
         self.data.as_ref().and_then(|data| data.kind)
     }
 }
+
+// The helpers every server of the control API answers with, so the core's
+// own methods and the service host's say the same words for the same fault.
+
+/// A method's `params` as `T`; `-32602` with the method's name when they are
+/// not usable. A missing `params` reads as `{}`.
+pub fn params<T: serde::de::DeserializeOwned>(method: &str, value: serde_json::Value) -> Result<T, RpcError> {
+    let value = if value.is_null() { serde_json::json!({}) } else { value };
+    serde_json::from_value(value).map_err(|error| RpcError::invalid_params(format!("The parameters of {method} are not usable: {error}.")))
+}
+
+/// An absolute path from a parameter (§1: a client and the core share a file
+/// system); the error `invalid` for another one.
+pub fn absolute(path: &str) -> Result<std::path::PathBuf, RpcError> {
+    let path = std::path::PathBuf::from(path);
+    if !path.is_absolute() {
+        return Err(RpcError::op(ErrorKind::Invalid, format!("{} is not an absolute path.", path.display())));
+    }
+    Ok(path)
+}
+
+/// One owner-facing sentence from a lower-level message: a capital first
+/// letter and a full stop.
+pub fn sentence(text: &str) -> String {
+    let text = text.trim();
+    let mut out = String::with_capacity(text.len() + 1);
+    let mut chars = text.chars();
+    if let Some(first) = chars.next() {
+        out.extend(first.to_uppercase());
+        out.push_str(chars.as_str());
+    }
+    if !out.ends_with(['.', '!', '?']) {
+        out.push('.');
+    }
+    out
+}

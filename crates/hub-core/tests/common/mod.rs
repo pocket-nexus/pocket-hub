@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use pocket_hub_core::{
-    BoxFuture, ChannelHost, ChannelOffer, ChannelOpenError, ChannelStream, Endpoint, EndpointConfig, HubEvent, TcpCarrier, Timing,
+    BoxFuture, ChannelOffer, ChannelOpenError, ChannelStream, Endpoint, EndpointConfig, HubEvent, ServiceConnector, TcpCarrier, Timing,
 };
 use pocket_hub_store::{DeviceRecord, Store};
 use pocket_link::frame::{self, Decoded, Dialect, Frame, FrameDecoder, FrameType};
@@ -49,13 +49,13 @@ pub struct Hub {
 }
 
 impl Hub {
-    pub async fn start(config: EndpointConfig, host: Option<Arc<dyn ChannelHost>>) -> Hub {
+    pub async fn start(config: EndpointConfig, host: Option<Arc<dyn ServiceConnector>>) -> Hub {
         let dir = temp_dir("store");
         let store = Arc::new(Store::open(dir.join("store")).unwrap());
         let carrier = TcpCarrier::bind(Some(0)).await.unwrap();
         let mut builder = Endpoint::builder(store.clone()).config(config).listener(Box::new(carrier));
         if let Some(host) = host {
-            builder = builder.channel_host(host);
+            builder = builder.service_connector(host);
         }
         let endpoint = builder.start();
         let port = endpoint.ports()[0].1.unwrap();
@@ -449,7 +449,7 @@ impl Drop for DropNotice {
     }
 }
 
-impl ChannelHost for FakeHost {
+impl ServiceConnector for FakeHost {
     fn open(&self, offer: ChannelOffer) -> BoxFuture<'static, Result<ChannelStream, ChannelOpenError>> {
         let notices = self.notices.clone();
         Box::pin(async move {

@@ -1474,28 +1474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pocket-hub-services"
-version = "0.2.2"
-dependencies = [
- "bytes",
- "flate2",
- "hex",
- "libc",
- "pocket-link",
- "rand 0.9.5",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "zip",
-]
-
-[[package]]
 name = "pocket-hub-setup"
 version = "0.2.2"
 dependencies = [
@@ -1536,10 +1514,10 @@ dependencies = [
  "pocket-hub-applet-store",
  "pocket-hub-core",
  "pocket-hub-net",
- "pocket-hub-services",
  "pocket-hub-setup",
  "pocket-hub-store",
  "pocket-link",
+ "pocket-service-host",
  "serde",
  "serde_json",
  "tempfile",
@@ -1572,6 +1550,30 @@ checksum = "e5276f5ee8b20d49a84498ac1fb3fd1200f15e0f04af010cb5800fc1c698a35b"
 dependencies = [
  "pocket-drivers",
  "pocket-spec",
+]
+
+[[package]]
+name = "pocket-service-host"
+version = "0.2.2"
+dependencies = [
+ "bytes",
+ "flate2",
+ "hex",
+ "libc",
+ "pocket-hub-api",
+ "pocket-hub-core",
+ "pocket-link",
+ "rand 0.9.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "zip",
 ]
 
 [[package]]

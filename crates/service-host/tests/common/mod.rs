@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use pocket_hub_services::{ChannelOffer, Config, Supervisor, Timings};
+use service_host::{ChannelOffer, Config, Supervisor, Timings};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 /// The system `bun`, or None with a note: the tests that run a service are

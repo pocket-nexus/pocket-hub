@@ -1,19 +1,19 @@
 //! The methods of §3.
 
 use std::net::{IpAddr, SocketAddr};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use pocket_hub_api::types::*;
+use pocket_hub_api::rpc::{absolute, params};
 use pocket_hub_api::{ErrorKind, RpcError, methods};
 use pocket_hub_applet_store::{StoreError, is_update};
 use pocket_hub_core::{DeviceHandle, LaunchTarget, OpError, Operation, family};
-use pocket_hub_services::{InstallError, StartError};
+use service_host::ServiceHost;
 use pocket_hub_setup::{DeviceFamily, DiscoverOptions, FTPD_PORT, InstallOptions, InstallTarget, InstalledProgram, InstalledPrograms, ReleaseError, ReleaseFetcher, ShellSource};
 use serde::Serialize;
-use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
@@ -37,11 +37,6 @@ impl Progress<'_> {
     }
 }
 
-fn params<T: DeserializeOwned>(method: &str, value: Value) -> Result<T, RpcError> {
-    let value = if value.is_null() { json!({}) } else { value };
-    serde_json::from_value(value).map_err(|error| RpcError::invalid_params(format!("The parameters of {method} are not usable: {error}.")))
-}
-
 fn ok(value: impl Serialize) -> Result<Value, RpcError> {
     Ok(serde_json::to_value(value).expect("results serialize"))
 }
@@ -54,15 +49,6 @@ fn invalid(message: impl Into<String>) -> RpcError {
     RpcError::op(ErrorKind::Invalid, message)
 }
 
-/// An absolute path from a parameter.
-fn absolute(path: &str) -> Result<PathBuf, RpcError> {
-    let path = PathBuf::from(path);
-    if !path.is_absolute() {
-        return Err(invalid(format!("{} is not an absolute path.", path.display())));
-    }
-    Ok(path)
-}
-
 async fn read_file(path: &Path) -> Result<Vec<u8>, RpcError> {
     tokio::fs::read(path).await.map_err(|error| match error.kind() {
         std::io::ErrorKind::NotFound => RpcError::op(ErrorKind::NotFound, format!("There is no file at {}.", path.display())),
@@ -72,6 +58,12 @@ async fn read_file(path: &Path) -> Result<Vec<u8>, RpcError> {
 
 pub async fn dispatch(core: &Arc<Core>, client: &Client, id: &Value, method: &str, value: Value) -> Result<Value, RpcError> {
     let progress = Progress { client, id };
+    // `services.*` belong to the service host (`service_host`), mounted
+    // here; this server keeps the envelope and adds each call's id to its
+    // progress.
+    if ServiceHost::handles(method) {
+        return core.services.call(method, value, &|members| progress.send(members)).await;
+    }
     match method {
         methods::STATUS => hub_status(core),
         methods::SET_NAME => set_name(core, params(method, value)?),
@@ -131,48 +123,6 @@ pub async fn dispatch(core: &Arc<Core>, client: &Client, id: &Value, method: &st
             ok(Empty {})
         }
 
-        methods::SERVICES_LIST => {
-            let _guard = core.publication();
-            ok(ServiceList { services: core.services() })
-        }
-        methods::SERVICES_INSTALL => service_install(core, params(method, value)?, &progress).await,
-        methods::SERVICES_REMOVE => {
-            let p: ServiceRemoveParams = params(method, value)?;
-            let removed = core.supervisor.remove(&p.id, p.purge.unwrap_or(false)).await.map_err(|error| service_error(&p.id, format!("The service could not be removed: {error}.")))?;
-            if !removed {
-                return Err(no_service(&p.id));
-            }
-            ok(Empty {})
-        }
-        methods::SERVICES_START => {
-            let p: ServiceIdParams = params(method, value)?;
-            core.supervisor.start(&p.id).await.map_err(|error| start_error(&p.id, error))?;
-            service_now(core, &p.id)
-        }
-        methods::SERVICES_STOP => {
-            let p: ServiceIdParams = params(method, value)?;
-            installed(core, &p.id)?;
-            core.supervisor.stop(&p.id).await;
-            service_now(core, &p.id)
-        }
-        methods::SERVICES_RESTART => {
-            let p: ServiceIdParams = params(method, value)?;
-            installed(core, &p.id)?;
-            core.supervisor.restart(&p.id).await.map_err(|error| start_error(&p.id, error))?;
-            service_now(core, &p.id)
-        }
-        methods::SERVICES_LOGS => {
-            let p: ServiceLogsParams = params(method, value)?;
-            let lines = core.supervisor.logs(&p.id, None);
-            if lines.is_empty() && core.supervisor.status(&p.id).is_none() {
-                return Err(no_service(&p.id));
-            }
-            let tail = p.tail.unwrap_or(200);
-            let lines = lines[lines.len().saturating_sub(tail)..].iter().map(map::service_log_line).collect();
-            ok(ServiceLogs { lines })
-        }
-        methods::SERVICES_RUNTIME => runtime(core, params(method, value)?, &progress).await,
-
         methods::STORE_APPS => store_apps(core, params(method, value)?).await,
         methods::STORE_DETAILS => store_details(core, params(method, value)?).await,
         methods::STORE_SAMPLE => store_sample(core, params(method, value)?, &progress).await,
@@ -186,7 +136,6 @@ pub async fn dispatch(core: &Arc<Core>, client: &Client, id: &Value, method: &st
 // ---------------------------------------------------------------------------
 
 fn hub_status(core: &Core) -> Result<Value, RpcError> {
-    let runtime = core.supervisor.runtime();
     ok(HubStatus {
         id: core.store.hub_id(),
         name: core.store.hub_name(),
@@ -194,7 +143,7 @@ fn hub_status(core: &Core) -> Result<Value, RpcError> {
         home: core.home.display().to_string(),
         started_at: core.started_at,
         carriers: core.endpoint.ports().iter().map(|(kind, port)| Carrier { kind: map::carrier_name(*kind), port: *port }).collect(),
-        bun: BunInfo { version: core.bun_version(), installed: runtime.available().is_some() },
+        bun: core.services.bun(),
     })
 }
 
@@ -771,91 +720,3 @@ async fn pair_answer(core: &Arc<Core>, p: PairAnswerParams) -> Result<Value, Rpc
     ok(core.device(&id).ok_or_else(|| internal("The device was paired and its record is gone."))?)
 }
 
-// ---------------------------------------------------------------------------
-// Services
-// ---------------------------------------------------------------------------
-
-fn no_service(id: &str) -> RpcError {
-    RpcError::op(ErrorKind::NotFound, format!("No service {id} is installed."))
-}
-
-fn installed(core: &Core, id: &str) -> Result<(), RpcError> {
-    core.supervisor.status(id).map(|_| ()).ok_or_else(|| no_service(id))
-}
-
-fn service_now(core: &Core, id: &str) -> Result<Value, RpcError> {
-    ok(core.service(id).ok_or_else(|| no_service(id))?)
-}
-
-/// The error `service` for `id`.
-fn service_error(id: &str, message: impl Into<String>) -> RpcError {
-    let id = id.to_owned();
-    RpcError::op(ErrorKind::Service, message).with(|data| data.id = Some(id))
-}
-
-fn start_error(id: &str, error: StartError) -> RpcError {
-    match error {
-        StartError::NotInstalled(id) => no_service(&id),
-        StartError::Failed(why) => service_error(id, map::sentence(&format!("the service did not start: {why}"))),
-    }
-}
-
-/// Downloads Bun when it is missing, with `{done, total}` going to `each`.
-async fn ensure_bun(core: &Core, mut each: impl FnMut(pocket_hub_services::Progress)) -> Result<PathBuf, RpcError> {
-    let runtime = core.supervisor.runtime();
-    if let Some(path) = runtime.available() {
-        return Ok(path);
-    }
-    runtime.ensure_with(&mut each).await.map_err(|error| internal(map::sentence(&format!("Bun could not be installed: {error}"))))
-}
-
-async fn service_install(core: &Core, p: ServicePathParams, progress: &Progress<'_>) -> Result<Value, RpcError> {
-    let path = absolute(&p.path)?;
-    if !path.exists() {
-        return Err(RpcError::op(ErrorKind::NotFound, format!("There is nothing at {}.", path.display())));
-    }
-    // A service runs on Bun: the first install downloads it.
-    let mut shown = None;
-    let source = path.display().to_string();
-    ensure_bun(core, |step| {
-        let message = match step.total {
-            Some(total) if total > 0 => format!("Downloading Bun: {}%.", step.done * 100 / total),
-            _ => format!("Downloading Bun: {} KiB.", step.done / 1024),
-        };
-        if shown.as_ref() != Some(&message) {
-            progress.send(ServiceInstallProgress { stage: "runtime".into(), message: message.clone() });
-            shown = Some(message);
-        }
-    })
-    .await
-    .map_err(|error| RpcError::op(ErrorKind::Service, error.message))?;
-    progress.send(ServiceInstallProgress { stage: "installing".into(), message: format!("Installing the service package {}.", path.display()) });
-    // A package that is not one is an unusable argument; a package that
-    // could not be installed (its dependencies, the disk) is the service's.
-    let report = core.supervisor.install(&path).await.map_err(|error| match error {
-        InstallError::Source(_) | InstallError::Archive(_) | InstallError::Manifest(_) => invalid(map::sentence(&error.to_string())),
-        other => RpcError::op(ErrorKind::Service, map::sentence(&format!("{source} could not be installed: {other}"))),
-    })?;
-    service_now(core, &report.service.id)
-}
-
-async fn runtime(core: &Core, p: RuntimeParams, progress: &Progress<'_>) -> Result<Value, RpcError> {
-    let runtime = core.supervisor.runtime();
-    if p.install.unwrap_or(false) {
-        let mut last = None;
-        ensure_bun(core, |step| {
-            let tick = (step.done / (256 * 1024), step.done == step.total.unwrap_or(u64::MAX));
-            if last != Some(tick) {
-                last = Some(tick);
-                progress.send(RuntimeProgress { done: step.done, total: step.total });
-            }
-        })
-        .await?;
-    }
-    let path = runtime.available();
-    ok(RuntimeInfo {
-        version: core.bun_version(),
-        installed: path.is_some(),
-        path: path.unwrap_or_else(|| runtime.install_path()).display().to_string(),
-    })
-}

@@ -306,7 +306,7 @@ async fn requests_and_events_hub_does_not_serve() {
     assert_eq!(seen[&1], "unsupported");
     assert_eq!(seen[&3], "unknown_message");
     assert_eq!(seen[&5], "malformed");
-    // No channel host: Hub does not list `channel`, so the group is not in use.
+    // No service connector: Hub does not list `channel`, so the group is not in use.
     assert_eq!(seen[&7], "unsupported");
     assert_eq!(seen[&9], "reset");
     assert_eq!(seen[&11], "no_channel");

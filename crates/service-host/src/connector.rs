@@ -1,5 +1,5 @@
-//! The service supervisor (`hub-services`) as the endpoint's channel host
-//! (`hub-core`): a device's `channel.open` becomes `Supervisor::open_channel`.
+//! The supervisor as the relay's `ServiceConnector` (`hub-core`): a device's
+//! `channel.open` becomes `Supervisor::open_channel`.
 //!
 //! - The supervisor's channel connection becomes hub-core's
 //!   `ChannelStream`: its two halves as they are, and its `StopSignal` as the
@@ -12,16 +12,17 @@
 
 use std::sync::Arc;
 
-use pocket_hub_core::{BoxFuture, ChannelHost, ChannelOffer, ChannelOpenError, ChannelStream};
-use pocket_hub_services::{OpenError, Supervisor};
+use pocket_hub_core::{BoxFuture, ChannelOffer, ChannelOpenError, ChannelStream, ServiceConnector};
 
-pub struct ServiceHost(pub Arc<Supervisor>);
+use crate::{OpenError, Supervisor};
 
-impl ChannelHost for ServiceHost {
+pub(crate) struct Connector(pub Arc<Supervisor>);
+
+impl ServiceConnector for Connector {
     fn open(&self, offer: ChannelOffer) -> BoxFuture<'static, Result<ChannelStream, ChannelOpenError>> {
         let supervisor = self.0.clone();
         Box::pin(async move {
-            let offer = pocket_hub_services::ChannelOffer {
+            let offer = crate::ChannelOffer {
                 device: offer.device,
                 device_name: offer.device_name,
                 model: offer.model,

@@ -40,6 +40,10 @@ touch its folders on a machine (`~/Library/Application Support/Pocket Hub`,
 - **No link key in a log line, an error, a status answer or the control API.**
 - **A service gets no device operation**, and a process Hub starts inherits none
   of Hub's descriptors.
+- **What runs services lives in `crates/service-host`**, which depends on
+  `hub-core` and `hub-api` and never on `hubd`, devices, setup or the store
+  pages: another program will serve services from it. `hubd` mounts its
+  methods and holds no service logic of its own.
 - Owner-facing sentences from the core are English; the app localizes from
   `kind`, `step` and `reason` (English and Simplified Chinese are both filled
   in for every string).

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use common::*;
-use pocket_hub_services::{BunRuntime, DependencyInstall, InstallError, ManifestError, Registry};
+use service_host::{BunRuntime, DependencyInstall, InstallError, ManifestError, Registry};
 
 fn registry(home: &Path, bun: Option<PathBuf>) -> Registry {
     // Without a Bun the registry still installs packages that need none; a
@@ -308,7 +308,7 @@ async fn hubs_sdk_is_linked_into_packages_without_their_own() {
 
     let plain = package(temp.path(), "plain", &manifest("dev.plain", "1.0.0"), &[("src/service.ts", "")]);
     let installed = registry.install(&plain, &[]).await.unwrap().service;
-    let link = installed.dir.join(pocket_hub_services::SDK_LINK);
+    let link = installed.dir.join(service_host::SDK_LINK);
     assert_eq!(fs::read_link(&link).unwrap(), sdk);
     assert!(!plain.join("node_modules").exists(), "the source is not touched");
 
@@ -319,17 +319,17 @@ async fn hubs_sdk_is_linked_into_packages_without_their_own() {
         &[("src/service.ts", ""), ("node_modules/@pocketjs/service/package.json", r#"{"name":"@pocketjs/service","version":"9.9.9"}"#)],
     );
     let installed_own = registry.install(&own, &[]).await.unwrap().service;
-    let kept = installed_own.dir.join(pocket_hub_services::SDK_LINK);
+    let kept = installed_own.dir.join(service_host::SDK_LINK);
     assert!(!fs::symlink_metadata(&kept).unwrap().file_type().is_symlink());
     assert!(fs::read_to_string(kept.join("package.json")).unwrap().contains("9.9.9"));
-    assert!(!pocket_hub_services::link_sdk(&installed_own.dir, &sdk).unwrap());
+    assert!(!service_host::link_sdk(&installed_own.dir, &sdk).unwrap());
 
     // Removed, and dangling: both are made again.
     fs::remove_file(&link).unwrap();
-    assert!(pocket_hub_services::link_sdk(&installed.dir, &sdk).unwrap());
+    assert!(service_host::link_sdk(&installed.dir, &sdk).unwrap());
     assert_eq!(fs::read_link(&link).unwrap(), sdk);
     fs::remove_file(&link).unwrap();
     std::os::unix::fs::symlink(temp.path().join("gone"), &link).unwrap();
-    assert!(pocket_hub_services::link_sdk(&installed.dir, &sdk).unwrap());
+    assert!(service_host::link_sdk(&installed.dir, &sdk).unwrap());
     assert_eq!(fs::read_link(&link).unwrap(), sdk);
 }

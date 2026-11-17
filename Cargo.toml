@@ -7,8 +7,8 @@ members = [
     "crates/hub-net",
     "crates/hub-applet-store",
     "crates/hub-setup",
-    "crates/hub-services",
     "crates/hub-api",
+    "crates/service-host",
     "crates/hubd",
     "crates/hub-cli",
 ]
@@ -27,8 +27,10 @@ pocket-hub-core = { path = "crates/hub-core" }
 pocket-hub-net = { path = "crates/hub-net" }
 pocket-hub-applet-store = { path = "crates/hub-applet-store" }
 pocket-hub-setup = { path = "crates/hub-setup" }
-pocket-hub-services = { path = "crates/hub-services" }
 pocket-hub-api = { path = "crates/hub-api" }
+# The service host. Its crate name is recommended, not confirmed: this line and
+# its Cargo.toml hold it, and the code calls it `service_host`.
+service-host = { package = "pocket-service-host", path = "crates/service-host" }
 pocket-hubd = { path = "crates/hubd" }
 
 # net.http's own response decoding (gzip, deflate, br), streamed and bounded.

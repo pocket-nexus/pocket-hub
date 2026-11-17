@@ -1,13 +1,19 @@
 [package]
-name = "pocket-hub-services"
-description = "Pocket Hub's services: the Bun runtime, installed service packages and their processes"
+name = "pocket-service-host"
+description = "Pocket Hub's service host: the Bun runtime, installed service packages, their processes and the service socket, the channel connector and the control API's service methods"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+# The code names it `service_host` whatever its package is called.
+[lib]
+name = "service_host"
+
 [dependencies]
 pocket-link.workspace = true
+pocket-hub-api.workspace = true
+pocket-hub-core.workspace = true
 bytes.workspace = true
 hex.workspace = true
 rand.workspace = true

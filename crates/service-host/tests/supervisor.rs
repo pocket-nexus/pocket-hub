@@ -8,7 +8,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use common::*;
-use pocket_hub_services::{ServiceState, LogStream, OpenError, Supervisor, SupervisorError};
+use service_host::{ServiceState, LogStream, OpenError, Supervisor, SupervisorError};
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -337,7 +337,7 @@ async fn start_stop_and_restart_by_the_owner() {
 
     let mut states = Vec::new();
     while let Ok(event) = events.try_recv() {
-        if let pocket_hub_services::ServiceEvent::State(status) = event {
+        if let service_host::ServiceEvent::State(status) = event {
             states.push(status.state);
         }
     }

@@ -1,6 +1,6 @@
 //! What the rest of Hub sees of the endpoint: snapshots, events, the error of
 //! a runtime operation, and the two traits other crates implement (the
-//! service supervisor's `ChannelHost`, and `DeviceRequests` for the device's
+//! service host's `ServiceConnector`, and `DeviceRequests` for the device's
 //! own system requests).
 
 use std::future::Future;
@@ -68,13 +68,14 @@ pub enum ChannelOpenError {
     Rejected(String),
 }
 
-/// The service supervisor's side of a channel. `open` is called after the
+/// Where a relay hands an applet's channel: the service host's side
+/// (`service_host`'s connector). `open` is called after the
 /// generation is stored; Hub answers the device `busy` when it has not
 /// returned within LINK_CHANNEL_OPEN_MS, and **drops the future** when the
 /// device cancels the open or the link ends: dropping it is how the
 /// supervisor learns that the open is no longer wanted. A stream that comes
 /// after the answer is dropped.
-pub trait ChannelHost: Send + Sync + 'static {
+pub trait ServiceConnector: Send + Sync + 'static {
     fn open(&self, offer: ChannelOffer) -> BoxFuture<'static, Result<ChannelStream, ChannelOpenError>>;
 }
 

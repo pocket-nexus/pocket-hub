@@ -20,7 +20,6 @@ use pocket_hub_api::types::{self as api, Event};
 use pocket_hub_api::{methods, paths};
 use pocket_hub_applet_store::{AppletStore, LinkCatalog, LinkConfig, StoreConfig, StoreEvent};
 use pocket_hub_core::{Endpoint, EndpointConfig, HubEvent, TcpCarrier, Timing};
-use pocket_hub_services::{ServiceEvent, ServiceStatus, LogLine, Supervisor};
 use pocket_hub_setup::{DeviceFamily, ReleaseFetcher, ShellSource};
 use pocket_hub_store::Store;
 use serde_json::json;
@@ -28,9 +27,10 @@ use tokio::net::UnixListener;
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 
-use crate::host::ServiceHost;
 use crate::program::Releases;
-use crate::{Options, StartError, VERSION, map, sdk, server};
+use service_host::{HostOptions, Publisher, ServiceHost};
+
+use crate::{Options, StartError, VERSION, map, server};
 
 /// Screenshots kept in `<home>/cache/screenshots`.
 pub const KEPT_SCREENSHOTS: usize = 50;
@@ -47,7 +47,9 @@ pub struct Core {
     pub socket: PathBuf,
     pub store: Arc<Store>,
     pub endpoint: Endpoint,
-    pub supervisor: Arc<Supervisor>,
+    /// The service host (`service_host`): the supervisor and the
+    /// `services.*` methods, mounted into this server.
+    pub services: Arc<ServiceHost>,
     /// The applet store's client (§3 Store), and the link's catalog and
     /// install served from it (link specification §6.4).
     pub applets: Arc<AppletStore>,
@@ -55,9 +57,6 @@ pub struct Core {
     pub started_at: i64,
     /// The TCP link port in use.
     pub link_port: u16,
-    /// The version of the configured Bun as it reports it; None for the
-    /// pinned Bun Hub downloads.
-    bun_override_version: Option<String>,
     events: broadcast::Sender<Arc<Published>>,
     publication: Mutex<()>,
     /// The newest release of each family's own program (§2 `Device.program`).
@@ -117,12 +116,9 @@ impl Core {
         })?;
 
         let store = Arc::new(Store::open_named(home.join("store"), options.name.as_deref()).map_err(|error| StartError::Other(format!("Pocket Hub cannot open its store: {error}.")))?);
-        let sdk = sdk::materialize(&home).map_err(|error| StartError::Other(format!("Pocket Hub cannot write the service SDK into its home: {error}.")))?;
-        let mut config = pocket_hub_services::Config::new(&home, home.join("service.sock"));
-        config.bun_path = options.bun.clone();
-        config.sdk = Some(sdk);
-        config.timings.idle_override = options.service_idle;
-        let supervisor = Arc::new(Supervisor::new(config).await.map_err(|error| StartError::Other(format!("Pocket Hub cannot start its service supervisor: {error}.")))?);
+        let services = ServiceHost::start(HostOptions { home: home.clone(), socket: home.join("service.sock"), bun: options.bun.clone(), idle_override: options.service_idle })
+            .await
+            .map_err(StartError::Other)?;
 
         let endpoint_config = EndpointConfig { timing: Timing {
                 mutex_wait: options.mutex_wait,
@@ -151,7 +147,7 @@ impl Core {
         let endpoint = Endpoint::builder(store.clone())
             .config(endpoint_config)
             .listener(Box::new(carrier))
-            .channel_host(Arc::new(ServiceHost(supervisor.clone())))
+            .service_connector(services.connector())
             .device_requests(Arc::new(net))
             .device_requests(Arc::new(link_catalog.clone()))
             .start();
@@ -165,13 +161,10 @@ impl Core {
         let store_events = applets.subscribe();
         let link_port = endpoint.ports().iter().find_map(|(_, port)| *port).unwrap_or(wanted);
         let hub_events = endpoint.subscribe();
-        let service_events = supervisor.subscribe();
-        let service_logs = supervisor.subscribe_logs();
 
         let listener = UnixListener::bind(&socket).map_err(|error| StartError::Other(format!("Pocket Hub cannot listen on {}: {error}.", socket.display())))?;
         fs::set_permissions(&socket, fs::Permissions::from_mode(0o600)).map_err(home_error)?;
 
-        let bun_override_version = options.bun.as_deref().and_then(reported_version);
         let releases = Releases::new(options.program_look_interval);
         let core = Arc::new(Core {
             options,
@@ -179,12 +172,11 @@ impl Core {
             socket,
             store,
             endpoint,
-            supervisor,
+            services,
             applets,
             link_catalog,
             started_at: epoch_ms(),
             link_port,
-            bun_override_version,
             events: broadcast::channel(4096).0,
             publication: Mutex::new(()),
             releases,
@@ -195,22 +187,18 @@ impl Core {
             tasks: Mutex::new(Vec::new()),
             _home_lock: home_lock,
         });
-        let pump = tokio::spawn(pump(core.clone(), hub_events, service_events, service_logs));
+        let pump = tokio::spawn(pump(core.clone(), hub_events));
+        let service_pump = core.services.attach(Arc::new(CorePublisher(Arc::downgrade(&core))));
         let accept = tokio::spawn(server::accept_loop(core.clone(), listener));
         let offer = core.link_catalog.start();
         let store_pump = tokio::spawn(store_pump(core.clone(), store_events));
-        core.tasks.lock().unwrap().extend([pump, accept, offer, store_pump]);
+        core.tasks.lock().unwrap().extend([pump, service_pump, accept, offer, store_pump]);
         tracing::info!(home = %core.home.display(), socket = %core.socket.display(), link_port, version = VERSION, "Pocket Hub core started");
         Ok(core)
     }
 
     pub fn hub_info(&self) -> api::HubInfo {
         api::HubInfo { id: self.store.hub_id(), name: self.store.hub_name(), version: VERSION.to_owned() }
-    }
-
-    /// The Bun version services run on: the configured Bun's own, else the pinned one.
-    pub fn bun_version(&self) -> String {
-        self.bun_override_version.clone().unwrap_or_else(|| self.supervisor.runtime().version().to_owned())
     }
 
     pub fn next_conn(&self) -> u64 {
@@ -316,25 +304,6 @@ impl Core {
         }
     }
 
-    pub fn service(&self, id: &str) -> Option<api::Service> {
-        let status = self.supervisor.status(id)?;
-        Some(map::service(&status, self.supervisor.registry().get(id).as_ref()))
-    }
-
-    pub fn services(&self) -> Vec<api::Service> {
-        self.supervisor.statuses().iter().map(|status| map::service(status, self.supervisor.registry().get(&status.id).as_ref())).collect()
-    }
-
-    /// `service.changed` with the service as it is now (`fallback` when it is
-    /// no longer known, as after a removal with its process still ending).
-    fn publish_service(&self, id: &str, fallback: Option<&ServiceStatus>) {
-        let _guard = self.publication();
-        let service = self.service(id).or_else(|| fallback.map(|status| map::service(status, None)));
-        if let Some(service) = service {
-            self.publish(&Event::ServiceChanged { service });
-        }
-    }
-
     /// Every device, the pairing requests and every service again, after
     /// events were lost to a full queue.
     pub fn resync(&self) {
@@ -343,7 +312,7 @@ impl Core {
             self.publish(&Event::DeviceChanged { device: Box::new(device) });
         }
         self.publish(&Event::PairingChanged { requests: self.pair_requests() });
-        for service in self.services() {
+        for service in self.services.services() {
             self.publish(&Event::ServiceChanged { service });
         }
     }
@@ -449,7 +418,7 @@ impl Core {
         }
         tracing::info!("Pocket Hub core shutting down");
         self.endpoint.shutdown().await;
-        self.supervisor.shutdown().await;
+        self.services.shutdown().await;
         for task in self.tasks.lock().unwrap().drain(..) {
             task.abort();
         }
@@ -482,14 +451,6 @@ async fn futures_any(probes: impl Iterator<Item = impl std::future::Future<Outpu
     any
 }
 
-/// `<bun> --version`, for a Bun Hub did not download.
-fn reported_version(bun: &Path) -> Option<String> {
-    use pocket_hub_services::child::InheritNothing;
-    let output = std::process::Command::new(bun).arg("--version").stdin(std::process::Stdio::null()).inherit_nothing().output().ok()?;
-    let text = String::from_utf8(output.stdout).ok()?;
-    (output.status.success() && !text.trim().is_empty()).then(|| text.trim().to_owned())
-}
-
 fn prune_cache(dir: &Path, keep: usize) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     let mut names: Vec<PathBuf> = entries.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "png")).collect();
@@ -502,33 +463,43 @@ fn prune_cache(dir: &Path, keep: usize) {
     }
 }
 
-/// Turns the endpoint's and the supervisor's events into the contract's.
-async fn pump(
-    core: Arc<Core>,
-    mut hub: broadcast::Receiver<HubEvent>,
-    mut services: broadcast::Receiver<ServiceEvent>,
-    mut logs: broadcast::Receiver<LogLine>,
-) {
+/// The service host's way out to this server's clients: its events go to
+/// the same broadcast as the core's, under the same `publication` lock, and
+/// a loss of them resyncs everything. Weak: the host lives inside the core.
+struct CorePublisher(std::sync::Weak<Core>);
+
+impl Publisher for CorePublisher {
+    fn ordered(&self, body: &mut dyn FnMut()) {
+        match self.0.upgrade() {
+            Some(core) => {
+                let _guard = core.publication();
+                body();
+            }
+            None => body(),
+        }
+    }
+
+    fn publish(&self, event: Event) {
+        if let Some(core) = self.0.upgrade() {
+            core.publish(&event);
+        }
+    }
+
+    fn resync(&self) {
+        if let Some(core) = self.0.upgrade() {
+            core.resync();
+        }
+    }
+}
+
+/// Turns the endpoint's events into the contract's.
+async fn pump(core: Arc<Core>, mut hub: broadcast::Receiver<HubEvent>) {
     use broadcast::error::RecvError;
     loop {
-        tokio::select! {
-            event = hub.recv() => match event {
-                Ok(event) => on_hub_event(&core, event).await,
-                Err(RecvError::Lagged(_)) => core.resync(),
-                Err(RecvError::Closed) => return,
-            },
-            event = services.recv() => match event {
-                Ok(ServiceEvent::State(status)) => core.publish_service(&status.id.clone(), Some(&status)),
-                Ok(ServiceEvent::Installed(service)) => core.publish_service(&service.id, None),
-                Ok(ServiceEvent::Removed { id }) => core.publish(&Event::ServiceRemoved { id }),
-                Err(RecvError::Lagged(_)) => core.resync(),
-                Err(RecvError::Closed) => return,
-            },
-            line = logs.recv() => match line {
-                Ok(line) => core.publish(&Event::ServiceLog { id: line.app.clone(), at: line.at, stream: map::log_stream(line.stream).to_owned(), text: line.text }),
-                Err(RecvError::Lagged(missed)) => tracing::warn!(missed, "service log lines were dropped from the control API"),
-                Err(RecvError::Closed) => return,
-            },
+        match hub.recv().await {
+            Ok(event) => on_hub_event(&core, event).await,
+            Err(RecvError::Lagged(_)) => core.resync(),
+            Err(RecvError::Closed) => return,
         }
     }
 }

@@ -351,10 +351,15 @@ async fn the_vertical_slice_through_the_binary() {
     device.send(json!({"cmd": "open", "app": APP})).await;
     device.expect("channel-open").await;
     // The service's and the device's views of the channel, in either order.
-    let (mut open, mut running) = (None, None);
+    // A line of the service's output may come among them: events of the
+    // device and of the service host have no order between them (§1), so it
+    // is noted here rather than awaited after.
+    let (mut open, mut running, mut logged) = (None, None, false);
     while open.is_none() || running.is_none() {
-        let e = event(&client, |e| topic(e, "device.changed") || topic(e, "service.changed")).await;
-        if topic(&e, "device.changed") && e["device"]["channels"].as_array().is_some_and(|c| c.len() == 1) {
+        let e = event(&client, |e| topic(e, "device.changed") || topic(e, "service.changed") || topic(e, "service.log")).await;
+        if topic(&e, "service.log") && e["id"] == APP {
+            logged = true;
+        } else if topic(&e, "device.changed") && e["device"]["channels"].as_array().is_some_and(|c| c.len() == 1) {
             open = Some(e);
         } else if topic(&e, "service.changed") && e["service"]["state"] == "running" && e["service"]["channels"] == 1 {
             running = Some(e);
@@ -385,7 +390,9 @@ async fn the_vertical_slice_through_the_binary() {
 
     let services: ServiceList = client.call_as(methods::SERVICES_LIST, &json!({})).await.unwrap();
     assert_eq!((services.services[0].state, services.services[0].channels), (ServiceState::Running, 1));
-    event(&client, |e| topic(e, "service.log") && e["id"] == APP).await;
+    if !logged {
+        event(&client, |e| topic(e, "service.log") && e["id"] == APP).await;
+    }
 
     // The applet exits: the channel closes, the service goes idle and stops.
     device.send(json!({"cmd": "exit"})).await;
@@ -588,7 +595,7 @@ impl Machine {
     /// port (a peer, a test server), a screenshot's time in its file name.
     fn text(&self, text: &str) -> String {
         if text == self.bun_version {
-            return pocket_hub_services::BUN_VERSION.to_owned();
+            return service_host::BUN_VERSION.to_owned();
         }
         let mut text = text.to_owned();
         for (from, to) in &self.replacements {
