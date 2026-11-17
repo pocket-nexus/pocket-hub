@@ -1,16 +1,18 @@
-//! One service process, from its spawn to its end (§2, §4).
+//! One service process, from its spawn to its end (§2, §4, §6).
 //!
 //! The instance's task owns the child and, once the service has said
-//! `service.hello`, its control connection. It answers `service.ready`, writes
-//! the offers the supervisor gives it, keeps the idle timer, and runs the
-//! stop sequence. Whatever ends the process — Hub's stop, the end of the
-//! control connection (the lease), or the process's own exit — the task
+//! `service.hello`, its control connection. It answers `service.ready` with
+//! a host ticket, waits for the host connection that presents it and hands
+//! that connection to its own task (`host::serve`), writes the offers the
+//! supervisor gives it, keeps the idle timer, and runs the stop sequence.
+//! Whatever ends the process — Hub's stop, the end of the control or the host
+//! connection (together the lease), or the process's own exit — the task
 //! reaps it, kills what is left of its process group, shuts its channel
 //! connections down and records how it ended. It never starts the process
 //! again: only the next open does.
 
 use std::os::unix::process::ExitStatusExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -26,10 +28,12 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 use crate::child::InheritNothing;
+use crate::host::{self, HostSession, StoreBinding};
 use crate::logs::{pump, LogStream};
 use crate::registry::InstalledService;
+use crate::store::Stores;
 use crate::supervisor::{backoff, exit_info, ServiceState, Entry, Inner, Instance};
-use crate::util::{epoch_ms, inherited_env, path_with, private_dir, random_hex, signal_group};
+use crate::util::{epoch_ms, locale_env, random_hex, signal_group};
 use crate::wire;
 
 /// What the supervisor's waiters see of an instance.
@@ -80,34 +84,33 @@ struct Outcome {
     requested: Option<StopReason>,
 }
 
-/// Spawns `bun run ./<entry>` for `service` (§2) in its own process group and
-/// starts its task. Called with the supervisor's table locked; `entry` is
-/// the service's.
+/// Spawns the bootstrap for `service` (§2), `bun --no-install run
+/// <sdk>/src/boot.ts ./<entry>`, in its own process group and starts its
+/// task. Called with the supervisor's table locked; `entry` is the service's.
 pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledService, bun: &Path) -> std::io::Result<Instance> {
-    private_dir(&service.data)?;
-    // Checked again at each start: the link made at install may be gone.
-    if let Some(sdk) = &inner.config.sdk
-        && let Err(error) = crate::registry::link_sdk(&service.dir, sdk)
-    {
+    let sdk = inner.config.sdk.clone().ok_or_else(|| std::io::Error::other("the host has no service SDK to start a service with"))?;
+    // At each start: the host's copy always wins (§1), and the link made at
+    // install may be gone.
+    if let Err(error) = crate::registry::link_sdk(&service.dir, &sdk) {
         tracing::warn!(app = %service.id, %error, "the service SDK could not be linked into the package");
     }
     let token = random_hex();
     let mut command = Command::new(bun);
-    // `./` makes Bun run the file even when package.json has a script of the
-    // same name; `--no-install` keeps Bun from fetching packages the
-    // lockfile did not pin.
+    // `--no-install` keeps Bun from fetching packages the lockfile did not
+    // pin; `./` makes the entry a path, not a package name. The process gets
+    // the three variables and the locale, and nothing else of Hub's
+    // environment (§2).
     command
         .arg("--no-install")
         .arg("run")
+        .arg(sdk.join("src").join("boot.ts"))
         .arg(format!("./{}", service.entry))
         .current_dir(&service.dir)
         .env_clear()
-        .envs(inherited_env())
-        .env("PATH", path_with(bun))
+        .envs(locale_env())
         .env("POCKET_SERVICE_SOCKET", &inner.config.socket)
         .env("POCKET_SERVICE_TOKEN", &token)
         .env("POCKET_SERVICE_ID", &service.id)
-        .env("POCKET_SERVICE_DATA", &service.data)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -143,7 +146,9 @@ pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledSe
         inner: inner.clone(),
         app: service.id.clone(),
         release: service.release.clone(),
-        data: service.data.clone(),
+        requires: service.requires.clone(),
+        store_max_bytes: service.store_max_bytes,
+        host_task: None,
         serial,
         pid,
         child,
@@ -173,9 +178,11 @@ pub(crate) fn spawn(inner: &Arc<Inner>, entry: &mut Entry, service: &InstalledSe
 struct Task {
     inner: Arc<Inner>,
     app: String,
-    #[allow(dead_code)] // kept beside `app` for the process's logs and debugging
     release: String,
-    data: PathBuf,
+    requires: Vec<String>,
+    store_max_bytes: Option<u64>,
+    /// The host connection's task, once the service attached it.
+    host_task: Option<JoinHandle<String>>,
     serial: u64,
     pid: u32,
     child: Child,
@@ -222,7 +229,11 @@ impl Task {
                         Ok(Err(reason)) => return Err(self.end(format!("service.hello refused: {reason}"), None).await),
                         Err(_) => return Err(self.end("the supervisor dropped the process".into(), None).await),
                     };
-                    let ready = json!({ "t": "service.ready", "app": self.app, "data": self.data.to_string_lossy() });
+                    // §4: the release it runs and a ticket for one host.attach.
+                    let ticket = random_hex();
+                    let (host_tx, host_rx) = oneshot::channel();
+                    self.inner.add_host_ticket(&ticket, &self.app, self.serial, host_tx);
+                    let ready = json!({ "t": "service.ready", "app": self.app, "release": self.release, "host": ticket });
                     let frame = pocket_link::frame::encode_json(
                         pocket_link::FrameType::Handshake, 0, &ready, Default::default(), pocket_link::consts::MAX_HANDSHAKE,
                     );
@@ -236,6 +247,7 @@ impl Task {
                     if let Err(error) = written {
                         return Err(self.end(format!("writing service.ready: {error}"), None).await);
                     }
+                    self.attach_host(host_rx).await?;
                     return Ok(stream);
                 }
                 _ = &mut deadline => {
@@ -251,6 +263,52 @@ impl Task {
         }
     }
 
+    /// §6: the host connection presenting the ticket of `service.ready`,
+    /// within `host_attach` of it, answered `host.ready` and served by its
+    /// own task. A process that attaches none is a failed start.
+    async fn attach_host(&mut self, host_rx: oneshot::Receiver<UnixStream>) -> Result<(), Outcome> {
+        let wait = self.timings().host_attach;
+        let attached = tokio::select! {
+            stream = host_rx => stream.ok(),
+            _ = tokio::time::sleep(wait) => None,
+            status = self.child.wait() => {
+                return Err(Outcome { status: status.ok(), why: "the process exited before its host.attach".into(), requested: None });
+            }
+        };
+        let Some(mut stream) = attached else {
+            self.inner.remove_host_tickets(&self.app, self.serial);
+            return Err(self.end(format!("no host.attach within {:.1} s of service.ready", wait.as_secs_f32()), None).await);
+        };
+        let written = tokio::time::timeout(Duration::from_secs(5), wire::write_all(&mut stream, &host::ready_frame(&self.requires))).await;
+        if !matches!(written, Ok(Ok(()))) {
+            return Err(self.end("writing host.ready failed".into(), None).await);
+        }
+        let session = HostSession { app: self.app.clone(), requires: self.requires.clone(), store: self.store_binding() };
+        self.host_task = Some(tokio::spawn(host::serve(stream, session)));
+        Ok(())
+    }
+
+    /// The store this process's `store.*` calls reach (§7): the release's
+    /// own, under the newest installed release's `store.maxBytes`.
+    fn store_binding(&self) -> Option<StoreBinding> {
+        let own = self.store_max_bytes?;
+        let weak = Arc::downgrade(&self.inner);
+        let (app, max_app) = (self.app.clone(), self.app.clone());
+        let max = weak.clone();
+        Some(StoreBinding {
+            stores: self.inner.stores.clone(),
+            name: Stores::name(&self.app, &self.release),
+            max_bytes: Arc::new(move || {
+                max.upgrade().and_then(|inner| inner.registry.get(&max_app)).and_then(|service| service.store_max_bytes).unwrap_or(own)
+            }),
+            written: Arc::new(move || {
+                if let Some(inner) = weak.upgrade() {
+                    inner.store_written(&app);
+                }
+            }),
+        })
+    }
+
     /// From `service.ready` to the end.
     async fn serving(&mut self, control: UnixStream) -> Outcome {
         self.running = true;
@@ -264,13 +322,23 @@ impl Task {
         let idle = tokio::time::sleep(Duration::from_secs(86_400));
         tokio::pin!(idle);
         let mut armed = self.arm(idle.as_mut());
+        let mut host = self.host_task.take().expect("attached before serving");
         loop {
             tokio::select! {
                 status = self.child.wait() => {
+                    host.abort();
                     return Outcome { status: status.ok(), why: "the process exited".into(), requested: None };
                 }
+                why = &mut host => {
+                    // §6: the host connection is part of the lease.
+                    let why = why.unwrap_or_else(|_| "the host connection's task ended".into());
+                    return self.lease_lost(&why).await;
+                }
                 read = reader.read(&mut buffer) => match read {
-                    Ok(0) | Err(_) => return self.lease_lost("the service closed its control connection").await,
+                    Ok(0) | Err(_) => {
+                        host.abort();
+                        return self.lease_lost("the service closed its control connection").await;
+                    }
                     Ok(n) => {
                         // §4 defines nothing the service sends after its
                         // hello; a valid frame is ignored, a broken one
@@ -281,6 +349,7 @@ impl Task {
                                 Ok(Some(_)) => {}
                                 Ok(None) => break,
                                 Err(close) => {
+                                    host.abort();
                                     let why = format!("a malformed frame on the control connection: {}", close.reason);
                                     return self.lease_lost(&why).await;
                                 }
@@ -292,16 +361,27 @@ impl Task {
                     Some(Cmd::Offer(frame)) => {
                         let written = tokio::time::timeout(Duration::from_secs(5), wire::write_all(&mut writer, &frame)).await;
                         if !matches!(written, Ok(Ok(()))) {
+                            host.abort();
                             return self.lease_lost("the control connection does not take channel.offer").await;
                         }
                     }
                     Some(Cmd::Recount) => armed = self.arm(idle.as_mut()),
-                    Some(Cmd::Stop(reason)) => return self.stop(reason, &mut writer).await,
-                    None => return self.stop(StopReason::Shutdown, &mut writer).await,
+                    Some(Cmd::Stop(reason)) => {
+                        let outcome = self.stop(reason, &mut writer).await;
+                        host.abort();
+                        return outcome;
+                    }
+                    None => {
+                        let outcome = self.stop(StopReason::Shutdown, &mut writer).await;
+                        host.abort();
+                        return outcome;
+                    }
                 },
                 _ = &mut idle, if armed => {
                     if self.claim_idle_stop() {
-                        return self.stop(StopReason::Idle, &mut writer).await;
+                        let outcome = self.stop(StopReason::Idle, &mut writer).await;
+                        host.abort();
+                        return outcome;
                     }
                     armed = false;
                 }
@@ -406,6 +486,10 @@ impl Task {
     }
 
     async fn finish(mut self, outcome: Outcome) {
+        if let Some(host) = self.host_task.take() {
+            host.abort();
+        }
+        self.inner.remove_host_tickets(&self.app, self.serial);
         // What is left of the group (the service's own children) goes with it.
         signal_group(self.pid, libc::SIGKILL);
         // The log is complete before the state says the process ended. A

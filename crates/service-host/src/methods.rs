@@ -38,6 +38,7 @@ use crate::child::InheritNothing;
 use crate::connector::Connector;
 use crate::registry::Removed;
 use crate::supervisor::EARLIER_SENTENCE;
+use crate::store::StoreUse;
 use crate::{Config, InstallError, InstalledService, LogLine, LogStream, Progress, ServiceEvent, ServiceState, ServiceStatus, StartError, Supervisor};
 
 /// What the program that serves the methods gives them: its event broadcast
@@ -185,13 +186,16 @@ impl ServiceHost {
 
     /// Every installed service, as the contract's `Service`.
     pub fn services(&self) -> Vec<api::Service> {
-        self.supervisor.statuses().iter().map(|status| service(status, self.supervisor.registry().get(&status.id).as_ref())).collect()
+        self.supervisor.statuses().iter().map(|status| self.contract(status)).collect()
     }
 
     /// One installed service, as the contract's `Service`.
     pub fn service(&self, id: &str) -> Option<api::Service> {
-        let status = self.supervisor.status(id)?;
-        Some(service(&status, self.supervisor.registry().get(id).as_ref()))
+        Some(self.contract(&self.supervisor.status(id)?))
+    }
+
+    fn contract(&self, status: &ServiceStatus) -> api::Service {
+        service(status, self.supervisor.registry().get(&status.id).as_ref(), self.supervisor.store_use(&status.id))
     }
 
     /// The Bun services run on, as `hub.status` gives it: the configured
@@ -238,7 +242,7 @@ impl ServiceHost {
     /// no longer known, as after a removal with its process still ending).
     fn publish_service(&self, publisher: &dyn Publisher, id: &str, fallback: Option<&ServiceStatus>) {
         publisher.ordered(&mut || {
-            let service = self.service(id).or_else(|| fallback.map(|status| service(status, None)));
+            let service = self.service(id).or_else(|| fallback.map(|status| service(status, None, None)));
             if let Some(service) = service {
                 publisher.publish(Event::ServiceChanged { service });
             }
@@ -259,10 +263,12 @@ impl ServiceHost {
         if !path.exists() {
             return Err(RpcError::op(ErrorKind::NotFound, format!("There is nothing at {}.", path.display())));
         }
-        // A service runs on Bun: the first install downloads it.
-        let mut shown = None;
         let source = path.display().to_string();
-        self.ensure_bun(|step| {
+        send(progress, ServiceInstallProgress { stage: "installing".into(), message: format!("Installing the service package {}.", path.display()) });
+        // A service runs on Bun: the first install downloads it, once the
+        // manifest is checked, so a refused manifest never waits for it.
+        let mut shown = None;
+        let mut bun = |step: Progress| {
             let message = match step.total {
                 Some(total) if total > 0 => format!("Downloading Bun: {}%.", step.done * 100 / total),
                 _ => format!("Downloading Bun: {} KiB.", step.done / 1024),
@@ -271,17 +277,12 @@ impl ServiceHost {
                 send(progress, ServiceInstallProgress { stage: "runtime".into(), message: message.clone() });
                 shown = Some(message);
             }
-        })
-        .await
-        .map_err(|error| RpcError::op(ErrorKind::Service, error.message).with(|data| data.reason = Some("runtime".into())))?;
-        send(progress, ServiceInstallProgress { stage: "installing".into(), message: format!("Installing the service package {}.", path.display()) });
-        // A package that is not one is an unusable argument; a package that
-        // could not be installed (its dependencies, the disk) is the service's.
+        };
         // A package that is not one is an unusable argument; a manifest the
         // host refuses is the service's (SERVICE-PROTOCOL.md §1), its field
-        // in `detail`; a package that could not be installed (its
+        // in `detail`; a package that could not be installed (Bun, its
         // dependencies, the disk) is the service's too.
-        let report = self.supervisor.install(&path).await.map_err(|error| match error {
+        let report = self.supervisor.install_with(&path, Some(&mut bun)).await.map_err(|error| match error {
             InstallError::Source(_) | InstallError::Archive(_) => RpcError::op(ErrorKind::Invalid, sentence(&error.to_string())),
             InstallError::Manifest(manifest) => RpcError::op(ErrorKind::Service, sentence(&manifest.to_string())).with(|data| {
                 data.reason = Some("manifest".into());
@@ -396,6 +397,7 @@ fn start_error(id: &str, error: StartError) -> RpcError {
     match error {
         StartError::NotInstalled(id) => no_service(&id),
         StartError::Earlier(_) => service_error(id, EARLIER_SENTENCE).with(|data| data.reason = Some("earlier".into())),
+        StartError::StoreFormat(_) => service_error(id, STORE_FORMAT_SENTENCE).with(|data| data.reason = Some("store_format".into())),
         StartError::Failed(why) => service_error(id, sentence(&format!("the service did not start: {why}"))),
     }
 }
@@ -407,6 +409,9 @@ fn reported_version(bun: &Path) -> Option<String> {
     (output.status.success() && !text.trim().is_empty()).then(|| text.trim().to_owned())
 }
 
+/// What a service whose store a newer Pocket Hub wrote says.
+pub const STORE_FORMAT_SENTENCE: &str = "Its stored data was written by a newer Pocket Hub, and is kept as it is; update Pocket Hub to use it.";
+
 /// `ServiceStatus` → `Service` (§2).
 ///
 /// | contract | supervisor |
@@ -417,11 +422,14 @@ fn reported_version(bun: &Path) -> Option<String> {
 /// | `since` | `since`; for a service that has not changed state since Hub started, its install time |
 /// | `lastExit.signal` | the signal number's name (`SIGTERM`) |
 /// | `error` | `last_error` while `failed`, else null |
-/// | `reason` | `earlier` for an id an earlier Pocket Hub installed |
+/// | `reason` | `earlier` for an id an earlier Pocket Hub installed; `store_format` for a store a newer one wrote |
+/// | `store` | `store`: the store's `meta.bytes`, the `maxBytes` that applies, its file's size |
 ///
 /// `started_at`, `restarts`, `crashes` and `retry_at` have no place in the
 /// contract.
-pub fn service(status: &ServiceStatus, installed: Option<&InstalledService>) -> api::Service {
+pub fn service(status: &ServiceStatus, installed: Option<&InstalledService>, store: Option<(StoreUse, u64)>) -> api::Service {
+    let store = store.map(|(usage, max_bytes)| api::ServiceStore { bytes: usage.meta.map(|meta| meta.bytes), max_bytes, file_bytes: usage.file_bytes });
+    let newer = store.as_ref().is_some_and(|store| store.bytes.is_none());
     api::Service {
         id: status.id.clone(),
         release: status.release.clone().or_else(|| installed.map(|service| service.release.clone())).or_else(|| status.running_release.clone()),
@@ -439,7 +447,14 @@ pub fn service(status: &ServiceStatus, installed: Option<&InstalledService>) -> 
         channels: status.channels as u32,
         last_exit: status.last_exit.as_ref().map(|exit| api::LastExit { code: exit.code, signal: exit.signal.map(signal_name), at: exit.at }),
         error: if status.state == ServiceState::Failed { status.last_error.clone() } else { None },
-        reason: status.earlier.then(|| "earlier".to_owned()),
+        reason: if status.earlier {
+            Some("earlier".to_owned())
+        } else if newer {
+            Some("store_format".to_owned())
+        } else {
+            None
+        },
+        store,
     }
 }
 

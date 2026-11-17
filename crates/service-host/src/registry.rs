@@ -3,8 +3,8 @@
 //! ```text
 //! <home>/services/<id>/releases.json            the id's releases (the index), each naming its folder
 //! <home>/services/<id>/<release>-<8 hex>/        one release as installed: `dev` for a development install
-//! <home>/service-data/<id>/           the service's own files, 0700, kept across installs
 //! <home>/services-staging/            packages being installed
+//! <home>/service-data/<id>/           an earlier data folder: given to no process, deleted by a purge
 //! ```
 //!
 //! **How a release folder appears.** A package is unpacked and checked, and
@@ -41,7 +41,7 @@ use serde::{Deserialize, Serialize};
 use crate::archive::{self, ArchiveError};
 use crate::child::InheritNothing;
 use crate::manifest::{MANIFEST_FILE, Manifest, ManifestError, valid_id};
-use crate::runtime::{BunRuntime, RuntimeError};
+use crate::runtime::{BunRuntime, Progress, RuntimeError};
 use crate::util::{epoch_ms, inherited_env, path_with, private_dir, random_hex, write_atomic};
 
 /// The index of an id's releases.
@@ -67,10 +67,10 @@ pub struct InstalledService {
     pub idle_seconds: u64,
     pub requires: Vec<String>,
     pub hosts: Vec<String>,
+    /// `store.maxBytes`; None without `store` in `requires`.
+    pub store_max_bytes: Option<u64>,
     /// The release's folder: the process's working directory.
     pub dir: PathBuf,
-    /// The service's data folder (`POCKET_SERVICE_DATA`).
-    pub data: PathBuf,
     /// Epoch milliseconds.
     pub installed_at: i64,
 }
@@ -184,10 +184,11 @@ pub struct Registry {
 /// Where a package's own copy of the SDK would be.
 pub const SDK_LINK: &str = "node_modules/@pocketjs/service";
 
-/// Links `sdk` at `<package>/node_modules/@pocketjs/service` when nothing is
-/// there: a package that brings its own copy keeps it. A link left dangling
-/// (the home moved, the SDK folder was removed) is made again. True when a
-/// link was made.
+/// Links `sdk` at `<package>/node_modules/@pocketjs/service`, replacing
+/// whatever is there: **the host's copy always wins** (§1), so a copy the
+/// package brought, a link elsewhere or a link left dangling (the home
+/// moved) is replaced. True when a link was made; false when the link to
+/// `sdk` was there already.
 ///
 /// A link and not a copy: every installed package then runs the SDK of the
 /// host that starts it, which is the one that speaks its protocol, and an
@@ -195,8 +196,14 @@ pub const SDK_LINK: &str = "node_modules/@pocketjs/service";
 pub fn link_sdk(package: &Path, sdk: &Path) -> io::Result<bool> {
     let link = package.join(SDK_LINK);
     match fs::symlink_metadata(&link) {
-        Ok(meta) if meta.file_type().is_symlink() && fs::metadata(&link).is_err() => fs::remove_file(&link)?,
-        Ok(_) => return Ok(false),
+        Ok(meta) if meta.file_type().is_symlink() => {
+            if fs::read_link(&link).is_ok_and(|target| target == sdk) {
+                return Ok(false);
+            }
+            fs::remove_file(&link)?;
+        }
+        Ok(meta) if meta.is_dir() => fs::remove_dir_all(&link)?,
+        Ok(_) => fs::remove_file(&link)?,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
@@ -245,6 +252,8 @@ impl Registry {
         self.home.join("services")
     }
 
+    /// The data folder an earlier step gave a service: given to no process
+    /// now, kept until a purge deletes it.
     pub fn data_dir(&self, id: &str) -> PathBuf {
         self.home.join("service-data").join(id)
     }
@@ -313,8 +322,8 @@ impl Registry {
                 idle_seconds: manifest.idle_seconds,
                 requires: manifest.requires,
                 hosts: manifest.hosts,
+                store_max_bytes: manifest.store_max_bytes,
                 dir,
-                data: self.data_dir(id),
                 installed_at: entry.installed_at,
             }),
             Ok(_) => {
@@ -348,11 +357,19 @@ impl Registry {
     /// root or in one folder at its root. An install over what an earlier
     /// Pocket Hub left replaces it: it is the owner's own action on the id.
     pub async fn install(&self, source: &Path) -> Result<InstallReport, InstallError> {
+        self.install_with(source, None).await
+    }
+
+    /// `install`; with `bun`, the runtime is made sure of once the manifest
+    /// is checked, `bun` seeing a download's progress, so a refused manifest
+    /// never waits for a download. Without it Bun is fetched only for a
+    /// package's dependencies.
+    pub async fn install_with(&self, source: &Path, bun: Option<&mut (dyn FnMut(Progress) + Send)>) -> Result<InstallReport, InstallError> {
         let _guard = self.lock.lock().await;
         let staging = self.home.join("services-staging").join(random_hex());
         private_dir(staging.parent().expect("staging parent"))?;
         fs::create_dir_all(&staging)?;
-        let result = self.install_staged(source, &staging).await;
+        let result = self.install_staged(source, &staging, bun).await;
         // A failure point stands for a crash: what was staged stays for the
         // next start to clean.
         if !matches!(&result, Err(InstallError::Io(error)) if error.to_string().starts_with("injected failure")) {
@@ -361,7 +378,7 @@ impl Registry {
         result
     }
 
-    async fn install_staged(&self, source: &Path, staging: &Path) -> Result<InstallReport, InstallError> {
+    async fn install_staged(&self, source: &Path, staging: &Path, bun: Option<&mut (dyn FnMut(Progress) + Send)>) -> Result<InstallReport, InstallError> {
         let unpacked = staging.join("package");
         fs::create_dir(&unpacked)?;
         let meta = fs::metadata(source).map_err(|error| InstallError::Source(format!("{}: {error}", source.display())))?;
@@ -386,6 +403,9 @@ impl Registry {
         }
         let root = package_root(&unpacked);
         let manifest = Manifest::read(&root)?;
+        if let Some(progress) = bun {
+            self.runtime.ensure_with(progress).await?;
+        }
 
         let dependencies = if !root.join("package.json").is_file() {
             DependencyInstall::None
@@ -449,8 +469,6 @@ impl Registry {
                 fs::rename(&staged, &folder)?;
             }
         }
-        private_dir(&self.data_dir(&manifest.id))?;
-
         let service = InstalledService {
             id: manifest.id.clone(),
             release: release.to_owned(),
@@ -458,8 +476,8 @@ impl Registry {
             idle_seconds: manifest.idle_seconds,
             requires: manifest.requires,
             hosts: manifest.hosts,
+            store_max_bytes: manifest.store_max_bytes,
             dir: folder.join(&name),
-            data: self.data_dir(&manifest.id),
             installed_at,
         };
         Ok(InstallReport { service, replaced_earlier, dependencies })
@@ -508,7 +526,8 @@ impl Registry {
 
     /// Removes `release` of `id`, or every release with None (and the id's
     /// folder, also an earlier Pocket Hub's), and with `purge_data` the
-    /// service's data folder. The caller has stopped its process.
+    /// data folder an earlier step gave it. The caller has stopped its
+    /// process, and deletes its stores (`Stores::purge`).
     pub async fn remove(&self, id: &str, release: Option<&str>, purge_data: bool) -> io::Result<Removed> {
         if !valid_id(id) {
             return Ok(Removed::Nothing);

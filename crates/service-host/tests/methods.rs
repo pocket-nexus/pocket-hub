@@ -12,7 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::*;
-use pocket_hub_api::types::{Event, Service, ServiceList, ServiceState};
+use std::os::unix::fs::PermissionsExt;
+
+use pocket_hub_api::types::{Event, Service, ServiceList, ServiceState, ServiceStore};
 use pocket_hub_api::{ErrorKind, methods};
 use serde_json::{Value, json};
 use service_host::{HostOptions, Publisher, ServiceHost};
@@ -79,11 +81,16 @@ async fn the_service_methods_stand_up_without_hubd() {
     assert!(list.services.is_empty());
     assert_eq!(*recorder.ordered.lock().unwrap(), 1);
 
-    // services.install of a package: the answer, its progress, and the event.
-    let source = fixture_package(home.path(), "dev.test.host", "1.0.0", json!({}));
+    // services.install of a package on the host's SDK that requires its
+    // store: the answer, its progress, and the event. Its store is not made
+    // until the service uses it.
+    let source = sdk_package(home.path(), "store-service");
     let installed: Service = serde_json::from_value(host.call(methods::SERVICES_INSTALL, json!({"path": source.display().to_string()}), &progress_of).await.unwrap()).unwrap();
     assert_eq!((installed.id.as_str(), installed.release.as_deref(), installed.state), ("dev.test.host", Some("dev"), ServiceState::Stopped));
-    assert!(installed.requires.is_empty() && installed.hosts.is_empty() && installed.reason.is_none());
+    assert!(installed.requires == ["store"] && installed.hosts.is_empty() && installed.reason.is_none());
+    assert_eq!(installed.store, Some(ServiceStore { bytes: Some(0), max_bytes: 65_536, file_bytes: 0 }));
+    let store_folder = home.path().join("service-store/dev.test.host@dev");
+    assert!(!store_folder.exists());
     assert_eq!(progress.lock().unwrap().last().unwrap()["stage"], "installing");
     until("service.changed for the install", || recorder.changed("dev.test.host", ServiceState::Stopped)).await;
     let list: ServiceList = serde_json::from_value(host.call(methods::SERVICES_LIST, json!({}), &progress_of).await.unwrap()).unwrap();
@@ -113,6 +120,17 @@ async fn the_service_methods_stand_up_without_hubd() {
     };
     let stream = connector.open(offer.clone()).await.expect("the channel reaches the service");
     until("service.changed running", || recorder.changed("dev.test.host", ServiceState::Running)).await;
+    // The factory counted its start in the store before the channel was taken:
+    // `{"starts"}` and `1`, and `service.changed` says so within a second.
+    let store = host.service("dev.test.host").unwrap().store.unwrap();
+    assert_eq!((store.bytes, store.max_bytes), (Some(6 + 1), 65_536));
+    assert!(store.file_bytes > 0);
+    assert_eq!(std::fs::metadata(&store_folder).unwrap().permissions().mode() & 0o777, 0o700);
+    assert_eq!(std::fs::metadata(store_folder.join("store.sqlite")).unwrap().permissions().mode() & 0o777, 0o600);
+    until("service.changed with the store's use", || {
+        recorder.any(|event| matches!(event, Event::ServiceChanged { service } if service.id == "dev.test.host" && service.store.as_ref().is_some_and(|store| store.bytes == Some(7))))
+    })
+    .await;
     assert!(matches!(connector.open(pocket_hub_core::ChannelOffer { app: "dev.none".into(), ..offer }).await, Err(pocket_hub_core::ChannelOpenError::NoService)));
     let logs = host.call(methods::SERVICES_LOGS, json!({"id": "dev.test.host"}), &progress_of).await.unwrap();
     assert!(logs["lines"].as_array().is_some_and(|lines| !lines.is_empty()));
@@ -122,10 +140,15 @@ async fn the_service_methods_stand_up_without_hubd() {
     assert_eq!(stopped.id, "dev.test.host");
     until("service.changed stopped", || recorder.changed("dev.test.host", ServiceState::Stopped) && host.service("dev.test.host").is_some_and(|s| s.state == ServiceState::Stopped)).await;
 
-    // services.remove, and its event.
-    host.call(methods::SERVICES_REMOVE, json!({"id": "dev.test.host", "purge": true}), &progress_of).await.unwrap();
+    // services.remove without purge keeps the store; with purge it goes.
+    host.call(methods::SERVICES_REMOVE, json!({"id": "dev.test.host"}), &progress_of).await.unwrap();
     until("service.removed", || recorder.any(|event| matches!(event, Event::ServiceRemoved { id, release } if id == "dev.test.host" && release.as_deref() == Some("dev")))).await;
     assert!(host.services().is_empty());
+    assert!(store_folder.join("store.sqlite").is_file(), "a removal without purge keeps the store");
+    let again: Service = serde_json::from_value(host.call(methods::SERVICES_INSTALL, json!({"path": source.display().to_string()}), &progress_of).await.unwrap()).unwrap();
+    assert_eq!(again.store.unwrap().bytes, Some(7), "the store outlives the install");
+    host.call(methods::SERVICES_REMOVE, json!({"id": "dev.test.host", "purge": true}), &progress_of).await.unwrap();
+    assert!(!store_folder.exists(), "purge deletes the store");
 
     // hub.status's `bun` and services.runtime, from the configured Bun.
     let bun = host.bun();
@@ -162,7 +185,7 @@ async fn an_earlier_layout_is_listed_failed_until_the_owner_removes_it() {
     assert_eq!(
         earlier,
         json!([{"id": "dev.old", "release": null, "requires": [], "hosts": [], "state": "failed", "pid": null, "since": null, "channels": 0, "lastExit": null,
-                "error": "Installed by an earlier Pocket Hub; install it again.", "reason": "earlier"}])
+                "error": "Installed by an earlier Pocket Hub; install it again.", "reason": "earlier", "store": null}])
     );
     let error = host.call(methods::SERVICES_START, json!({"id": "dev.old"}), &progress_of).await.unwrap_err();
     assert_eq!((error.kind(), error.message.as_str()), (Some(ErrorKind::Service), "Installed by an earlier Pocket Hub; install it again."));
@@ -185,19 +208,22 @@ async fn an_earlier_layout_is_listed_failed_until_the_owner_removes_it() {
 }
 
 /// A refused manifest is the error `service`, `reason: "manifest"`, the field
-/// in `detail` (CONTROL-API.md §1, Errors).
+/// in `detail` (CONTROL-API.md §1, Errors), and it is refused before Bun is
+/// fetched: this host has no Bun and gets none.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_refused_manifest_is_the_error_service_with_its_field() {
-    // An install makes sure of Bun before it reads the package.
-    let Some(bun) = system_bun() else { return };
     let home = temp_home();
-    let host = ServiceHost::start(HostOptions { home: home.path().to_owned(), socket: home.path().join("s.sock"), bun: Some(bun), idle_override: None }).await.unwrap();
-    let progress_of = |_: Value| {};
+    let host = ServiceHost::start(HostOptions { home: home.path().to_owned(), socket: home.path().join("s.sock"), bun: None, idle_override: None }).await.unwrap();
+    assert!(!host.bun().installed);
+    let progress = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let sink = progress.clone();
+    let progress_of = move |members: Value| sink.lock().unwrap().push(members);
     let source = home.path().join("pkg");
     std::fs::create_dir_all(&source).unwrap();
     std::fs::write(source.join("service.mjs"), "").unwrap();
+    let started = std::time::Instant::now();
     for (manifest, message, field) in [
-        (r#"{"service":1,"id":"dev.x","entry":"service.mjs","requires":["store"]}"#, "Requires \"store\", which this Hub does not provide yet.", Some("requires")),
+        (r#"{"service":1,"id":"dev.x","entry":"service.mjs","requires":["net"]}"#, "Requires \"net\", which this Hub does not provide yet.", Some("requires")),
         (r#"{"service":1,"id":"dev.x","entry":"service.mjs","hosts":["*.workers.dev"]}"#, "Hosts entry \"*.workers.dev\" covers workers.dev, a public suffix.", Some("hosts")),
         (r#"{"service":1,"id":"dev.x","version":"1.0.0","entry":"service.mjs"}"#, "Pocket.service.json names `version`, a field this Hub does not read.", Some("version")),
         (r#"[1]"#, "Pocket.service.json is not a JSON object.", None),
@@ -208,6 +234,69 @@ async fn a_refused_manifest_is_the_error_service_with_its_field() {
         assert_eq!((error.kind(), error.message.as_str(), data.reason.as_deref(), data.detail.as_deref()), (Some(ErrorKind::Service), message, Some("manifest"), field), "{manifest}");
     }
     assert!(host.services().is_empty());
+    // No download was started or waited for.
+    assert!(started.elapsed() < Duration::from_secs(2), "{:?}", started.elapsed());
+    assert!(progress.lock().unwrap().iter().all(|members| members["stage"] != "runtime"));
+    assert!(!host.bun().installed);
+    host.shutdown().await;
+}
+
+/// Every file of `folder` with its bytes and modification time.
+fn snapshot(folder: &std::path::Path) -> Vec<(String, Vec<u8>, std::time::SystemTime)> {
+    let mut files: Vec<_> = std::fs::read_dir(folder)
+        .unwrap()
+        .map(|entry| {
+            let entry = entry.unwrap();
+            (entry.file_name().to_string_lossy().into_owned(), std::fs::read(entry.path()).unwrap(), entry.metadata().unwrap().modified().unwrap())
+        })
+        .collect();
+    files.sort();
+    files
+}
+
+/// A store whose `user_version` is above this host's is refused on both
+/// paths and left as it is (SERVICE-PROTOCOL.md §7): the control API lists
+/// it with `reason: "store_format"` and refuses the owner's start with the
+/// error `service`, `reason: "store_format"`; a process a device starts gets
+/// `store_format` for its store call. No byte or time of its files changes,
+/// and no file is added beside it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_store_a_newer_pocket_hub_wrote_is_refused_and_untouched() {
+    let Some(bun) = system_bun() else { return };
+    let home = temp_home();
+    let host = ServiceHost::start(HostOptions { home: home.path().to_owned(), socket: home.path().join("s.sock"), bun: Some(bun), idle_override: None }).await.unwrap();
+    let progress_of = |_: Value| {};
+    let source = sdk_package(home.path(), "store-service");
+    host.call(methods::SERVICES_INSTALL, json!({"path": source.display().to_string()}), &progress_of).await.unwrap();
+    let folder = home.path().join("service-store/dev.test.host@dev");
+    std::fs::create_dir_all(&folder).unwrap();
+    {
+        let newer = rusqlite::Connection::open(folder.join("store.sqlite")).unwrap();
+        newer.execute_batch("CREATE TABLE entries (key BLOB PRIMARY KEY, value BLOB) WITHOUT ROWID; PRAGMA user_version = 2;").unwrap();
+    }
+    let before = snapshot(&folder);
+    assert_eq!(before.iter().map(|(name, ..)| name.as_str()).collect::<Vec<_>>(), ["store.sqlite"]);
+
+    let listed = host.service("dev.test.host").unwrap();
+    assert_eq!(listed.reason.as_deref(), Some("store_format"));
+    assert_eq!(listed.store, Some(ServiceStore { bytes: None, max_bytes: 65_536, file_bytes: before[0].1.len() as u64 }));
+
+    let error = host.call(methods::SERVICES_START, json!({"id": "dev.test.host"}), &progress_of).await.unwrap_err();
+    let data = error.data.as_ref().unwrap();
+    assert_eq!((error.kind(), data.reason.as_deref(), data.id.as_deref()), (Some(ErrorKind::Service), Some("store_format"), Some("dev.test.host")));
+    assert!(error.message.contains("newer Pocket Hub"), "{}", error.message);
+
+    // A device's open starts it: its factory's store call is refused.
+    let offer = pocket_hub_core::ChannelOffer {
+        device: "0123456789abcdef".into(), device_name: "Test 3DS".into(), model: "New 3DS XL".into(), target: "3ds".into(),
+        app: "dev.test.host".into(), hash: "fedcba9876543210".into(), generation: 1, payload_limit: 16_384,
+    };
+    assert!(host.connector().open(offer).await.is_err());
+    let logs = host.call(methods::SERVICES_LOGS, json!({"id": "dev.test.host"}), &progress_of).await.unwrap();
+    let text = logs["lines"].as_array().unwrap().iter().map(|line| line["text"].as_str().unwrap().to_owned()).collect::<Vec<_>>().join("\n");
+    assert!(text.contains("store_format"), "{text}");
+
+    assert_eq!(snapshot(&folder), before, "the store's files are as they were");
     host.shutdown().await;
 }
 

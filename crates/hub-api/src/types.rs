@@ -477,8 +477,24 @@ pub struct Service {
     pub channels: u32,
     pub last_exit: Option<LastExit>,
     pub error: Option<String>,
-    /// `earlier` for one an earlier Pocket Hub installed; else None.
+    /// `earlier` for one an earlier Pocket Hub installed, `store_format` for
+    /// one whose store a newer Pocket Hub wrote; else None.
     pub reason: Option<String>,
+    /// Its store's use; None for a release that does not require `store`.
+    pub store: Option<ServiceStore>,
+}
+
+/// `Service.store`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceStore {
+    /// The sum of every key's and value's length, which `maxBytes` bounds;
+    /// None for a store a newer Pocket Hub wrote.
+    pub bytes: Option<u64>,
+    /// The `store.maxBytes` that applies.
+    pub max_bytes: u64,
+    /// The store's file and its write-ahead log on disk, in bytes.
+    pub file_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -505,7 +521,7 @@ pub struct ServiceRemoveParams {
     /// One release; every release without it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release: Option<String>,
-    /// Remove the service's data folder too.
+    /// Delete the service's stores (and the data folder of an earlier step) too.
     #[serde(default)]
     pub purge: Option<bool>,
 }

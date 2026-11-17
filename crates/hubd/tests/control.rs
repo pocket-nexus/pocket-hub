@@ -64,8 +64,8 @@ async fn hello_first_and_protocol_errors() {
     // The refusal carries the core's protocol in `data` (a newer client learns it
     // that way); a refusal for another reason has none.
     let old = rpc(other.call(methods::HELLO, &json!({"protocol": 1, "client": {"kind": "gui", "name": "Pocket Hub", "version": "0.2.2"}})).await.unwrap_err());
-    assert_eq!((old.code, old.message.as_str(), old.refused_protocol()), (INVALID_PARAMS, "This Hub speaks protocol 3, not 1.", Some(PROTOCOL)));
-    let newer = rpc(other.call(methods::HELLO, &json!({"protocol": 4, "client": {"kind": "cli", "name": "x", "version": "1"}})).await.unwrap_err());
+    assert_eq!((old.code, old.message.as_str(), old.refused_protocol()), (INVALID_PARAMS, "This Hub speaks protocol 4, not 1.", Some(PROTOCOL)));
+    let newer = rpc(other.call(methods::HELLO, &json!({"protocol": 5, "client": {"kind": "cli", "name": "x", "version": "1"}})).await.unwrap_err());
     assert_eq!((newer.code, newer.data.and_then(|data| data.protocol)), (INVALID_PARAMS, Some(PROTOCOL)));
     // A refused hello leaves the connection without one: a hello in the
     // core's own protocol is still taken on it.

@@ -1,9 +1,9 @@
-//! The host provides the service SDK (docs/SERVICE-PROTOCOL.md §1): the
+//! The host provides the service SDK (docs/SERVICE-PROTOCOL.md §1, §2): the
 //! runtime files of `sdk/service` are built into this crate and written under
 //! `<home>/sdk/service` at each start, so the SDK a service runs is always
 //! the one of the host that started it. The registry links that folder into
-//! a package that has no `node_modules/@pocketjs/service` of its own
-//! (`registry::link_sdk`).
+//! every package (`registry::link_sdk`), and a process starts with its
+//! `src/boot.ts`.
 
 use std::fs;
 use std::io;
@@ -13,10 +13,13 @@ use std::path::{Path, PathBuf};
 pub const FILES: &[(&str, &str)] = &[
     ("package.json", include_str!("../../../sdk/service/package.json")),
     ("README.md", include_str!("../../../sdk/service/README.md")),
+    ("src/boot.ts", include_str!("../../../sdk/service/src/boot.ts")),
+    ("src/capabilities.ts", include_str!("../../../sdk/service/src/capabilities.ts")),
     ("src/channel.ts", include_str!("../../../sdk/service/src/channel.ts")),
     ("src/connection.ts", include_str!("../../../sdk/service/src/connection.ts")),
     ("src/errors.ts", include_str!("../../../sdk/service/src/errors.ts")),
     ("src/frame.ts", include_str!("../../../sdk/service/src/frame.ts")),
+    ("src/host.ts", include_str!("../../../sdk/service/src/host.ts")),
     ("src/index.ts", include_str!("../../../sdk/service/src/index.ts")),
     ("src/serve.ts", include_str!("../../../sdk/service/src/serve.ts")),
     ("src/streams.ts", include_str!("../../../sdk/service/src/streams.ts")),

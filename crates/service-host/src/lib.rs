@@ -9,8 +9,9 @@
 //!   (`connector`).
 //! - `sdk` writes the service SDK into the home for the registry to link.
 //! - [`BunRuntime`] finds or downloads the pinned Bun that every service runs on.
-//! - [`Registry`] installs service packages under `<home>/services` and keeps
-//!   each service's data folder under `<home>/service-data`.
+//! - [`Registry`] installs service packages under `<home>/services`.
+//! - [`store`] keeps each service's store under `<home>/service-store`, and
+//!   [`host`] answers a service's capability requests on its host connection.
 //! - [`Supervisor`] owns the service socket and the processes: it starts a
 //!   service when a device opens its applet's channel, hands the channel
 //!   connection the service attaches to the relay, and stops the process when it
@@ -28,6 +29,7 @@ mod archive;
 mod channel;
 mod config;
 mod connector;
+pub mod host;
 mod hosts;
 mod instance;
 mod logs;
@@ -36,6 +38,7 @@ mod methods;
 mod registry;
 mod runtime;
 mod sdk;
+pub mod store;
 mod supervisor;
 mod util;
 mod wire;
@@ -53,4 +56,4 @@ pub use supervisor::{
 };
 
 /// The version of the control connection's protocol (§4, `service.hello`).
-pub const PROTOCOL_VERSION: u64 = 2;
+pub const PROTOCOL_VERSION: u64 = 3;

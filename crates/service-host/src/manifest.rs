@@ -29,9 +29,10 @@ const DEFAULT_STORE_BYTES: u64 = 16 * 1024 * 1024;
 
 /// Every capability a manifest may name in `requires`.
 pub const CAPABILITIES: &[&str] = &["net", "store", "image", "text", "media", "native"];
-/// The capabilities this host provides. None yet: a service that requires
-/// one is refused at install, with its name, so it never runs without it.
-pub const PROVIDED: &[&str] = &[];
+/// The capabilities this host provides (SERVICE-PROTOCOL.md §7). A service
+/// that requires another is refused at install, with its name, so it never
+/// runs without it.
+pub const PROVIDED: &[&str] = &["store"];
 
 /// The fields of the manifest's table, in its order.
 const FIELDS: &[&str] = &["service", "id", "entry", "requires", "hosts", "store", "idleSeconds"];
@@ -307,6 +308,9 @@ mod tests {
         assert_eq!((manifest.requires.len(), manifest.store_max_bytes), (0, None));
         let minimal = with("").unwrap();
         assert_eq!((minimal.idle_seconds, minimal.requires.len(), minimal.hosts.len()), (DEFAULT_IDLE_SECONDS, 0, 0));
+        let store = with(r#""requires":["store"]"#).unwrap();
+        assert_eq!((store.requires, store.store_max_bytes), (vec!["store".to_owned()], Some(16 * 1024 * 1024)));
+        assert_eq!(with(r#""requires":["store"],"store":{"maxBytes":1024}"#).unwrap().store_max_bytes, Some(1024));
     }
 
     /// Every refusal of the manifest's table, with its sentence and its field.
@@ -328,7 +332,8 @@ mod tests {
             (r#"{"service":1,"id":"a","entry":"d.ts","requires":["signin"]}"#.into(), r#"requires names "signin", which is not a capability (net, store, image, text, media, native)"#, Some("requires")),
             (r#"{"service":1,"id":"a","entry":"d.ts","requires":["net","net"]}"#.into(), r#"requires names "net" twice"#, Some("requires")),
             (r#"{"service":1,"id":"a","entry":"d.ts","requires":["image","net"]}"#.into(), r#"requires "image", which this Hub does not provide yet"#, Some("requires")),
-            (r#"{"service":1,"id":"a","entry":"d.ts","requires":["store"],"store":{"maxBytes":1}}"#.into(), r#"requires "store", which this Hub does not provide yet"#, Some("requires")),
+            (r#"{"service":1,"id":"a","entry":"d.ts","requires":["net"]}"#.into(), r#"requires "net", which this Hub does not provide yet"#, Some("requires")),
+            (r#"{"service":1,"id":"a","entry":"d.ts","requires":["store"],"store":{"maxBytes":0}}"#.into(), "store.maxBytes 0 is not between 1 and 268435456", Some("store")),
             (r#"{"service":1,"id":"a","entry":"d.ts","hosts":"x.com"}"#.into(), "`hosts` must be an array of strings", Some("hosts")),
             (format!(r#"{{"service":1,"id":"a","entry":"d.ts","hosts":[{}]}}"#, (0..33).map(|i| format!("\"h{i}.example\"")).collect::<Vec<_>>().join(",")), "hosts has 33 entries, more than 32", Some("hosts")),
             (r#"{"service":1,"id":"a","entry":"d.ts","hosts":["X.com"]}"#.into(), r#"hosts entry "X.com" is not a lower-case host name, or `*.` and one"#, Some("hosts")),

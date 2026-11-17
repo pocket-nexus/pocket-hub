@@ -23,6 +23,7 @@ use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 use crate::channel::{make_stream, ChannelInfo, ChannelLease, ChannelStream};
+use crate::store::{StoreUse, Stores};
 use crate::config::Config;
 use crate::instance::{self, Cmd, Phase, StopReason};
 use crate::logs::{LogLine, LogRing, LogStream};
@@ -71,6 +72,10 @@ pub enum StartError {
     /// The id is in the layout of an earlier Pocket Hub: it is not run.
     #[error("{0} was installed by an earlier Pocket Hub")]
     Earlier(String),
+    /// Its store was written by a newer Pocket Hub (§7): the owner's start
+    /// is refused, the store untouched.
+    #[error("{0}'s store was written by a newer Pocket Hub")]
+    StoreFormat(String),
     #[error("{0}")]
     Failed(String),
 }
@@ -230,6 +235,11 @@ struct Ticket {
 pub(crate) struct Table {
     pub services: HashMap<String, Entry>,
     tickets: HashMap<String, Ticket>,
+    /// The `host` tickets of `service.ready`, each for one `host.attach` (§6).
+    host_tickets: HashMap<String, Ticket>,
+    /// Services whose store was written since their `service.changed` last
+    /// went out.
+    store_written: std::collections::HashSet<String>,
 }
 
 pub(crate) struct Inner {
@@ -237,6 +247,7 @@ pub(crate) struct Inner {
     pub runtime: BunRuntime,
     pub registry: Registry,
     pub table: Mutex<Table>,
+    pub stores: Arc<Stores>,
     pub events: broadcast::Sender<ServiceEvent>,
     pub log_lines: broadcast::Sender<LogLine>,
     pub closing: AtomicBool,
@@ -290,6 +301,22 @@ impl Inner {
     pub fn log(&self, app: &str, text: &str) {
         let ring = self.update(app, |entry| entry.logs.clone());
         ring.push(LogStream::Hub, text, false);
+    }
+
+    /// A `host` ticket of `service.ready` for the instance `serial`.
+    pub fn add_host_ticket(&self, ticket: &str, app: &str, serial: u64, tx: oneshot::Sender<UnixStream>) {
+        self.lock().host_tickets.insert(ticket.to_owned(), Ticket { app: app.to_owned(), serial, tx });
+    }
+
+    /// The `host` tickets of the instance `serial` no longer open anything.
+    pub fn remove_host_tickets(&self, app: &str, serial: u64) {
+        self.lock().host_tickets.retain(|_, ticket| !(ticket.app == app && ticket.serial == serial));
+    }
+
+    /// A write to `app`'s store committed: its `Service.store` changed, and
+    /// `service.changed` follows within a second (`publish_store_changes`).
+    pub fn store_written(&self, app: &str) {
+        self.lock().store_written.insert(app.to_owned());
     }
 
     /// The relay dropped both halves of a channel.
@@ -388,6 +415,24 @@ impl Drop for TicketGuard<'_> {
 pub struct Supervisor {
     inner: Arc<Inner>,
     accept: JoinHandle<()>,
+    store_changes: JoinHandle<()>,
+}
+
+/// At most once a second, `service.changed` for each service whose store was
+/// written: a burst of writes is one event, and the last write is never
+/// left unsaid.
+async fn publish_store_changes(inner: std::sync::Weak<Inner>) {
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let Some(inner) = inner.upgrade() else { return };
+        let mut table = inner.lock();
+        let written: Vec<String> = table.store_written.drain().collect();
+        for app in written {
+            if let Some(entry) = table.services.get(&app) {
+                let _ = inner.events.send(ServiceEvent::State(entry.status.clone()));
+            }
+        }
+    }
 }
 
 impl Supervisor {
@@ -397,11 +442,13 @@ impl Supervisor {
         let (listener, socket_id) = bind(&config.socket)?;
         let runtime = BunRuntime::new(&config.home, config.bun_path.clone());
         let registry = Registry::new(&config.home, runtime.clone(), config.timings.install).with_sdk(config.sdk.clone());
+        let stores = Arc::new(Stores::new(&config.home));
         let inner = Arc::new(Inner {
             config,
             runtime,
             registry,
             table: Mutex::new(Table::default()),
+            stores,
             events: broadcast::channel(256).0,
             log_lines: broadcast::channel(1024).0,
             closing: AtomicBool::new(false),
@@ -409,7 +456,23 @@ impl Supervisor {
             socket_id,
         });
         let accept = tokio::spawn(accept_loop(Arc::downgrade(&inner), listener));
-        Ok(Self { inner, accept })
+        let store_changes = tokio::spawn(publish_store_changes(Arc::downgrade(&inner)));
+        Ok(Self { inner, accept, store_changes })
+    }
+
+    /// What `Service.store` shows of `id`'s release that requires `store`
+    /// (§7), with the `store.maxBytes` that applies; None for one that does
+    /// not. A store a newer Pocket Hub wrote has no `meta`.
+    pub fn store_use(&self, id: &str) -> Option<(StoreUse, u64)> {
+        let service = self.inner.registry.get(id)?;
+        let max = service.store_max_bytes?;
+        match self.inner.stores.usage(&Stores::name(id, &service.release)) {
+            Ok(usage) => Some((usage, max)),
+            Err(error) => {
+                tracing::warn!(id, %error, "the store could not be read for its use");
+                None
+            }
+        }
     }
 
     pub fn runtime(&self) -> &BunRuntime {
@@ -479,7 +542,13 @@ impl Supervisor {
     /// the next open starts the new version. A new package clears the hold
     /// after failed starts.
     pub async fn install(&self, source: &Path) -> Result<InstallReport, InstallError> {
-        let report = self.inner.registry.install(source).await?;
+        self.install_with(source, None).await
+    }
+
+    /// `install`, with Bun made sure of once the manifest is checked
+    /// (`Registry::install_with`).
+    pub async fn install_with(&self, source: &Path, bun: Option<&mut (dyn FnMut(crate::Progress) + Send)>) -> Result<InstallReport, InstallError> {
+        let report = self.inner.registry.install_with(source, bun).await?;
         let id = report.service.id.clone();
         let release = report.service.release.clone();
         let idle_stop = self.inner.update(&id, |entry| {
@@ -509,11 +578,17 @@ impl Supervisor {
     }
 
     /// Stops `id`'s process, then removes `release` (every release with
-    /// None, or what an earlier Pocket Hub left), and the data folder with
-    /// `purge_data`. Says what was removed.
-    pub async fn remove(&self, id: &str, release: Option<&str>, purge_data: bool) -> io::Result<Removed> {
+    /// None, or what an earlier Pocket Hub left), and with `purge` its
+    /// stores and the data folder an earlier step gave it. Says what was
+    /// removed.
+    pub async fn remove(&self, id: &str, release: Option<&str>, purge: bool) -> io::Result<Removed> {
         self.stop(id).await;
-        let removed = self.inner.registry.remove(id, release, purge_data).await?;
+        let removed = self.inner.registry.remove(id, release, purge).await?;
+        if purge && (removed != Removed::Nothing || release.is_none()) {
+            let stores = self.inner.stores.clone();
+            let id = id.to_owned();
+            tokio::task::spawn_blocking(move || stores.purge(&id)).await.map_err(io::Error::other)??;
+        }
         {
             let mut table = self.inner.lock();
             if table.services.get(id).is_some_and(|entry| entry.instance.is_none()) {
@@ -679,6 +754,12 @@ impl Supervisor {
             return Err(StartError::Earlier(id.to_owned()));
         }
         let service = self.inner.registry.get(id).ok_or_else(|| StartError::NotInstalled(id.to_owned()))?;
+        if service.store_max_bytes.is_some() {
+            let (stores, name) = (self.inner.stores.clone(), Stores::name(id, &service.release));
+            if tokio::task::spawn_blocking(move || stores.is_newer(&name)).await.unwrap_or(false) {
+                return Err(StartError::StoreFormat(id.to_owned()));
+            }
+        }
         let (serial, mut phase, _) = self.claim(&service, true).await.map_err(StartError::Failed)?;
         let pending = Pending { inner: &self.inner, app: id.to_owned(), serial };
         let ready = phase.wait_for(|phase| !matches!(phase, Phase::Starting)).await.map(|phase| phase.clone());
@@ -716,6 +797,7 @@ impl Supervisor {
     pub async fn shutdown(&self) {
         self.inner.closing.store(true, Ordering::SeqCst);
         self.accept.abort();
+        self.store_changes.abort();
         let ids: Vec<String> = self.inner.lock().services.keys().cloned().collect();
         let phases: Vec<_> = ids.iter().filter_map(|id| self.inner.request_stop(id, StopReason::Shutdown)).collect();
         for mut phase in phases {
@@ -731,6 +813,7 @@ impl Drop for Supervisor {
     /// its supervisor.
     fn drop(&mut self) {
         self.accept.abort();
+        self.store_changes.abort();
         self.inner.closing.store(true, Ordering::SeqCst);
         let table = self.inner.lock();
         for entry in table.services.values() {
@@ -819,6 +902,7 @@ async fn serve(inner: Arc<Inner>, mut stream: UnixStream) {
             hello(&inner, stream, &app, &token, protocol).await;
         }
         Some("channel.attach") => attach(&inner, stream, &text("ticket")).await,
+        Some("host.attach") => host_attach(&inner, stream, &text("ticket")).await,
         other => tracing::debug!(t = ?other, "a service socket connection opened with an unknown HANDSHAKE"),
     }
 }
@@ -864,6 +948,20 @@ async fn attach(inner: &Arc<Inner>, stream: UnixStream, ticket: &str) {
     };
     if let Err(stream) = claimed.tx.send(stream) {
         refuse(stream, "channel.refused", "unknown or expired ticket").await;
+    }
+}
+
+/// §6: a host connection names the `host` ticket of its process's
+/// `service.ready`. Each is good for one connection: a second one for the
+/// process, or a ticket that was never given, is refused.
+async fn host_attach(inner: &Arc<Inner>, stream: UnixStream, ticket: &str) {
+    let claimed = inner.lock().host_tickets.remove(ticket);
+    let Some(claimed) = claimed else {
+        refuse(stream, "host.refused", "unknown or used ticket").await;
+        return;
+    };
+    if let Err(stream) = claimed.tx.send(stream) {
+        refuse(stream, "host.refused", "the process is no longer expected").await;
     }
 }
 

@@ -115,7 +115,7 @@ async fn a_folder_without_dependencies_is_installed_as_the_dev_release() {
     assert_eq!(fs::read_to_string(service.dir.join("src/service.ts")).unwrap(), "1");
     assert_eq!(fs::metadata(service.dir.join("bin/run")).unwrap().permissions().mode() & 0o777, 0o755);
     assert!(!service.dir.join(".git").exists());
-    assert_eq!(fs::metadata(&service.data).unwrap().permissions().mode() & 0o777, 0o700);
+    assert!(!home.path().join("service-data").exists(), "no data folder is made: a service gets none");
     assert_eq!(registry.list(), vec![service.clone()]);
     assert_eq!(registry.get("com.example.plain"), Some(service.clone()));
     assert_eq!(registry.release("com.example.plain", "dev"), Some(service));
@@ -222,16 +222,19 @@ async fn an_archive_is_installed_with_or_without_a_top_folder() {
     assert_eq!(report.service.dir.file_name().unwrap().to_string_lossy(), children[0], "the replaced folder is gone");
 }
 
+/// The data folder an earlier step gave a service is given to no process, and
+/// stays until the owner removes the service with `purge` (§1).
 #[tokio::test]
-async fn an_install_keeps_the_data_folder_and_remove_keeps_it_unless_purged() {
+async fn an_earlier_data_folder_stays_until_a_purge() {
     let home = temp_home();
     let registry = registry(home.path(), None);
-    let first = package(home.path(), "first", &manifest("com.example.up"), &[("src/service.ts", "1")]);
-    let data = registry.install(&first).await.unwrap().service.data;
+    let data = home.path().join("service-data/com.example.up");
+    fs::create_dir_all(&data).unwrap();
     fs::write(data.join("state.json"), "kept").unwrap();
+    let first = package(home.path(), "first", &manifest("com.example.up"), &[("src/service.ts", "1")]);
+    registry.install(&first).await.unwrap();
     let second = package(home.path(), "second", &manifest("com.example.up"), &[("src/service.ts", "2")]);
     let report = registry.install(&second).await.unwrap();
-    assert_eq!(report.service.data, data);
     assert_eq!(fs::read_to_string(data.join("state.json")).unwrap(), "kept");
     assert_eq!(fs::read_to_string(report.service.dir.join("src/service.ts")).unwrap(), "2");
 
@@ -506,12 +509,12 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// Hub provides the SDK (§1): a package without its own
-/// `node_modules/@pocketjs/service` gets a link to Hub's copy at install; a
-/// package that brings its own keeps it; a link removed after the install is
-/// made again by `link_sdk`, which the supervisor runs before each start.
+/// Hub provides the SDK (§1): every package gets a link to Hub's copy at
+/// install, **the host's copy always wins** over one the package brought,
+/// and a link removed or pointed elsewhere after the install is made again
+/// by `link_sdk`, which the supervisor runs before each start.
 #[tokio::test]
-async fn hubs_sdk_is_linked_into_packages_without_their_own() {
+async fn hubs_sdk_is_linked_into_every_package() {
     let temp = tempfile::tempdir().unwrap();
     let home = temp.path().join("home");
     let sdk = temp.path().join("sdk");
@@ -532,10 +535,15 @@ async fn hubs_sdk_is_linked_into_packages_without_their_own() {
         &[("src/service.ts", ""), ("node_modules/@pocketjs/service/package.json", r#"{"name":"@pocketjs/service","version":"9.9.9"}"#)],
     );
     let installed_own = registry.install(&own).await.unwrap().service;
-    let kept = installed_own.dir.join(service_host::SDK_LINK);
-    assert!(!fs::symlink_metadata(&kept).unwrap().file_type().is_symlink());
-    assert!(fs::read_to_string(kept.join("package.json")).unwrap().contains("9.9.9"));
-    assert!(!service_host::link_sdk(&installed_own.dir, &sdk).unwrap());
+    let replaced = installed_own.dir.join(service_host::SDK_LINK);
+    assert_eq!(fs::read_link(&replaced).unwrap(), sdk, "the package's own copy gave way to the host's");
+    assert!(!service_host::link_sdk(&installed_own.dir, &sdk).unwrap(), "a link to the host's copy stays");
+    // A copy put back after the install is replaced at the next start.
+    fs::remove_file(&replaced).unwrap();
+    fs::create_dir_all(&replaced).unwrap();
+    fs::write(replaced.join("package.json"), "{}").unwrap();
+    assert!(service_host::link_sdk(&installed_own.dir, &sdk).unwrap());
+    assert_eq!(fs::read_link(&replaced).unwrap(), sdk);
 
     // Removed, and dangling: both are made again.
     fs::remove_file(&link).unwrap();

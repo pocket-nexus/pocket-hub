@@ -30,6 +30,7 @@ pub fn fast_timings() -> Timings {
         open_budget: Duration::from_secs(10),
         start: Duration::from_secs(8),
         attach: Duration::from_millis(1000),
+        host_attach: Duration::from_millis(1000),
         first_frame: Duration::from_secs(2),
         stop_grace: Duration::from_millis(400),
         term_grace: Duration::from_millis(400),
@@ -44,6 +45,7 @@ pub fn fast_timings() -> Timings {
 pub fn config(home: &Path, bun: PathBuf) -> Config {
     let mut config = Config::new(home, home.join("d.sock"));
     config.bun_path = Some(bun);
+    config.sdk = Some(fixtures().join("sdk"));
     config.timings = fast_timings();
     config
 }
@@ -56,6 +58,17 @@ pub fn fixture_package(parent: &Path, id: &str, version: &str, fixture: serde_js
     std::fs::write(dir.join("pocket.service.json"), manifest.to_string()).unwrap();
     std::fs::copy(fixtures().join("service.mjs"), dir.join("service.mjs")).unwrap();
     std::fs::write(dir.join("fixture.json"), fixture.to_string()).unwrap();
+    dir
+}
+
+/// A copy of the fixture package `name` (one on the host's own SDK) in `parent`.
+pub fn sdk_package(parent: &Path, name: &str) -> PathBuf {
+    let dir = parent.join(format!("src-{name}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    for entry in std::fs::read_dir(fixtures().join(name)).unwrap() {
+        let entry = entry.unwrap();
+        std::fs::copy(entry.path(), dir.join(entry.file_name())).unwrap();
+    }
     dir
 }
 
