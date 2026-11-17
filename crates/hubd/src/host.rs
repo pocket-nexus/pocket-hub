@@ -13,7 +13,7 @@
 use std::sync::Arc;
 
 use pocket_hub_core::{BoxFuture, ChannelHost, ChannelOffer, ChannelOpenError, ChannelStream};
-use pocket_hub_services::{OpenError, Supervisor};
+use service_host::{OpenError, Supervisor};
 
 pub struct ServiceHost(pub Arc<Supervisor>);
 
@@ -21,7 +21,7 @@ impl ChannelHost for ServiceHost {
     fn open(&self, offer: ChannelOffer) -> BoxFuture<'static, Result<ChannelStream, ChannelOpenError>> {
         let supervisor = self.0.clone();
         Box::pin(async move {
-            let offer = pocket_hub_services::ChannelOffer {
+            let offer = service_host::ChannelOffer {
                 device: offer.device,
                 device_name: offer.device_name,
                 model: offer.model,

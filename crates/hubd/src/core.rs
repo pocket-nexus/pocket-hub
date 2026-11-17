@@ -20,7 +20,7 @@ use pocket_hub_api::types::{self as api, Event};
 use pocket_hub_api::{methods, paths};
 use pocket_hub_applet_store::{AppletStore, LinkCatalog, LinkConfig, StoreConfig, StoreEvent};
 use pocket_hub_core::{Endpoint, EndpointConfig, HubEvent, TcpCarrier, Timing};
-use pocket_hub_services::{ServiceEvent, ServiceStatus, LogLine, Supervisor};
+use service_host::{ServiceEvent, ServiceStatus, LogLine, Supervisor};
 use pocket_hub_setup::{DeviceFamily, ReleaseFetcher, ShellSource};
 use pocket_hub_store::Store;
 use serde_json::json;
@@ -118,7 +118,7 @@ impl Core {
 
         let store = Arc::new(Store::open_named(home.join("store"), options.name.as_deref()).map_err(|error| StartError::Other(format!("Pocket Hub cannot open its store: {error}.")))?);
         let sdk = sdk::materialize(&home).map_err(|error| StartError::Other(format!("Pocket Hub cannot write the service SDK into its home: {error}.")))?;
-        let mut config = pocket_hub_services::Config::new(&home, home.join("service.sock"));
+        let mut config = service_host::Config::new(&home, home.join("service.sock"));
         config.bun_path = options.bun.clone();
         config.sdk = Some(sdk);
         config.timings.idle_override = options.service_idle;
@@ -484,7 +484,7 @@ async fn futures_any(probes: impl Iterator<Item = impl std::future::Future<Outpu
 
 /// `<bun> --version`, for a Bun Hub did not download.
 fn reported_version(bun: &Path) -> Option<String> {
-    use pocket_hub_services::child::InheritNothing;
+    use service_host::child::InheritNothing;
     let output = std::process::Command::new(bun).arg("--version").stdin(std::process::Stdio::null()).inherit_nothing().output().ok()?;
     let text = String::from_utf8(output.stdout).ok()?;
     (output.status.success() && !text.trim().is_empty()).then(|| text.trim().to_owned())

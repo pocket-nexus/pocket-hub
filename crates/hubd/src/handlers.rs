@@ -10,7 +10,7 @@ use pocket_hub_api::types::*;
 use pocket_hub_api::{ErrorKind, RpcError, methods};
 use pocket_hub_applet_store::{StoreError, is_update};
 use pocket_hub_core::{DeviceHandle, LaunchTarget, OpError, Operation, family};
-use pocket_hub_services::{InstallError, StartError};
+use service_host::{InstallError, StartError};
 use pocket_hub_setup::{DeviceFamily, DiscoverOptions, FTPD_PORT, InstallOptions, InstallTarget, InstalledProgram, InstalledPrograms, ReleaseError, ReleaseFetcher, ShellSource};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -801,7 +801,7 @@ fn start_error(id: &str, error: StartError) -> RpcError {
 }
 
 /// Downloads Bun when it is missing, with `{done, total}` going to `each`.
-async fn ensure_bun(core: &Core, mut each: impl FnMut(pocket_hub_services::Progress)) -> Result<PathBuf, RpcError> {
+async fn ensure_bun(core: &Core, mut each: impl FnMut(service_host::Progress)) -> Result<PathBuf, RpcError> {
     let runtime = core.supervisor.runtime();
     if let Some(path) = runtime.available() {
         return Ok(path);

@@ -117,8 +117,8 @@ fn fatal(message: &str) -> ExitCode {
 
 fn main() -> ExitCode {
     // Nothing of whatever started this core (the command line, the app)
-    // stays open in it for its life (`pocket_hub_services::child`).
-    pocket_hub_services::child::close_inherited();
+    // stays open in it for its life (`service_host::child`).
+    service_host::child::close_inherited();
     let args = Args::parse();
     let Some(home) = args.home.clone().or_else(pocket_hub_api::paths::home_from_env) else {
         return fatal("Pocket Hub has no home folder: set POCKET_HUB_HOME or HOME.");

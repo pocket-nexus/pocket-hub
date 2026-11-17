@@ -588,7 +588,7 @@ impl Machine {
     /// port (a peer, a test server), a screenshot's time in its file name.
     fn text(&self, text: &str) -> String {
         if text == self.bun_version {
-            return pocket_hub_services::BUN_VERSION.to_owned();
+            return service_host::BUN_VERSION.to_owned();
         }
         let mut text = text.to_owned();
         for (from, to) in &self.replacements {

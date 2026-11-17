@@ -6,7 +6,7 @@
 use pocket_hub_api::types as api;
 use pocket_hub_api::{ErrorKind, RpcError};
 use pocket_hub_core::{DeviceSnapshot, OpError, Operation, PairError, family};
-use pocket_hub_services::{ServiceState, ServiceStatus, InstalledService, LogLine, LogStream};
+use service_host::{ServiceState, ServiceStatus, InstalledService, LogLine, LogStream};
 use pocket_hub_setup::{InstallReport, InstallTarget, PairingOutcome, ProgramAction, Progress, Stage};
 
 // ---------------------------------------------------------------------------

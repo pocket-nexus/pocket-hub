@@ -13,7 +13,7 @@
 //! the link specification (`docs/POCKET-LINK.md` in PocketJS).
 
 #[cfg(not(unix))]
-compile_error!("pocket-hub-services runs services as Unix process groups over a Unix socket; other platforms are not supported yet");
+compile_error!("the service host runs services as Unix process groups over a Unix socket; other platforms are not supported yet");
 
 #[cfg(unix)]
 pub mod child;

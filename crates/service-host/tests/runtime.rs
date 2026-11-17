@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::temp_home;
-use pocket_hub_services::{BunRuntime, RuntimeError, BUN_VERSION};
+use service_host::{BunRuntime, RuntimeError, BUN_VERSION};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -154,7 +154,7 @@ async fn a_configured_bun_is_used_as_is() {
 }
 
 /// The real download from GitHub. Run with
-/// `cargo test -p pocket-hub-services --test runtime -- --ignored`.
+/// `cargo test -p pocket-service-host --test runtime -- --ignored`.
 #[tokio::test]
 #[ignore = "downloads Bun from GitHub"]
 async fn the_pinned_bun_downloads_and_runs() {
