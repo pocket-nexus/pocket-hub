@@ -7,7 +7,10 @@
 # cargo runs with a clean environment: Xcode exports SDKROOT,
 # MACOSX_DEPLOYMENT_TARGET and the like, which build scripts watch, and the
 # shared target/ would otherwise be rebuilt each time a build alternates
-# between Xcode and a terminal. cargo is where rustup puts it.
+# between Xcode and a terminal. cargo is where rustup puts it. The proxy
+# variables are kept: where the network is reached through a proxy, cargo
+# fetching a crate without it waits on a connection that never answers (it
+# did on the release runner).
 #
 # The helpers are signed here with the app's identity: Xcode signs the bundle
 # after this phase but does not sign executables a script copies into it. They
@@ -34,8 +37,14 @@ if [ ! -x "$cargo" ]; then
 fi
 
 cd "$repo_root"
-env -i HOME="$HOME" PATH="$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
-    "$cargo" build $release_flag -p pocket-hubd -p pocket-hub-cli
+set -- HOME="$HOME" PATH="$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+for name in http_proxy https_proxy all_proxy no_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY; do
+    value="$(printenv "$name" || true)"
+    if [ -n "$value" ]; then
+        set -- "$@" "$name=$value"
+    fi
+done
+env -i "$@" "$cargo" build $release_flag -p pocket-hubd -p pocket-hub-cli
 
 # cargo built the helpers for this Mac; Xcode builds the app for $ARCHS. They
 # have to be the same. A Release build used to be a universal app around
