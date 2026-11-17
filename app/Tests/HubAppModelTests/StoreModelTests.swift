@@ -228,9 +228,8 @@ struct StoreModelTests {
         // The store's names, in its order, each device once (the mock's `3ds`
         // and `3ds-dev` are both a 3DS).
         #expect(details.deviceNames == ["Omarchy Pocket", "M5Stack Tab5", "Nintendo 3DS"])
-        #expect(details.needs.compactMap(capabilityText).count == details.needs.count, "words for every capability the store names today")
+        #expect(details.needs == ["text.glyphs.baked", "input.buttons", "display.auxiliary", "input.touch.auxiliary", "net.http"])
         #expect(details.screenText == "Touch, 320 × 240 to 640 × 720", "English in every language")
-        #expect(capabilityText("io.example.new") == nil, "an id the app has no words for is shown as itself")
 
         // A store that does not answer: the store's failure, in plain words.
         await h.core.setStoreReachable(false)

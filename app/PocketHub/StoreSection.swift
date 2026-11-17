@@ -452,8 +452,9 @@ struct StoreAppDetails: View {
     }
 
     /// What the package needs of a device and what it uses where a device
-    /// has it, a row per capability in the owner's words (the id is the
-    /// row's help); while the details are on their way, or why they are not.
+    /// has it, a row per capability by its id (`input.buttons`), as the
+    /// package states it: the owner chose ids over words that explain them.
+    /// While the details are on their way, or why they are not.
     @ViewBuilder
     private var capabilities: some View {
         switch details {
@@ -487,7 +488,7 @@ struct StoreAppDetails: View {
     }
 
     private func capabilityRow(_ id: String) -> some View {
-        Text(verbatim: capabilityText(id) ?? id).help(Text(verbatim: id))
+        Text(verbatim: id).textSelection(.enabled)
     }
 
     /// The devices it runs on, each once: the store's names for those its
