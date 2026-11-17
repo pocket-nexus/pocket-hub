@@ -25,7 +25,7 @@ Omarchy Pocket).
 | `id` | string | the applet's manifest id | 1 to 128 bytes of `[A-Za-z0-9._-]`, not `.` or `..` (the folder rule of today); **equal to the `id` of the applet package of the same release** (`TRUST.md` §6) |
 | `entry` | string | the module the host loads; its default export is the service (`CAPABILITIES.md` §2) | a relative path of normal components inside the package, at most 1,024 bytes, naming a regular file reached through no link (today's rule) |
 | `requires` | array of strings | the capabilities the service uses | each of `net`, `store`, `image`, `text`, `media`, `native` (six; `signin` is not one, `SETUP.md`); no repeats; order carries no meaning (the host sorts it where it signs or shows it). **A name the host does not know, or does not provide, is refused**, so a service written for a later capability is not run without it; `text` is refused until hosts implement it for services (`CAPABILITIES.md` §8). May be empty: a service that only computes for its applet |
-| `hosts` | array of strings | the destinations the service's `net` and the URL sources of its `image` and `media` may reach | at most **32**; each a lower-case DNS name as `applet.hosts` writes them (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`, at most 253 bytes), or such a name behind `*.` (§2); no repeats; no address, no port, no scheme. **May be empty**: a service with `net` and no hosts reaches only the origins the owner grants it (`SETUP.md` §3; Home Assistant) |
+| `hosts` | array of strings | the destinations the service's `net` and the URL sources of its `image` and `media` may reach | at most **32**; each a lower-case DNS name as `applet.hosts` writes them (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`, at most 253 bytes), or such a name behind `*.` (§2); no repeats; no address, no port, no scheme. **May be empty**: a service with `net` and no hosts reaches only the origins its setup passed (`SETUP.md` §2; Home Assistant) |
 | `store` | object? | `{ "maxBytes": <integer> }`: the store's size | only with `store` in `requires`; 1 to 268,435,456 (256 MiB); default 16 MiB. The id's releases share one store, whose limit is the newest installed release's (`QUESTIONS.md` Q16) |
 | `idleSeconds` | integer? | how long a process stays up with no channel open | 1 to 86,400; default **30** (unchanged) |
 | `setup` | string? | the setup guide's entry, `setup/SKILL.md` (`SETUP.md` §1) | a relative path inside the package to a regular file named `SKILL.md`; its folder holds at most 64 files and 1 MiB; the host never runs it |
@@ -52,9 +52,9 @@ as `net.http` allows it today. **The destination policy applies after the
 match**: a name that resolves to a private address is refused whatever the
 manifest says. A destination the manifest cannot express (a Home Assistant
 instance at `http://192.168.1.20:8123`: an address literal, a port, a private
-address) is reachable only as an **origin the owner granted** by a click in
-Pocket Hub's app, which the host keeps outside the manifest and the service's
-store (`SETUP.md` §3, `QUESTIONS.md` Q4).
+address) is reachable only as an **origin the setup's agent passed** with its
+result, which the host pins and keeps outside the manifest and the service's
+store (`SETUP.md` §2).
 
 The wildcard is this proposal's addition (`QUESTIONS.md` Q12): YouTube's media
 addresses are on per-server names under `googlevideo.com`, and without it a

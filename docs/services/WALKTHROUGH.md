@@ -100,7 +100,7 @@ never opens the browser and never sees the password.
 **Per device**: on a **3DS or a Tab5** the agent runs on the Mac and the
 applet says "Set it up on your Mac". On **Omarchy Pocket** the agent is the one
 on the device (Codex, which the owner already runs there), the command is
-`pocket-host service setup …`, and the browser is whatever the agent can open
+`pocket-service-host service setup …`, and the browser is whatever the agent can open
 there; **the device has no browser in its shell today, so X cannot be set up
 on Omarchy Pocket for now**, which the owner accepted.
 
@@ -153,9 +153,14 @@ its own programs on your Mac"; on Install, the dialog of `TRUST.md` §4:
 > Other applets can do only what Pocket Hub allows. YouTube runs programs of
 > its own, with the same access to your files, accounts and network that you
 > have, and Pocket Hub cannot limit or watch what they do. Install it only if
-> you trust Pocket Nexus, who published it.
+> you trust Pocket Nexus.
 >
-> [Cancel] [Install]
+> [Cancel] [Install], neither of them the default button
+
+"Pocket Nexus" appears because the entry's key is the official key this Mac
+knows; for another publisher the dialog names the handle as the publisher's
+own claim (`TRUST.md` §4). The click installs and gives consent; without it,
+an install from the command line or the console installs and holds.
 
 **On Omarchy Pocket** the same text with "on this device", in the shell, and
 the service runs on the device (its host provides `native`, `DEVICES.md` §5),
@@ -186,20 +191,22 @@ that agent has, or the owner pastes the token into the agent's terminal.
 ## 5. Home Assistant: a token and a private address
 
 `pocket.service.json`: `requires ["net", "store"]`, `hosts []`, `setup`: the
-service reaches only what the owner grants. The owner's own instance is a
-**granted origin**; so is a Home Assistant Cloud address
-(`https://<id>.ui.nabu.casa`), whose suffix a wildcard could not name if it
-is a public suffix (not checked). The guide has the agent ask the owner for the instance's address,
-check that it answers, have the owner create a long-lived token in Home
-Assistant's profile page, then:
+service reaches only the origins its setup passes (`MANIFEST.md` §1). The guide
+has the agent ask the owner for the instance's address, check that it answers,
+have the owner create a long-lived token in Home Assistant's profile page,
+and deliver both in one call:
 
-| Step | Agent | Owner | Service | Host |
-| --- | --- | --- | --- | --- |
-| the address | `pocket-hub service origin dev.pocket-nexus.homeassistant http://192.168.1.20:8123` | sees "Home Assistant asks to reach 192.168.1.20:8123 on your network" in Pocket Hub and clicks Allow (consent-class, `QUESTIONS.md` Q4) | | `services.requestOrigin`, then `services.grantOrigin` from the app: stored, pinned, private allowed, loopback and link-local never |
-| the token | `pocket-hub service setup dev.pocket-nexus.homeassistant -` with `{"url":"http://192.168.1.20:8123","token":"…"}` | | `setup`: checks the URL is a granted origin by calling `/api/` with the token, stores both | delivers |
-| use | | | `host.net.fetch` and `host.net.websocket` to the origin | checks the origin against the grants |
+| Step | Agent | Service | Host |
+| --- | --- | --- | --- |
+| deliver | `pocket-hub service setup dev.pocket-nexus.homeassistant - --origin http://192.168.1.20:8123` with `{"url":"http://192.168.1.20:8123","token":"…"}` | `setup`: calls `/api/` on the origin with the token through `host.net.fetch`, stores both | resolves and pins the origin (an address literal: itself), refuses loopback, link-local and this computer's own addresses, stores it, delivers the message, and returns `origins: [{origin, addresses: ["192.168.1.20"]}]` |
+| confirm | shows the owner "Home Assistant will reach 192.168.1.20 port 8123" before the call, as the guide says, and the pinned addresses after it | | no dialog: the confirmation is the agent's (`SETUP.md` §2) |
+| use | | `host.net.fetch` and `host.net.websocket` to the origin | connects only to the pinned addresses, directly, never through a proxy |
+
+A Home Assistant Cloud address (`https://<id>.ui.nabu.casa`) is passed the
+same way; it is a public name, so the agent shows the addresses it resolved
+to and does not call it the owner's network.
 
 Today the applet sends the address and token from the console's keyboard
 (`homeassistant/api.ts` `/setup`); under this flow nothing is typed on the
-device. **Per device**: on Omarchy Pocket the owner's click is in the shell,
-and the agent is the one on the device.
+device. **Per device**: on Omarchy Pocket the agent is the one on the device,
+and the command is `pocket-service-host service setup`.

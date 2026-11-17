@@ -16,7 +16,12 @@ marked changes to §1, §5.3, §6.1, §6.5, §7.1, §7.3, §7.6, §9 and §11. T
 link page decides the wire; this set decides what a service sees and what a
 service host does.
 
-**Revision 4** (2026-11-17) applies the owner's answers (`QUESTIONS.md`
+**Revision 5** (2026-11-17) answers an independent review: step 1 is described
+from #23, the store's format, the crate line and the protocol numbers are
+fixed, the enclosure is re-measured with Bun 1.4.4 and a real SDK service and
+narrowed, consent is identified by the app's code-directory hash, origins
+travel with the setup, and decoding is bounded host-wide. **Revision 4**
+applies the owner's answers (`QUESTIONS.md`
 "Decided": the names, one host for Omarchy Pocket, consent as the owner's
 click, the rule for a device with no measured enclosure, **`signin` replaced
 by a setup guide**) and rebases on a `main` that moved: the Tab5 now links
@@ -26,7 +31,7 @@ over Pocket Link 2 and pairs by a code, and Pocket Hub has released users.
 
 | | Nintendo 3DS | M5Stack Tab5 | Omarchy Pocket |
 | --- | --- | --- | --- |
-| Where its service host is | Hub on a paired Mac | Hub on a paired Mac | on the device (`pocket-hostd`) |
+| Where its service host is | Hub on a paired Mac | Hub on a paired Mac | on the device (`pocket-service-hostd`) |
 | Its channels travel on | Pocket Link 2 | Pocket Link 2, once its firmware opens channels | a local Unix socket (link §7.11) |
 | Pairing | Hub writes it (ftpd or SD card) | by a code it shows, or on its card | none |
 | Its worker's HTTP | through Hub | its own stack, which applies `applet.hosts` | through the service host on the device |
@@ -90,7 +95,7 @@ the host, from a guide the release ships (`SETUP.md`).
 | --- | --- |
 | **applet** | a Pocket applet package (`.pocket`) |
 | **service** | the code of one applet that runs on a service host (today a daemon) |
-| **service host**, "host" on these pages | what runs services and implements capabilities: Hub on a Mac for the 3DS and the Tab5, `pocket-hostd` on Omarchy Pocket. The SDK's object is `host` |
+| **service host**, "host" on these pages | what runs services and implements capabilities: Hub on a Mac for the 3DS and the Tab5, `pocket-service-hostd` on Omarchy Pocket. The SDK's object is `host` |
 | **runtime** | the device's own native program (Pocket Shell on a 3DS, the Tab5's firmware, omarchy-pocket-host). PocketJS calls it "host" in "host contract", "host namespace" and `hostAbi`; these pages write those out in full (`QUESTIONS.md` Q2) |
 | **capability** | one of six: `net`, `store`, `image`, `text`, `media`, `native` |
 | **portable service**, **unrestricted service** | without `native`, enclosed; with `native`, computers only, disclosed |
@@ -116,8 +121,8 @@ the host, from a guide the release ships (`SETUP.md`).
 | wire codes | `no_daemon`, close reason `daemon` | **`no_service`**, **`service`** |
 | handshake messages | `daemon.hello`, `.ready`, `.refused`, `.stop` | **`service.hello`**, … (`protocol` 2) |
 | control API | `daemons.*`, `Daemon`, `daemon.*` events, kind `daemon` | **`services.*`**, **`Service`**, **`service.*`**, kind **`service`** (`protocol` 2) |
-| Hub's folders | `<home>/daemons/`, `daemon-data/`, `daemon.sock` | **`<home>/services/`**, **`service-store/`**, **`service.sock`** |
-| Hub's crates and SDK folder | `crates/hub-daemons`, `sdk/daemon` | **`crates/hub-services`** with the host parts in **`crates/pocket-host`**; **`sdk/service`** |
+| Hub's folders | `<home>/daemons/`, `daemon-data/`, `daemon.sock`, `sdk/daemon` | step 1 (#23): **`services/`**, **`service-data/`** (the old data folder's new name, no longer given to a process from step 2), **`services-staging/`**, **`service.sock`**, **`sdk/service`**; step 2 adds **`service-store/`**, the `store` capability's (`HOST-PROTOCOL.md` §8). The old folders are left unread |
+| Hub's crates and SDK folder | `crates/hub-daemons`, `sdk/daemon` | **`crates/hub-services`** (#23), whose parts move in step 2 to **`crates/pocket-service-host`** (recommended, Q2); **`sdk/service`** |
 | framework capabilities of the system service | none | **`image.url`**, **`text.glyphs.deferred`**, **`media.url`** |
 | the console's link: `link.companion`, `globalThis.link`, `@pocketjs/framework/link` | as is | **not decided**: a split by concern is proposed (`QUESTIONS.md` Q1) |
 | the role name `companion` in the link's fields | `companion` | unchanged |
@@ -125,9 +130,9 @@ the host, from a guide the release ships (`SETUP.md`).
 ### Blast radius in this repository
 
 **Generated with `git grep -il daemon` at `1bc2074`, excluding `Cargo.lock`:
-101 files**, every one touched by the local rename. Another branch is doing
-that rename (`MIGRATION.md` step 1); this list is the proposal's, not that
-branch's diff.
+101 files**, every one touched by the local rename. Pull request #23
+(`MIGRATION.md` step 1) is that rename; this list is the proposal's, not its
+diff.
 
 | Area | Files |
 | --- | --- |
@@ -145,5 +150,5 @@ branch's diff.
 | pocket-nexus/pocketjs | link §7.10's lists: `link.channel` (applet and platform contracts, the 3DS's host contract, profile and feature bit, `qjs.c`, the channel binding, the framework module, the reference, `tools/repack/3ds.ts`, `apps/link-channel`, the site's app-contract page, two tests); `no_daemon` and `daemon` (`link2.ts`, `link2.c`, the reference, the vectors, a test); "daemon" as a term (the reference API and CLI, comments); `applet.services` and `companion.pocket` (`contracts/spec/{applet,link}.ts`, `docs/{APPLETS,WORKER,POCKET-LINK}.md`, `site/content/docs/{app-contract,applets}.md`, `tools/pocket-link/catalog.ts`, `tools/pocket-link/v2/cli.ts`); the link split's list in `QUESTIONS.md` Q1 |
 | pocket-nexus/applets | every applet that uses `companion.pocket`, rewritten (no compatibility): `lib/{net,store,mock}.ts`, `ui/{companion,glyphs}.ts`, `ui/setup.tsx`, `kit/{images,platform}`, `tools/check.ts`, the `api.ts` of `github`, `weather`, `x`, `discord`, `homeassistant`, `maps`, `podcasts`, `youtube`, `spotify`, `appstore`, the fixtures, `docs/{applets,X,DISCORD}.md`; each service's `setup/SKILL.md`, new |
 | pocket-nexus/pocket-shell | `shells/3ds/shell/{system.ts,store.tsx,pages.tsx,scanner.tsx}` under Q1 |
-| pocket-nexus/omarchy-pocket | `daemon/companion.ts` and the service half of `daemon/appstore.ts` give way to `pocket-hostd`; `host/src/{net,children}.rs`; `host/pocket.host.json` (`data.fs`, the new capabilities); the `vendor/pocket-hub` submodule goes |
+| pocket-nexus/omarchy-pocket | `daemon/companion.ts` and the service half of `daemon/appstore.ts` give way to `pocket-service-hostd`; `host/src/{net,children}.rs`; `host/pocket.host.json` (`data.fs`, the new capabilities); the `vendor/pocket-hub` submodule goes |
 | pocket-nexus/pocket-m5 | `components/pocket_system` (the channel groups and namespaces, `device.accepts`, `applet.hosts` in its HTTP node, `companion.c` gone), `programs/m5stack-tab5/pocket.host.json` |

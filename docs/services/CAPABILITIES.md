@@ -35,8 +35,24 @@ decision: decoding is performance-first). So bytes from the network reach
 the decoders inside the host, `hubd` included, which holds every device's
 link key. Two things follow: **memory-safe decoders are preferred where they
 cost nothing** (the pure-Rust image path of `DEVICES.md` §3, on every host),
-and **a URL is the only input form**: the image `{bytes}` source and the
+**decoding is bounded host-wide**, and **a URL is the only input form**: the image `{bytes}` source and the
 media `feed` of the first revision are dropped, since no applet needs them.
+
+**The host-wide bounds.** Performance first does not mean unbounded: one
+service may hold 8 renders of pictures up to 50 megapixels, and a device
+connection could otherwise open several system channels, which is about
+1.6 GB of decoded pixels per service inside the process that holds every
+link. So the host enforces:
+
+| Bound | Value | Answer past it |
+| --- | --- | --- |
+| decoded pixels in flight, host-wide | **64 megapixels** (256 MiB as RGBA), a semaphore every `image.render` and every media decoder's frame buffers take before decoding | the request waits its turn; one that has waited 10 s is answered `busy` |
+| one picture | **50 megapixels**, refused before decoding | `too_large` |
+| media transcodes, host-wide | **2** on a Mac, **1** on a device that hosts itself | `busy` |
+| system channels per device connection | **1** | a second `channel.open` with `service: "system"` is refused `rejected` (link §7.9) |
+
+None of these was measured; they are the order of what a Mac and an RG DS
+Plus hold.
 
 ## 2. The service module
 
@@ -87,7 +103,8 @@ export interface Host {
   readonly net: Net;
   readonly store: Store;
   /** null unless the manifest requires "native". */
-  readonly native: Native | null;
+  /** Present on every host; its members fail with not_required unless the manifest requires "native". */
+  readonly native: Native;
 }
 ```
 
@@ -150,7 +167,7 @@ Common error codes, each with one meaning (each capability adds its own):
 | Code | Meaning |
 | --- | --- |
 | `not_required` | the manifest's `requires` does not name the capability |
-| `denied` | the destination is refused: its host matches no entry of the manifest's `hosts` (nor an origin granted to the service, `SETUP.md` §3), or the destination policy refuses its address |
+| `denied` | the destination is refused: its host matches no entry of the manifest's `hosts` (nor an origin granted to the service, `SETUP.md` §2), or the destination policy refuses its address |
 | `invalid` | an argument is malformed |
 | `too_large` | an argument or a result is over its limit |
 | `busy` | a bound of the tables below is reached; nothing was started |
@@ -216,7 +233,7 @@ does `net.http` for a device (link specification §6.5), under **one
 destination policy shared with the applet's `net.http`**: every hop resolved
 and its address checked (no loopback, private, link-local, CGNAT, multicast,
 unique-local or reserved address, except a granted origin's private
-address, `SETUP.md` §3), redirects followed by the host, the system's proxy settings. The
+address, `SETUP.md` §2), redirects followed by the host, the system's proxy settings. The
 difference between the two surfaces is whose host list applies: the
 service's manifest `hosts` here, the applet's `applet.hosts` for `net.http`.
 The host keeps no cookie jar: a service that holds a session sends its `cookie`
@@ -282,7 +299,7 @@ own** (`TRUST.md` §8). **A `set` is atomic and durable before it resolves**: a
 reader sees the old value or the new one, never a part, and a crash after the
 resolve keeps the new one. The last `set` of a key wins; there are no
 transactions across keys. Tokens and sessions live here: X's `auth_token`
-and `ct0`, Discord's bot token, Home Assistant's token (its address is a granted origin, `SETUP.md` §3).
+and `ct0`, Discord's bot token, Home Assistant's token (its address is a granted origin, `SETUP.md` §2).
 
 | Limit | Value |
 | --- | --- |
@@ -303,6 +320,19 @@ A native service and any other process of the owner's user can read it
 (`TRUST.md` §2, `QUESTIONS.md` Q24). Values are not encrypted beyond the
 file mode (`QUESTIONS.md` Q26).
 
+**On disk**, a format kept across upgrades from step 2 on:
+
+| Point | Rule | Why |
+| --- | --- | --- |
+| The file | one SQLite database per store, `store.sqlite` in the store's folder, `journal_mode=WAL`, `synchronous=FULL`, `PRAGMA user_version = 1`; one table `entries(key BLOB PRIMARY KEY, value BLOB NOT NULL)` and one row of `meta(bytes, keys)` | a key is bytes (up to 256, `/` included), so no key is mapped to a file name; atomicity, durability and the count come from one engine on macOS and Linux |
+| Who writes | **only the host's process**, through one connection per store guarded by one lock; services never open the file (they cannot, `TRUST.md` §5), so two releases' processes writing at once are two requests the host serializes | one writer makes the quota exact |
+| A `set` | the value's whole body is received first; then one transaction replaces the row and updates `meta` (the key's and value's bytes are what `usage` counts); the quota is checked inside that transaction against `meta.bytes`; the commit is the reply's precondition | "atomic and durable": the old value or the new one, and a reply only after `synchronous=FULL` has synced the write-ahead log |
+| The folder | created with mode 0700 and synced (`fsync` of the folder) after the database and its `-wal` file are created | a crash right after creation keeps the files |
+| `list` | `after` is the last key returned (exclusive), keys in byte order; `more` says whether a later key exists at that moment; keys added or removed between pages show or not by their order | a cursor that is a key needs no server state |
+| `CANCEL` | **before the body's last byte**: nothing is written and the reply is `cancelled`; **after it**: the transaction completes and the `set`'s own reply is sent | a write either happened whole or did not, and the service is told which |
+| A newer format | a host that finds a `user_version` above its own refuses that store (`service` error, reason `store_format`) and does not touch it | no reading of a format it does not know |
+
+
 **The framework does not use `store`.** An applet without a service keeps its
 state on the device (`data.fs`), GitHub's token and Weather's places among it
 (`QUESTIONS.md` Q8, which records that the direction's table does not cover
@@ -318,7 +348,8 @@ from **a setup guide** its release ships: a coding agent on the service host's
 machine follows it with the owner, outside the host, and hands the result to
 the service through the host's **setup inlet**, which calls the service's
 `setup` handler (§2). A private address the service must reach (a Home
-Assistant instance) is **granted by the owner's click** as an origin. All
+Assistant instance) is **an origin the agent passes with its result**, which
+the host pins and enforces; the owner's confirmation is the agent's to ask. All
 three are in `SETUP.md`. An applet whose setup nobody has done says so: "Not
 signed in to X. Set it up on your Mac."
 
@@ -339,7 +370,7 @@ export interface ImageBox {
 }
 
 export interface RenderedImage {
-  /** One IMG entry, the layout uploadImgEntry takes (PocketJS framework/compiler/pak.ts). */
+  /** One IMG entry, the layout uploadImgEntry takes (PocketJS framework/compiler/pak.ts writes it). */
   entry: Uint8Array;
   /** The texture's sides: powers of two, at most the device's stated maxSide (≤ 512). */
   width: number;
@@ -356,7 +387,8 @@ the host (§1), scales it into the box at the device's density, applies
 `fit`, `round` and `background`, and places it at the top-left corner of
 **a texture whose sides are powers of two, no larger than the device's
 stated `maxSide`**: `uploadImgEntry` refuses any other size
-(`framework/compiler/pak.ts`: "pow2, <= TEX_MAX_DIM", 512 in
+(the core's `upload_texture_flags`, `engine/core/src/lib.rs`, returns -1 for
+any other size; `framework/compiler/pak.ts` refuses it when it writes one; 512 in
 `contracts/spec/spec.ts`). It encodes **one IMG entry in a format the
 device stated it takes**, choosing among them itself (an opaque photo as
 RGB565, a round avatar with alpha, a picture of few colours as T8 with
@@ -371,7 +403,7 @@ rectangle. The service never learns the device's pixel format.
 | Input | at most **16 MiB**; at most **50 megapixels** decoded (a decompression bomb is refused before it is decoded) |
 | Source | a URL, as `net.fetch`: the host in the manifest's `hosts`, the destination policy |
 | Box | 1 to 512 logical pixels a side; the texture at most the device's `maxSide` |
-| Output | one IMG entry; 512 × 512 RGBA8888, the largest, is 1 MiB |
+| Output | one IMG entry; 512 × 512 RGBA8888, the largest, is 1,048,584 bytes |
 | Open | **8** per service across its channels |
 
 **The host checks**: `image` in `requires`; the channel named is open and belongs
@@ -517,7 +549,8 @@ feed states).
 ```ts
 export interface Native {
   /** A folder of this service's own, mode 0700, kept across upgrades:
-   *  where a program the service fetches (yt-dlp) lives. */
+   *  where a program the service fetches (yt-dlp) lives. Reading it throws
+   *  ServiceError("not_required") unless the manifest requires native. */
   readonly files: string;
 }
 ```
@@ -544,7 +577,7 @@ the applet says, in the owner's words, that it needs a computer.
 ## 11. The existing applets' needs
 
 From each applet's use of `https://companion.pocket/<service>` in
-pocket-nexus/applets at `3edefb5`. The calls are the same on all three
+pocket-nexus/applets, read at `3edefb5` and checked against the pin `a629fda`. The calls are the same on all three
 devices (`DEVICES.md`). "Through the framework"
 means the applet uses the capability with no service.
 
@@ -555,7 +588,7 @@ means the applet uses the capability with no service.
 | GitHub | `store` (token), `images` `/fetch?url&w&h&round` (avatars), `glyphs` `/atlas` | no service | `net.http` to api.github.com; `image.url` (avatars); `text.glyphs.deferred`; token in `data.fs` (Q8), sign-in by device flow (Q31) |
 | X | `x` `/timeline?kind&cursor`, `/post/<id>`, `/{like,repost,…}?id`, `/reply`, `/avatar?u`, `/media?u&w&h`; `glyphs` | portable service | service: `net.fetch` (x.com, api.x.com, the scripts' host), `store` (session, operation ids), the setup inlet (the session's cookies, `SETUP.md`), `channel.image.render` (avatars, media); applet: `text.glyphs.deferred` |
 | Discord | `discord` `/guilds`, `/guilds/<id>/channels`, `/channels/<id>/messages?before`, `?after&wait` (long poll), POST messages, `/<kind>/<owner>/<hash>` (pictures); `glyphs` | portable service | service: `net.fetch` and `net.websocket` (gateway), `store` (token), the setup inlet (the bot token), `channel.image.render`; the long poll becomes events the service emits; applet: `text.glyphs.deferred` |
-| Home Assistant | `homeassistant` `/setup` (URL and token sent from the device), `/states`, `/call`, `/forget` | portable service | service: the setup inlet (a token) and a granted origin (`SETUP.md` §3), `store`, `net.fetch` to that origin (a private address, Q4) |
+| Home Assistant | `homeassistant` `/setup` (URL and token sent from the device), `/states`, `/call`, `/forget` | portable service | service: the setup inlet (a token) and a granted origin (`SETUP.md` §2), `store`, `net.fetch` to that origin (a private address, `SETUP.md` §2) |
 | Maps | `maps` `/tile?z&x&y` (256 × 256 RGB565), `/geocode?q`, `/locate`; `store` (view) | portable service | service: `net.fetch` (a tile server, a geocoder), `channel.image.render` (tiles); `/locate` has no capability (Q33); the view in `data.fs` |
 | Podcasts | `podcasts` `/search?q`, `/episodes?feed`, `/play?url&at&duration&codec`, `/stop`, `/art?url&size`; `store` | portable service with any host (Q12) | service: `net.fetch`, `channel.media.open` (`video: false`, `durationMs`), `channel.image.render`, `store`; the codec is no longer the applet's choice |
 | YouTube | `youtube` `/feed?topic`, `/search?q`, `/play?id&codec&at`, `/stop`, `/thumb?id` | unrestricted service | service: `native` (yt-dlp), `channel.media.open`, `channel.image.render`; the codec is no longer the applet's choice |
@@ -563,8 +596,8 @@ means the applet uses the capability with no service.
 | App Store | `appstore` (Omarchy Pocket's own store client) | Omarchy Pocket's host installs releases on the device (Q40) | on Hub, a device's store page is the link's `catalog` and `install` (link §6.4) |
 | Camera, Photos, Notes | nothing | no service | unchanged |
 
-Two applets today pass a codec in their request (`youtube` `codec=h264|pal8`,
-`podcasts` `codec=pal8`): the applet chose the device's format. Under this
+Two applets today pass a codec in their request (`youtube` `codec=rgb565|h264|pal8`,
+`podcasts` `codec=pal8` except on Omarchy Pocket, where it sends none): the applet chose the device's format. Under this
 proposal neither can, which is the rule of `README.md` §1 item 3.
 
 The applets declaring the `glyphs` service are GitHub, X, Discord and Spotify
@@ -578,7 +611,7 @@ The applets declaring the `glyphs` service are GitHub, X, Discord and Spotify
 | `docs/MEDIA.md` (`MediaSource`, the PKMV wire, codecs `h264`/`pal8`/`rgb565`, one-use 60 s tickets, at most 4 tickets and streams, the side TCP connection) | `channel.media` output and the system service's `media.open` | the codec is chosen by the host from the device's statement, not by the applet or service |
 | `framework/src/media-service.ts` (`createMediaService`) and `framework/src/service-client.ts` (`createServiceClient`) | the framework's media over the system channel, through a client adapter | none on the applet's side |
 | `ui.loadFontAtlas` format, carried by `agent.glyphs` (link §6.6); the applets' `ui/glyphs.ts` request `{px, bold, slot, density, text}` | `text.atlas` | density comes from the device's statement; the codepoints travel as a body; `omitted` reports what did not fit |
-| IMG entry (`uploadImgEntry`, `framework/compiler/pak.ts`): power-of-two sides at most TEX_MAX_DIM | `image.render` output | the content size travels beside it, since the picture sits in a padded texture |
+| IMG entry (`uploadImgEntry`; written by `framework/compiler/pak.ts`, taken by the core's `upload_texture_flags`): power-of-two sides at most TEX_MAX_DIM | `image.render` output | the content size travels beside it, since the picture sits in a padded texture |
 | `framework/src/resource-state.ts`, `resource.ts` (`ResourceState`, `ResourceImage`), `resource-cache.ts` (`createResourceScheduler`) | the framework's three states | "unavailable" is `ResourceState`'s `error` with a code; no fourth shape |
 | `contracts/spec/text.ts`, `docs/TEXT-OFFLOAD.md`, `docs/DYNAMIC_TEXT.md` (over `io.offload`) | not in this phase | Q13 |
 | `docs/OFFLOAD.md` `httpResources`, `sqliteQueries` | not reused | a service uses `net` and `store` |

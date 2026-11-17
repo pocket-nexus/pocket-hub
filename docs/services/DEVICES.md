@@ -31,7 +31,7 @@ always written out in full, because they belong to the runtime
 | Runtime | Pocket Shell (PocketJS `products/3ds`) | pocket-m5's firmware (`programs/m5stack-tab5`), with pocket-shell's launcher | omarchy-pocket-host (Rust) and omarchy-pocketd (Bun) |
 | **Where its service host is** | Hub on a paired Mac | Hub on a paired Mac | **on the device** |
 | The link today | Pocket Link 2 over Wi-Fi | **Pocket Link 2 over Wi-Fi** (`components/pocket_system`: `link2*.c`); it lists `apps`, `runtime`, `runtime.remove`, `catalog`, `install`, `net.http`, and **opens no applet channel** | none: same machine |
-| Pairing | Hub writes the pairing over ftpd or on the SD card (link §3.2) | **by a code it shows** (link §3.11; Hub's `pairing.answer`), or Hub writes it onto its card (§3.2) | none |
+| Pairing | Hub writes the pairing over ftpd or on the SD card (link §3.2) | **by the code it shows** (link §3.11; Hub's `pairing.answer`), or by the card (§3.2): Hub writes the pairing onto its microSD card | none |
 | What Hub may ask of it (`Device.supports`, `crates/hub-core/src/family.rs`) | `push`, `screenshot`, `logs`, `program` | **none**: no push, screenshot, log or program install; its software is flashed over USB by its owner | not a Hub device |
 | Channels, under the proposal | the link | **the link, once its firmware lists `channel` and `system`** and binds the channel namespaces (the C client it shares with the 3DS already holds a channel table) | a local connection (below) |
 | The worker's HTTP | `net.http` over the link; Hub performs it and applies `applet.hosts` | **its own HTTP stack** (`pocket_http_esp`) for every URL but `companion.pocket`, which goes to Hub as `net.http`; Hub never sees the rest, so **the firmware must apply `applet.hosts`** (`QUESTIONS.md` Q10) | today an `appNet` line on omarchy-pocketd's bridge socket (`host/src/net.rs`, `daemon/companion.ts`); under the proposal `net.http` on the local connection |
@@ -47,7 +47,7 @@ changes for services.
 
 **The local connection on Omarchy Pocket** (link §7.11 as proposed): a Unix
 domain socket the service host listens on, at
-`$XDG_RUNTIME_DIR/pocket-host/channels.sock`, mode 0600, owned by the Omarchy
+`$XDG_RUNTIME_DIR/pocket-service-host/channels.sock`, mode 0600, owned by the Omarchy
 user. omarchy-pocket-host opens **one connection per applet window** (each
 window is a Runtime of its own, `host/src/children.rs`), sends `local.hello`
 with the package's `app` and `hash`, and then carries that window's applet
@@ -92,33 +92,50 @@ the host; that is why the memory-safe decoders are preferred.
 
 ## 4. Omarchy Pocket's host: one host, factored out of Hub
 
-**Decided on 2026-11-17.** Hub's host parts (the service supervisor, the
-service socket with its three connections, the capability providers, the
-system service, the enclosure launcher, the channel relay, the store client
-for releases, the setup inlet) become a crate, `crates/pocket-host`, that
-`pocket-hubd` embeds on macOS and that Omarchy Pocket runs as a program of its
-own, **`pocket-hostd`**, under the Omarchy user's systemd, built for Linux
-aarch64, with its command line `pocket-host`. Omarchy Pocket's architecture
-rests on it; there is no second implementation.
+**Decided on 2026-11-17.** Omarchy Pocket runs Hub's own service host; there
+is no second implementation. The names below are recommended, not yet
+confirmed (`QUESTIONS.md` Q2): `pocket-host` would collide with PocketJS's
+`pocket.host.json` and with `omarchy-pocket-host`, Omarchy Pocket's runtime.
+
+**The line between crates, by module** (drawn once; every page uses it):
+
+| Crate | Holds | Used by |
+| --- | --- | --- |
+| `hub-core` (exists) | the transports: the link endpoint (`conn.rs`, `endpoint.rs`, carriers), **the local transport's endpoint** (a connection admitted by its socket, link §7.11), **the channel relay** (`relay.rs`, which joins a device's channel to one local connection and reads no content), and the trait a relay hands a channel to (today `ChannelHost` in `api.rs`, renamed `ServiceConnector`, Q2) | `pocket-hubd`, `pocket-service-hostd` |
+| `pocket-service-host` (new, from `hub-daemons` and `hubd/src/{host,sdk}.rs`) | the supervisor and its service socket with the control, channel and host connections; the implementation of `ServiceConnector` (today `hubd`'s `DaemonHost`); the capability providers; the system service; the enclosure launcher; the store client for releases; the setup inlet; **the control API's service methods** (`services.*`, consent) as a library | `pocket-hubd`, `pocket-service-hostd` |
+| `hubd` (exists) | Hub's control API server, devices, setup, Hub's store pages; it mounts `pocket-service-host`'s methods into its server | `pocket-hubd` |
+| `pocket-service-hostd` (new binary) | `hub-core`'s local endpoint, `pocket-service-host`, and a control socket that serves only the service methods | Omarchy Pocket |
+
+**`pocket-service-hostd`'s control path.** It listens on
+`$XDG_RUNTIME_DIR/pocket-service-host/control.sock` (mode 0600, the Omarchy
+user's) with the control API's framing and `protocol`, and serves only:
+`hub.hello`, `hub.shutdown`, `hub.subscribe`, `services.*` (list, install of a
+development release, remove, start, stop, restart, logs, `setupGuide`,
+`setup`, `origins`, `revokeOrigin`), `store.apps` and `store.install` for the
+device itself, `services.consent`, and their events. Its clients are the
+command line `pocket-service-host` (the agent's path) and omarchy-pocket-host.
+**Consent** comes only through omarchy-pocket-host, which sends it only for
+a realm whose plan holds a system capability only the launcher may declare
+(`TRUST.md` §2): the process cannot tell the shell from an applet, since every
+applet's runtime runs inside it (`host/src/children.rs`), but the runtime can.
 
 **What it costs**: a Linux enclosure (§6); the portable capability
-implementations of §3; CI on Linux aarch64; the local transport's endpoint in
-`hub-core` (the relay without admission); Bun for linux-arm64 on the device
+implementations of §3; CI on Linux aarch64; Bun for linux-arm64 on the device
 (omarchy-pocketd already runs on Bun 1.4.2).
 
 **Rejected alternative**: omarchy-pocketd implementing the contract again in
 TypeScript: a second implementation of every rule, kept equal by tests alone,
 and image decoding by spawning ffmpeg as today.
 
-**`pocket-hostd` is a process of its own**, not code linked into
+**`pocket-service-hostd` is a process of its own**, not code linked into
 omarchy-pocket-host: a decoder's failure does not take the display program
 down, and the licences stay apart. This repository is GPL-3.0-or-later
 (`LICENSE`, `Cargo.toml`); omarchy-pocket declares MIT (its `Cargo.toml`
-`license`). A GPL program that Omarchy Pocket ships beside its MIT programs and
-talks to over a socket is an aggregate, which the GPL allows, with the GPL's
-duty to offer `pocket-hostd`'s source, which is public here. **Linking the
-crate into omarchy-pocket-host would make that program GPL**; the separate
-process avoids the question rather than raising it. Not a lawyer's reading.
+`license`). A GPL program that Omarchy Pocket ships beside its MIT programs
+and talks to over a socket is an aggregate, which the GPL allows, with the
+GPL's duty to offer its source, which is public here. **Linking the crate into
+omarchy-pocket-host would make that program GPL**; the separate process
+avoids the question. Not a lawyer's reading.
 
 omarchy-pocketd keeps its system duties (the bridge, terminals, Omarchy's
 command line, notifications, Wi-Fi) and gives up `companion.ts`'s services and
@@ -137,9 +154,13 @@ inside the Linux root under proot, with that root's rights.
 
 ## 6. The enclosure on Linux
 
-A portable service gets the rules of `TRUST.md` §1. Candidate mechanisms:
+A portable service gets the rules of `TRUST.md` §1. **All of this section is
+on paper; nothing on Linux was measured.** Candidate mechanisms:
 **bubblewrap** (user, mount, network and PID namespaces) where unprivileged
-user namespaces are allowed; **Landlock and seccomp** where not. Measuring the
+user namespaces are allowed; **Landlock and seccomp** where not, which leave
+pathname Unix sockets reachable (seccomp cannot filter `connect()` by path;
+Landlock before its socket scoping does not limit them), so they do not meet
+R1 alone. Measuring the
 mechanism on each device, the AYN Thor under proot included, is an
 implementation step, not a question.
 

@@ -57,19 +57,28 @@ D§2 says. Service code calls none of this (`CAPABILITIES.md` §2).
 
 **A portable service gets these three, `TZ`, `LANG` and `LC_*`, and nothing
 else**: no `HOME`, `PATH`, proxy or certificate variable, because it reaches
-no network, file or program of its own (`TRUST.md` §1). Run that way under
-the macOS profile of `TRUST.md` §5, Bun started and served a module
-(measured there). **A native service gets today's list** (D§2: `PATH`
+no network, file or program of its own (`TRUST.md` §1). **Measured on
+2026-11-17** (Bun 1.4.4 and 1.4.2, macOS 27.2): a real SDK service run that
+way under the profile of `TRUST.md` §5 said its hello, took a channel and
+answered requests; its socket path must be the canonical one. **A native service gets today's list** (D§2: `PATH`
 with Bun's folder first, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`, the
 locale, the proxy and certificate variables) beside the three.
 
 ## 3. The control connection
 
-As D§4, with these changes:
+As D§4, with these changes. **The handshake's `protocol` changes at every
+step that breaks it**: 1 is Pocket Hub 0.2.1's; **2 is step 1's** (pull request
+#23: the messages renamed, nothing else); **3 is step 2's** (`service.ready`'s
+members below, the host connection). A process that says another number is
+refused with a sentence naming the SDK the host expects. From step 2 on a
+mismatch cannot happen in practice: the host links its own copy of the SDK into
+every package before each start and a store release cannot carry one
+(`MANIFEST.md` §3). In step 1 it can: a development package that brought its
+own copy keeps it (today's rule), and is refused.
 
 | Message | Change |
 | --- | --- |
-| `service.hello` (was `daemon.hello`) | `{"t":"service.hello","protocol":2,"token":…,"app":…}`. **`protocol` is 2**: a process that says 1 is refused with a sentence naming the SDK the host expects |
+| `service.hello` (was `daemon.hello`) | `{"t":"service.hello","protocol":3,"token":…,"app":…}` |
 | `service.ready` (was `daemon.ready`) | `{"t":"service.ready","app":…,"release":<release>,"host":<ticket>,"files"?:<path>}`. **`data` is gone.** `release` names the release the process runs (§8). `host` is 32 lowercase hex digits, valid for one `host.attach` within 10 s. `files` is present for a native service only (`CAPABILITIES.md` §10) |
 | `service.refused`, `service.stop` (were `daemon.*`) | renamed, unchanged |
 | `channel.offer` | unchanged |
@@ -210,34 +219,41 @@ capability (`not_accepted`). The checks and the codes are `CAPABILITIES.md`'s.
 
 ## 8. Releases and folders
 
-The layout is the host's; a service sees none of it. On each host:
+The layout is the host's; a service sees none of it. **One name per folder**,
+with the step that makes it (`MIGRATION.md` §3):
 
-| What | Hub (`<home>`, `CONTROL-API.md` §1) | Omarchy Pocket's host (proposed) |
-| --- | --- | --- |
-| the service socket, mode 0600 | `<home>/service.sock` (today `daemon.sock`) | `$XDG_RUNTIME_DIR/pocket-host/service.sock` |
-| the local transport's socket (L§7.11) | none | `$XDG_RUNTIME_DIR/pocket-host/channels.sock` |
-| one installed release's package | `<home>/services/<id>/<release>/` | `~/.local/share/omarchy-pocket/host/services/<id>/<release>/` |
-| the installed releases | `<home>/services/<id>/releases.json` | the same, under the host's folder |
-| the pinned publisher key (`TRUST.md` §7) | `<home>/services/<id>/owner.json` | the same |
-| granted origins (`SETUP.md` §3) | `<home>/services/<id>/origins.json` | the same |
-| a release's setup guide, read-only (`SETUP.md` §1) | `<home>/services/<id>/<release>/setup/` | the same |
-| the store, shared by the id's store releases | `<home>/service-store/<id>/` | the same |
-| a development release's own store (`TRUST.md` §8) | `<home>/service-store/<id>@dev/` | the same |
-| a native service's folder | `<home>/service-files/<id>/` | the same |
-| the SDK's copy, written at each start | `<home>/sdk/service/` (today `<home>/sdk/daemon`) | the same |
-| the package index (`QUESTIONS.md` Q11) | `<home>/packages.json` | the same |
+| What | Hub (`<home>`) | Born | Omarchy Pocket's host (proposed) |
+| --- | --- | --- | --- |
+| the service socket, mode 0600 | `<home>/service.sock` | step 1 (was `daemon.sock`) | `$XDG_RUNTIME_DIR/pocket-service-host/service.sock` |
+| the local transport's socket (L§7.11) | none | | `$XDG_RUNTIME_DIR/pocket-service-host/channels.sock` |
+| the control socket | `<home>/hubd.sock` (unchanged) | | `$XDG_RUNTIME_DIR/pocket-service-host/control.sock` (`DEVICES.md` §4) |
+| packages being installed | `<home>/services-staging/` | step 1 | under the host's folder |
+| an installed package | `<home>/services/<id>/<version>/` and `current.json` (step 1); **`<home>/services/<id>/<release>/` and `releases.json`** (step 2) | step 1, then step 2 | `~/.local/share/omarchy-pocket/service-host/services/<id>/<release>/` |
+| the old data folder under its new name | `<home>/service-data/<id>/` | step 1; **no longer given to any process from step 2**, kept until the owner removes the service with `purge` | none |
+| the store (`CAPABILITIES.md` §5) | `<home>/service-store/<id>/`, and `<id>@dev/` for a development release | step 2 | the same, under the host's folder |
+| the pinned key, granted origins | `<home>/services/<id>/owner.json`, `origins.json` | step 2, step 5 | the same |
+| a release's setup guide, read-only | `<home>/services/<id>/<release>/setup/` | step 5 | the same |
+| a native service's folder | `<home>/service-files/<id>/` | step 5 | the same |
+| the SDK's copy, written at each start | `<home>/sdk/service/` | step 1 (was `sdk/daemon`) | the same |
+| the package index (`QUESTIONS.md` Q11) | `<home>/packages.json` | step 4 | the same |
+
+**How step 2 recognises what step 1 left.** One rule, read once per id at the
+host's start: **a folder `services/<id>/` holding `releases.json` is of step 2;
+any other is earlier.** An earlier id is listed as one `Service` in state
+`failed`, reason `earlier` ("installed by an earlier Pocket Hub; install it
+again"); nothing under it is read, run or deleted until the owner removes it.
+No `<version>/` folder or `current.json` is read beside `releases.json`.
 
 `<release>` is **the footer hash of the applet package of that release** (16
 hex, what `channel.open` carries), or `dev` for a development install.
 
 **One process per running release**: a device on version 3 of an applet and
-another on version 4 each get their own release's service at the same time,
-both with the id's one store, whose limit is the newest installed release's
-`store.maxBytes` (`QUESTIONS.md` Q16). The host keeps a release while a
-device it serves runs or holds its hash (`runtime.apps` on the link; the
-installed packages on the device itself) and removes the others.
-`channel.open {app, hash}` starts the release whose folder is `hash`, or the
-`dev` release when one is installed (`TRUST.md` §8).
+another on version 4 each get their own release's service, both with the id's
+one store, whose limit is the newest installed release's `store.maxBytes`
+(`QUESTIONS.md` Q16). The host keeps a release while a device it serves runs
+or holds its hash and removes the others. `channel.open {app, hash}` starts
+the release whose folder is `hash`, or the `dev` release when one is
+installed (`TRUST.md` §8), and none whose consent is missing (`TRUST.md` §4).
 
 ## 9. What goes away, and what stays
 
