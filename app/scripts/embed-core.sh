@@ -10,7 +10,12 @@
 # between Xcode and a terminal. cargo is where rustup puts it.
 #
 # The helpers are signed here with the app's identity: Xcode signs the bundle
-# after this phase but does not sign executables a script copies into it.
+# after this phase but does not sign executables a script copies into it. They
+# are signed as Xcode signs the app: with the hardened runtime when the target
+# has it (ENABLE_HARDENED_RUNTIME, which Xcode turns off for an ad hoc
+# signature: a development build has none), and with a secure timestamp when the
+# identity is a certificate rather than ad hoc ("-"). Notarization accepts an
+# executable only with both (package.sh signs a release with the Developer ID).
 # The target has user script sandboxing off so this can run cargo on the
 # repository.
 set -eu
@@ -50,6 +55,14 @@ mkdir -p "$helpers"
 for tool in pocket-hubd pocket-hub; do
     cp "$repo_root/target/$profile/$tool" "$helpers/$tool"
     if [ "${CODE_SIGNING_ALLOWED:-NO}" = YES ]; then
-        codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$helpers/$tool"
+        runtime=""
+        if [ "${ENABLE_HARDENED_RUNTIME:-NO}" = YES ]; then
+            runtime="--options=runtime"
+        fi
+        timestamp="--timestamp"
+        if [ "$EXPANDED_CODE_SIGN_IDENTITY" = "-" ]; then
+            timestamp="--timestamp=none"
+        fi
+        codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" $runtime "$timestamp" "$helpers/$tool"
     fi
 done

@@ -210,31 +210,70 @@ Changes go through a pull request named with
 
 ## Releasing
 
-A release is a tag on `main` and the app built from it:
+A release is a tag on `main` and the app built from it, signed with the
+Developer ID of TypeSafe Limited and notarized by Apple. Pushing the tag is
+enough: `.github/workflows/release.yml` builds it with `app/scripts/package.sh`
+and attaches the disk image and the zip to a **draft** release of the tag. The
+notes are written on the draft, and publishing it is the release:
 
 ```sh
 git checkout main && git pull
-app/scripts/package.sh                 # app/dist/Pocket-Hub-<version>-arm64.dmg and .zip, and their SHA-256
 git tag -a v<version> -m "Pocket Hub v<version>" && git push origin v<version>
+# the release workflow drafts the release; write its notes, then publish it
+```
+
+The same build runs on a Mac that holds the credentials (below):
+
+```sh
+app/scripts/package.sh                 # app/dist/Pocket-Hub-<version>-arm64.dmg and .zip, and their SHA-256
 gh release create v<version> --verify-tag --title "Pocket Hub v<version>" \
     app/dist/Pocket-Hub-<version>-arm64.dmg app/dist/Pocket-Hub-<version>-arm64.zip
 ```
 
 The version is one number in three places, changed together: `version` of
 `[workspace.package]` in `Cargo.toml`, `version` in `sdk/daemon/package.json`
-and `MARKETING_VERSION` in the Xcode project. `package.sh` refuses a working
-tree with changes, builds the Release configuration from nothing, and checks
-that every executable in the app is arm64 and that the core and the command
-line report the app's version. It packs the app twice: a disk image (the app
-beside a link to Applications, which is what a person downloads) and a zip
-(the same app, for what unpacks it by itself). Finder lays the disk image's
-window out on the picture `app/Artwork/dmg-background.swift` draws
+and `MARKETING_VERSION` in the Xcode project. A tag that is not `v` and that
+version stops the workflow. `package.sh` refuses a working tree with changes,
+builds the Release configuration from nothing, and checks that every
+executable in the app is arm64 and that the core and the command line report
+the app's version. It packs the app twice: a disk image (the app beside a
+link to Applications, which is what a person downloads) and a zip (the same
+app, for what unpacks it by itself). Finder lays the disk image's window out
+on the picture `app/Artwork/dmg-background.swift` draws
 (`app/Artwork/DMGBackground.tiff`): the script runs in a logged-in session,
 macOS asks once whether the terminal may control Finder, and no other volume
 named Pocket Hub may be mounted.
 
-**The app is signed ad hoc**: there is no Developer ID yet, so it is not
-notarized.
+**Signing and notarization.** `package.sh` signs the app and both helpers with
+`Developer ID Application: TypeSafe Limited (9FDAZCRAN3)`, with the hardened
+runtime (on in the project; Xcode leaves it out of an ad hoc signature, so a
+development build runs without it) and a secure timestamp, and
+without the entitlement that lets a debugger attach. It sends the app to
+Apple's notary service, staples the ticket to it, packs it, then signs,
+notarizes and staples the disk image. A rejection stops it with the service's
+log. Builds for development stay signed ad hoc. The script checks two things
+in the keychain before it builds:
+
+- the certificate with its private key. It expires on 1 February 2027, with the
+  authority that issued it; a release after that needs a new one from the
+  team's account (Certificates, Identifiers & Profiles, Developer ID
+  Application). Releases signed before then stay valid.
+- notarytool's profile `pocket-hub-notary`, an App Store Connect API key of
+  the team (Users and Access › Integrations › Team Keys, the Developer role at
+  least):
+
+  ```sh
+  xcrun notarytool store-credentials pocket-hub-notary \
+      --key AuthKey_<key id>.p8 --key-id <key id> --issuer <issuer id>
+  ```
+
+The release workflow gets both from the repository's secrets and puts them in
+a keychain of its own: `DEVELOPER_ID_P12` (the certificate, its key and the
+issuing authority, as a .p12 in base64) and `DEVELOPER_ID_P12_PASSWORD`;
+`NOTARY_API_KEY` (the .p8's contents), `NOTARY_API_KEY_ID` and
+`NOTARY_API_ISSUER`. A pull request that changes `package.sh`, `embed-core.sh`
+or the workflow runs the whole build too, notarization included, and keeps
+the archives as the run's artifact.
 
 Publishing the release deploys [hub.pocket.nexus](https://hub.pocket.nexus)
 again (`.github/workflows/site.yml`): its Download button links the release's

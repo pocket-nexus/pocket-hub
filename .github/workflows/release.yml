@@ -1,0 +1,148 @@
+# The macOS release of Pocket Hub. A tag v<version> pushed to this repository
+# is built by app/scripts/package.sh: the app signed with the Developer ID of
+# TypeSafe Limited, notarized by Apple and stapled, packed as the disk image
+# and the zip. Both go on a draft release of that tag. A person writes the notes
+# on the draft and publishes it, and publishing is what deploys
+# hub.pocket.nexus again (site.yml): GitHub starts no workflow for a release
+# this workflow's own token would publish.
+#
+# A pull request that changes how the app is signed or packed runs the same
+# build, notarization included, and keeps the archives as the run's artifact:
+# it is the only test of this path before a tag. So does a run started by hand.
+#
+# Repository secrets (docs/CONTRIBUTING.md "Releasing" has how each is made):
+#   DEVELOPER_ID_P12            the Developer ID Application certificate, its
+#                               private key and the authority that issued it,
+#                               as a .p12 in base64
+#   DEVELOPER_ID_P12_PASSWORD   the .p12's password
+#   NOTARY_API_KEY              an App Store Connect API key of the team
+#                               (AuthKey_<id>.p8, its contents)
+#   NOTARY_API_KEY_ID           that key's id
+#   NOTARY_API_ISSUER           the team's issuer id for its keys
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - app/scripts/package.sh
+      - app/scripts/embed-core.sh
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    # The secrets are not given to a pull request from a fork: it would only fail.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Xcode 27, which the releases so far were built with; the image is
+    # macOS 26 with Xcode 27.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write # the draft release
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+
+      # embed-core.sh runs cargo where rustup puts it; the image has it there.
+      - name: Toolchains
+        run: |
+          "$HOME/.cargo/bin/cargo" --version
+          xcodebuild -version
+
+      # A keychain of this run alone, holding the Developer ID and notarytool's
+      # profile under the name package.sh asks for. It is made the default
+      # keychain and put in the search list, where codesign and notarytool
+      # look, and codesign is let use the key without a dialog.
+      - name: Signing keychain
+        env:
+          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          NOTARY_API_KEY: ${{ secrets.NOTARY_API_KEY }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER: ${{ secrets.NOTARY_API_ISSUER }}
+        run: |
+          for name in DEVELOPER_ID_P12 DEVELOPER_ID_P12_PASSWORD NOTARY_API_KEY NOTARY_API_KEY_ID NOTARY_API_ISSUER; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "::error::the repository secret $name is not set"
+              exit 1
+            fi
+          done
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -hex 24)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          secrets="$(mktemp -d)"
+          printf '%s' "$DEVELOPER_ID_P12" | base64 --decode > "$secrets/developer-id.p12"
+          security import "$secrets/developer-id.p12" -k "$keychain" -f pkcs12 \
+            -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s "$keychain"
+          printf '%s\n' "$NOTARY_API_KEY" > "$secrets/AuthKey.p8"
+          xcrun notarytool store-credentials pocket-hub-notary --keychain "$keychain" \
+            --key "$secrets/AuthKey.p8" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER"
+          rm -rf "$secrets"
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: Build, sign and notarize
+        run: app/scripts/package.sh
+
+      # A tag names the version it releases: the app built from it must be that one.
+      - name: Archives
+        id: archives
+        run: |
+          set -- app/dist/Pocket-Hub-*-arm64.dmg
+          if [ "$#" != 1 ] || [ ! -f "$1" ]; then
+            echo "::error::package.sh made no disk image, or more than one"
+            exit 1
+          fi
+          version="$(basename "$1" | sed 's/^Pocket-Hub-\(.*\)-arm64\.dmg$/\1/')"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::the tag is $GITHUB_REF_NAME and the app is version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Pocket-Hub-${{ steps.archives.outputs.version }}-arm64
+          path: |
+            app/dist/Pocket-Hub-${{ steps.archives.outputs.version }}-arm64.dmg
+            app/dist/Pocket-Hub-${{ steps.archives.outputs.version }}-arm64.zip
+          if-no-files-found: error
+
+      # A draft, with the build's part of the notes; a version with a
+      # pre-release part (0.3.0-rc.1) is marked a pre-release, which the
+      # download page never offers.
+      - name: Draft release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.archives.outputs.version }}
+        run: |
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          cd app/dist
+          notes="$(printf '## The build\n\nBuilt from %s by [the release workflow](%s), signed with the Developer ID of TypeSafe Limited and notarized by Apple.\n\n```\n%s\n```\n' \
+            "$(git rev-parse --short HEAD)" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            "$(shasum -a 256 "Pocket-Hub-$VERSION-arm64.dmg" "Pocket-Hub-$VERSION-arm64.zip")")"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft $prerelease \
+            --title "Pocket Hub $GITHUB_REF_NAME" --notes "$notes" \
+            "Pocket-Hub-$VERSION-arm64.dmg" "Pocket-Hub-$VERSION-arm64.zip"
+
+      - name: Remove the signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
