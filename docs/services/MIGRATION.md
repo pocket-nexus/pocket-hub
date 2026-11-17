@@ -4,35 +4,37 @@ Proposal (see `README.md`). What changes in `docs/CONTROL-API.md` (§1) and
 `docs/DAEMON-PROTOCOL.md` (§2), read at `1bc2074`, and an order of work (§3)
 that says what each device and **an existing home or a resident core of
 Pocket Hub 0.2.1** meet at each step. Step 1 is pull request #23
-(`refactor/services-rename`, open); a stacked pull request
-(`fix/app-replaces-older-core`) proposes how an app meets an older core.
+(`refactor/services-rename`, open); pull request #24
+(`fix/app-replaces-older-core`, on #23) proposes how an app meets a core of
+another version. Pull request #22 (merged; Pocket Hub 0.2.2) signs releases
+with a Developer ID and notarizes them, which `TRUST.md` §2 relies on.
 
 ## 1. `docs/CONTROL-API.md`
 
-**Versions** (step 1 makes the control API's `protocol` 2, #23). Proposed by
-the stacked pull request and **not yet ruled on by the owner**:
+**Versions** (step 1 makes the control API's `protocol` 2, #23). **Pull
+request #24**, built and measured against the real 0.2.0 and 0.2.1 cores, and
+**still the owner's to confirm, so proposed here**:
 
-- `hub.hello` and `hub.shutdown` keep their shape in every protocol version,
-  so any client can always say hello and ask a core to quit;
-- a core that refuses a hello says its own `protocol` in the error's `data`,
-  from protocol 2 on (0.2.1 sends none);
-- **the app replaces an older core** (a lower protocol, or the same protocol
-  and a lower `hub.version`): it asks it to shut down and starts its own; it
-  **never replaces a newer one**, and tells the owner a newer Pocket Hub is
-  running; **the command line never replaces a core**.
+- `hub.hello` and `hub.shutdown` keep their shape in every protocol version;
+- a refused hello carries `data: {protocol}` from protocol 2 on;
+- **the app takes over only from an older core** (a lower protocol, or the
+  same protocol and a lower `hub.version`): it asks it to shut down, waits up
+  to 20 s, and says so once if the core is not gone;
+- **a newer core of the same protocol is used as it is**; one of a higher
+  protocol is left alone, and the owner is told a newer Pocket Hub is running;
+- Quit, Stop and `pocket-hub shutdown` stop a core of any version; **the
+  command line never replaces a core**.
 
-What that leaves open: a refusal without `protocol` in `data` is read as
-"older than 2", which holds only because 0.2.1 is the one release before it;
-two apps of different versions on one Mac replace each other's core in turn
-until the older is quit; a `remote` client's versioning is not defined. **This
-proposal adopts the rule for every later breaking change** (step 2's
-`Service`, step 5's methods): each bumps `protocol`.
+What it leaves open: a `remote` client's versioning. **This proposal applies
+the same rule to every later breaking change** (step 2's `Service`, step 5's
+methods): each bumps `protocol`.
 
 **§1 Who may call what** (`TRUST.md` §2): **consent-class methods**
 (`services.consent`, and `consent` on an install) are taken only from the
-app whose executable's code-directory hash the core pinned from its own
-bundle, checked by audit token (`LOCAL_PEERTOKEN`); another client gets the
-error kind `denied`; a core outside a bundle answers `denied` to every
+app, checked by audit token (`LOCAL_PEERTOKEN`) against a designated
+requirement when the core has a Developer ID, or against the pinned
+code-directory hash of the app in its own bundle when the core is ad hoc
+(`TRUST.md` §2); another client gets the error kind `denied`; a core outside a bundle answers `denied` to every
 client; a `remote` client and a `pocket-hub:` link never reach them. Every
 other method stays open to every local client, as today.
 
@@ -40,10 +42,10 @@ other method stays open to every local client, as today.
 
 | Row | Change |
 | --- | --- |
-| `daemon` | renamed `service` in step 1 (#23). From step 2 `data` gains `reason?`: `manifest`, `check`, `runtime`, `enclosure` (it could not be set up; nothing runs unenclosed), `earlier` (a package of step 1's layout, kept and not run), and the service's own `unknown_setup` or `invalid_setup` |
+| `daemon` | renamed `service` in step 1 (#23). From step 2 `data` gains `reason?`: `manifest`, `check`, `runtime`, `enclosure` (it could not be set up; nothing runs unenclosed), `earlier` (a package of step 1's layout, kept and not run), `store_format` (a store of a newer format, untouched), and the service's own `unknown_setup` or `invalid_setup` |
 | `store` | `reason` gains `key` |
 | new: **`consent`** | the release runs its own programs and the owner has not allowed it; `data`: `{id, release}` |
-| new: **`denied`** | a consent-class method from a client that is not the pinned app |
+| new: **`denied`** | a consent-class method from a client that is not the app |
 
 **§2 Objects** (from step 2): **`Service`** gains `release`, `signed`,
 `requires`, `hosts`, `unrestricted`, `consented`, `setup`, `origins`, `store:
@@ -61,16 +63,21 @@ unchanged: channels are opened by the device and need no entry.
 | `services.list`, `services.install {path}`, `services.remove {id, purge?}`, `services.start`, `.stop`, `.restart {id}`, `services.logs`, `services.runtime`; command line `pocket-hub services`, `pocket-hub service <install\|start\|stop\|restart\|logs\|remove>`, flag `--service-idle-seconds` | step 2: `release?` on start, stop, restart, remove; `purge` also deletes `service-data/<id>/`, the stores, the pin and the origins |
 | `store.install {device, app}` (installs the applet only; it never installs a service, #23) | step 9: the release's service first; `consent: "unrestricted"` (consent-class); without it an unrestricted service is **installed and held** |
 | | step 5: **`services.consent {id, release}`** (consent-class) |
-| | step 5: **`services.setupGuide {id, release?}`** → `{path, release, signed, publisher}`; **`services.setup {id, message, origins?, release?}`** → `{reply, origins: [{origin, addresses}]}`; **`services.origins {id}`**, **`services.revokeOrigin {id, origin}`**; command line `pocket-hub service guide <id>`, `pocket-hub service setup <id> <file\|-> [--origin <url>…]` (`SETUP.md`) |
+| | step 5: **`services.setupGuide {id, release?}`** → `{path, release, signed, publisher}`; **`services.resolveOrigin {origin}`** → `{addresses, kind}` (changes nothing); **`services.setup {id, message, origins?, release?}`** → `{reply, origins: [{origin, kind, addresses}]}`; **`services.origins {id}`**, **`services.revokeOrigin {id, origin}`**; command line `pocket-hub service guide <id>`, `pocket-hub service resolve <url>`, `pocket-hub service setup <id> <file\|-> [--origin <url>…]` (`SETUP.md`) |
 | `pairing.list`, `.answer`, `.decline` | unchanged |
 
 **What a device is offered** (finding of the review: step 9 assumed a
 mechanism): `store.apps {device}` and the link's catalog (§6.4) offer a
-release to a device only when the device's target has a variant, its service
-host provides every capability the release requires, and, where that host
-has no measured enclosure, the release is the official key's. **A release
+release to a device only when the device's target has a variant, **the
+device's runtime offers what the applet's plan requires** (the groups its
+`features` list, `channel` and `system` among them, and the capabilities of
+its host contract, so a Tab5 never flashed, a 3DS program without the system
+channel or an Omarchy Pocket still on its own store client is not offered the
+rewritten applets), its service host provides every capability the release
+requires, and, where that host has no measured enclosure, the release is the
+official key's. **A release
 that fails is listed with `runsOn: [{device, reason}]`** (reasons
-`capability`, `enclosure`) on the computer, and **marked in the link's
+`runtime`, `capability`, `enclosure`) on the computer, and **marked in the link's
 catalog row** on the console (a field the row would gain, `QUESTIONS.md` Q4),
 never installed. A release waiting for consent is offered and held.
 
@@ -98,12 +105,12 @@ in the index, a sentence saying to install the applet from this Mac.
 | Step | Repository | Change | Existing home, older core | 3DS | Tab5 | Omarchy Pocket |
 | --- | --- | --- | --- | --- | --- | --- |
 | 0 | here, PocketJS | these documents | | as today | links over Pocket Link 2; its applets' `companion.pocket` requests reach Hub as `net.http` and are answered `unavailable` | omarchy-pocketd answers `companion.pocket` |
-| 1 | here | **#23: names only.** `pocket.service.json`, `@pocketjs/service`, `POCKET_SERVICE_*`, the handshake at `protocol` 2, the control API at `protocol` 2, the command line and flag of §1. New folders `services/`, `service-data/`, `services-staging/`, `service.sock`, `<home>/sdk/service`. **Nothing under the old names is read, moved or deleted.** Only Advanced › Services › Install and `pocket-hub service install` install a service; the store's install, deep links and setup never do | **an owner of 0.2.1 who never opened Advanced has nothing under the old names**; one who installed a daemon finds `daemons/` and `daemon-data/` left where they were, unread, and installs the service again. An app of this step meeting a 0.2.1 core replaces it (the stacked pull request) | as before | as before | as before |
+| 1 | here | **#23: names only.** `pocket.service.json`, `@pocketjs/service`, `POCKET_SERVICE_*`, the handshake at `protocol` 2, the control API at `protocol` 2, the command line and flag of §1. New folders `services/`, `service-data/`, `services-staging/`, `service.sock`, `<home>/sdk/service`. **Nothing under the old names is read, moved or deleted.** Only Advanced › Services › Install and `pocket-hub service install` install a service; the store's install, deep links and setup never do | **an owner of 0.2.1 who never opened Advanced has nothing under the old names**; one who installed a daemon finds `daemons/` and `daemon-data/` left where they were, unread, and installs the service again. An app of this step meeting a 0.2.1 core takes over from it (#24) | as before | as before | as before |
 | 2 | here | **the host parts into `crates/pocket-service-host`** (`DEVICES.md` §4); the manifest's new fields, releases, the bootstrap; **the host connection with `store`** (`CAPABILITIES.md` §5, its format); **the macOS enclosure, measured with the shipped Bun** (`TRUST.md` §5); the handshake at `protocol` 3; `service-data/` no longer given to any process; the control API's next `protocol` | a `services/<id>/` without `releases.json` is listed `failed`, reason `earlier`, and kept (`HOST-PROTOCOL.md` §8); `service-data/<id>/` stays until `purge` | services without capabilities behave as today | as before | as before |
 | 3 | here | **`net` for services** | | as before | as before | as before |
 | — | PocketJS | the specification's implementation and **a 3DS program release** | | | | |
 | 4 | here | **pin moved** with that release; the wire renames; the system service; **`image`, `text`, `media`** with the host-wide bounds; the media listener; **the package index** (`<home>/packages.json`, so the system channel checks the applet's hosts; today Hub allows every public destination, `PublicDestinations` in `crates/hub-net/src/lib.rs`) | the index is built from the store cache and from later pushes | **an older program strands**: one channel, no system service; Pocket Hub offers the update | as before | as before |
-| 5 | here | **the hardened runtime for the app**, **consent from the pinned app**, the setup guide and inlet, origins, **`native` for development installs** | | can be set up | as before | as before |
+| 5 | here | **consent from the app** (designated requirement for a Developer ID core, the hardened runtime already on since #22; pinned hash for an ad hoc one), the setup guide and inlet, origins, **`native` for development installs** | | can be set up | as before | as before |
 | — | pocket-m5 | the channel groups, namespaces, `device.accepts`, `applet.hosts` in its HTTP node; **a firmware release, flashed over USB by its owner** | | | **runs channels once flashed** | |
 | 6 | applets | **the pilots**, as development releases; not published | | runs them | runs them once flashed | would strand if published |
 | 7 | here | **`applet.hosts` enforced for every `net.http`** (the index exists since step 4); `hash` required | | a program without `hash` in `net.http` is told to update the 3DS's software | its own HTTP (Q10) | |

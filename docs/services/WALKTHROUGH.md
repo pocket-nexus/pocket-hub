@@ -198,13 +198,14 @@ and deliver both in one call:
 
 | Step | Agent | Service | Host |
 | --- | --- | --- | --- |
-| deliver | `pocket-hub service setup dev.pocket-nexus.homeassistant - --origin http://192.168.1.20:8123` with `{"url":"http://192.168.1.20:8123","token":"…"}` | `setup`: calls `/api/` on the origin with the token through `host.net.fetch`, stores both | resolves and pins the origin (an address literal: itself), refuses loopback, link-local and this computer's own addresses, stores it, delivers the message, and returns `origins: [{origin, addresses: ["192.168.1.20"]}]` |
-| confirm | shows the owner "Home Assistant will reach 192.168.1.20 port 8123" before the call, as the guide says, and the pinned addresses after it | | no dialog: the confirmation is the agent's (`SETUP.md` §2) |
-| use | | `host.net.fetch` and `host.net.websocket` to the origin | connects only to the pinned addresses, directly, never through a proxy |
+| preview | `pocket-hub service resolve http://192.168.1.20:8123` → `{addresses: ["192.168.1.20"], kind: "private"}`; shows the owner "Home Assistant will reach 192.168.1.20 port 8123 on your network" and asks | | nothing is granted |
+| deliver | `pocket-hub service setup dev.pocket-nexus.homeassistant - --origin http://192.168.1.20:8123` with `{"url":"http://192.168.1.20:8123","token":"…"}` | `setup`: calls `/api/` on the origin with the token through `host.net.fetch`, stores both | pins the private origin to its address, refuses loopback, link-local and this computer's own addresses, stores it, delivers the message, and returns `origins: [{origin, kind: "private", addresses: ["192.168.1.20"]}]` |
+| use | | `host.net.fetch` and `host.net.websocket` to the origin | connects only to the pinned address, directly, never through a proxy, checking at each connect that it is not one of this computer's own |
 
 A Home Assistant Cloud address (`https://<id>.ui.nabu.casa`) is passed the
-same way; it is a public name, so the agent shows the addresses it resolved
-to and does not call it the owner's network.
+same way; the preview says it is public, so the agent does not call it the
+owner's network, and the host resolves it at each connect rather than pinning
+addresses a CDN may rotate.
 
 Today the applet sends the address and token from the console's keyboard
 (`homeassistant/api.ts` `/setup`); under this flow nothing is typed on the

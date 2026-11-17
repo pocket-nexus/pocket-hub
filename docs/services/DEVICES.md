@@ -114,10 +114,14 @@ development release, remove, start, stop, restart, logs, `setupGuide`,
 `setup`, `origins`, `revokeOrigin`), `store.apps` and `store.install` for the
 device itself, `services.consent`, and their events. Its clients are the
 command line `pocket-service-host` (the agent's path) and omarchy-pocket-host.
-**Consent** comes only through omarchy-pocket-host, which sends it only for
-a realm whose plan holds a system capability only the launcher may declare
-(`TRUST.md` §2): the process cannot tell the shell from an applet, since every
-applet's runtime runs inside it (`host/src/children.rs`), but the runtime can.
+**Consent**, on paper: the server takes `services.consent` only from a peer
+whose executable, found from `SO_PEERCRED` (by process descriptor where the
+kernel has `SO_PEERPIDFD`) and `/proc/<pid>/exe`, is the installed,
+root-owned omarchy-pocket-host; that program sends it only for a realm holding
+`system.services`, which the runtime grants by the launcher's identity, since
+every applet's runtime runs inside its process (`host/src/children.rs`).
+Same limit as on macOS: it stops a helper acting for the owner, not a hostile
+program running as the owner (`TRUST.md` §2).
 
 **What it costs**: a Linux enclosure (§6); the portable capability
 implementations of §3; CI on Linux aarch64; Bun for linux-arm64 on the device

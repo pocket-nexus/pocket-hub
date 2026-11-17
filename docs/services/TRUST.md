@@ -44,33 +44,46 @@ nothing.
 app) is the one consent-class method family: `services.consent`, and
 `consent` on an install. How the core knows the caller is the app:
 
-- **The core pins the code-directory hash of the app's executable in its own
-  bundle** (`pocket-hubd` runs from `Contents/Helpers`; the app's executable
-  is `Contents/MacOS/Pocket Hub`), computed when the core starts, and **checks
-  the caller by its audit token** (`LOCAL_PEERTOKEN` on the accepted socket,
-  then the code-signing API on that token), never by a process id, which a
-  caller can race. A team or signing identifier would prove nothing: the app
-  is signed ad hoc today (`CODE_SIGN_IDENTITY = "-"` in
-  `app/PocketHub.xcodeproj`, `app/scripts/package.sh`).
-- **The hardened runtime is required from the step that brings consent**
-  (`MIGRATION.md` step 5), so a debugger or an injected library cannot drive
-  the app's process without the owner's own system prompt.
+- **The caller is checked by its audit token** (`LOCAL_PEERTOKEN` on the
+  accepted socket, then the code-signing API on that token), never by a
+  process id, which a caller can race. Against what depends on how the core
+  itself is signed:
+  - **A core signed with a Developer ID** (releases since pull request #22,
+    Pocket Hub 0.2.2): the caller must satisfy a **designated requirement**
+    built from the core's own signature: Apple's anchor for a Developer ID,
+    the core's team, and **the app's identifier** (`nexus.pocket.hub`). The
+    helpers in `Contents/Helpers` carry their own identifiers, so the command
+    line does not satisfy it. A reinstall of the app, of any version, still
+    satisfies it, so nothing goes stale while a core is resident.
+  - **A core signed ad hoc** (a development build, `CODE_SIGN_IDENTITY = "-"`):
+    a team or signing identifier proves nothing, so the core **pins the
+    code-directory hash of the app's executable in its own bundle**, read when
+    the core starts. A reinstall while that core is resident leaves the pin
+    stale: consent answers `denied` with a sentence to quit and reopen Pocket
+    Hub. In such a build the click is still the app's, but **neither
+    injection nor a debugger is prevented**: the hardened runtime cannot hold
+    for an ad hoc signature.
+- **The hardened runtime** is on for every signed release since #22; consent
+  relies on it there.
 - **The app's debug command pipe never reaches a consent dialog's answer**;
   only a click in the dialog sends `consent`.
-- **A core that is not in a bundle** (run from a build folder, or by the
-  command line alone) has no app to pin: **no client can consent**, and the
-  call answers `denied`. Tests reach the path through a constructor of the
-  core's library that takes the expected hash, which `pocket-hubd`'s
-  `main` never calls; no flag, variable or file of the shipped binary sets
-  it.
-- **On Omarchy Pocket** every applet's runtime runs inside the shell's own
-  process (`host/src/children.rs` in omarchy-pocket), so the process cannot
-  tell the launcher from an applet. The runtime tells them apart: the
-  consenting call is accepted by omarchy-pocket-host only from a realm whose
-  plan holds a system capability only the launcher may declare
-  (`system.services`, as `system.apps` would be, `QUESTIONS.md` Q1), and
-  omarchy-pocket-host is the only client of `pocket-service-hostd`'s control
-  socket that sends it (`DEVICES.md` §4).
+- **A core that is not in a bundle** has no app to check: **no client can
+  consent** (`denied`). Tests reach the path through a constructor of the
+  core's library that takes the expected requirement or hash, which
+  `pocket-hubd`'s `main` never calls; no flag, variable or file of the shipped
+  binary sets it.
+- **On Omarchy Pocket, on paper**: `pocket-service-hostd` takes
+  `services.consent` only from a peer whose executable is the installed
+  omarchy-pocket-host: the peer's process from `SO_PEERCRED` (through a
+  process descriptor, `SO_PEERPIDFD`, where the kernel has it, so the process
+  cannot be swapped under the check), its `/proc/<pid>/exe` resolved to the
+  installed path, a file owned by root that the Omarchy user cannot write.
+  That program runs every applet's runtime in its own process
+  (`host/src/children.rs`), so it sends consent only for a realm that holds
+  **`system.services`**, a system capability **the runtime grants by the
+  launcher's identity** (the shell's own package, which the runtime loads
+  itself), never because a plan declares it (link §7.11 as proposed). The
+  stated limit is the same as on macOS.
 
 **What this protects, said honestly**: it keeps consent with the owner's own
 click as against a helper acting for the owner: a coding agent, the command
@@ -119,12 +132,16 @@ Omarchy Pocket).
 | `store.install` and `services.install` without `consent` (the command line, a remote client, a console's own store page) | **installed and held**: the files are in place and the release waits; nothing runs until the owner allows it in the app, which then shows it as waiting |
 | any install with `consent: "unrestricted"` | taken from the app alone (§2) |
 
-**What consent binds** is the owner's to decide (`QUESTIONS.md` Q3): (a)
+**What consent binds, for a signed release**, is the owner's to decide
+(`QUESTIONS.md` Q3): (a)
 **one release**, so every update asks again; (b) **the applet's id and its
 publisher's key**, asked again when the key changes or when an update newly
 requires `native`. *Recommendation*: (b). The dialog asks the owner to trust
 a publisher, and a click on every release tells the owner nothing they can
-judge.
+judge. **For a development release**, which is unsigned and has no key,
+consent binds **its content hash**: installing a different package under the
+same id asks again, so a local program cannot slip native code in after one
+click.
 
 **The dialog.** Title "**YouTube runs its own programs on this Mac**" ("on
 this device" on Omarchy Pocket), text "Other applets can do only what Pocket
@@ -165,8 +182,8 @@ environment is the canonical one.
 | read `~/.zshrc`, list the home folder | denied | denied |
 | load `libSystem` through `bun:ffi` and call it | **allowed** | **allowed** (accepted: every system call it makes still meets the profile) |
 | `sysctl` `KERN_PROC_ALL` (every process on the machine) | **allowed** (650 KB) | denied |
-| `sysctl` `KERN_PROCARGS2` of the parent process | **allowed**: its command line, no environment | **allowed**: the parent is the host, whose command line holds no secret; denied for pid 1 and for another of the owner's processes |
-| `KERN_PROCARGS2` of another process | not tried | denied |
+| `sysctl` `KERN_PROCARGS2` of an ancestor (the parent; the reviewer's run also read the grandparent shell's) | **allowed**: its command line, no environment | **allowed** for every ancestor that runs as the owner; denied for pid 1 (launchd, root) and for Finder, the owner's but not an ancestor |
+| `KERN_PROCARGS2` of a process that is not an ancestor | not tried | denied |
 | TCP, start a program | denied | denied |
 | `Intl` with a time zone, `crypto.subtle` | worked | worked |
 | the working directory reached through a symbolic link (`/tmp/…`), with the profile's paths canonical | worked | worked |
@@ -193,7 +210,12 @@ environment is the canonical one.
 ```
 
 **Accepted leaks, with what they expose**: `bun:ffi` and native calls inside
-the profile (nothing the profile denies); the parent's command line; the
+the profile (nothing the profile denies); **the command lines of the host and
+its ancestors**, without their environments: a core started by the app has the
+app above it (its path); a core started by `pocket-hub` keeps that command and
+the shell and terminal above it while they live (a core whose starter exited
+is the child of launchd, pid 1, whose arguments were refused); so a secret
+passed as an argument to anything in that chain can be read; the
 machine's name and its hardware and OS version (`hw.*`, `kern.os*`,
 `kern.hostname`); the metadata of the listed ancestors (that the folders
 exist). **Measured as failing**: `(deny process-info*)` without a target
@@ -311,7 +333,7 @@ and held until the owner's click (§4).
 | A development install under another applet's id reading its session | its own store (§8) |
 | The store changing an applet's code, hosts or capabilities | the publisher's signature (§6) |
 | The store handing an id to another key | the pin (§7) |
-| A setup guide from an untrusted publisher | it runs only when the owner starts an agent on it; the store's editor reads it; the store page and install sheet say it is there and whose. An agent that follows it acts with the owner's rights (`SETUP.md` §4) |
+| A setup guide from an untrusted publisher | it runs only when the owner starts an agent on it; the store's editor reads it; the store page and install sheet say it is there and whose. An agent that follows it acts with the owner's rights (`SETUP.md` §3) |
 | **A hostile program running as the owner** | **not covered**: it needs no Hub to run code; it can read the stores, hand a service a setup message, and call every control method but consent |
 | **An active attacker on the LAN without the key** | **not covered in phase one, by decision.** It can open channels asserting any applet id (link §3.9) and drive X's, Discord's or Home Assistant's service with the owner's stored session; link encryption (§3.10) is the remedy, later. Omarchy Pocket's local connection does not cross the LAN |
 | A device that holds the link key and lies about `app` or `hash` | not covered: it holds the pairing |

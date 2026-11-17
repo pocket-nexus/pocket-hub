@@ -99,11 +99,13 @@ the device's program. **The crate and program names collide too**:
 `DaemonHost` in `crates/hubd/src/host.rs`) renamed **`ServiceConnector`** when
 the code moves (`DEVICES.md` §4). The owner confirms.
 
-**Q3. What consent binds.** (a) one release: every update asks again; (b) the
-applet's id and its publisher's key: asked again when the key changes or when
-an update newly requires `native`. *Recommendation*: **(b)**: the dialog asks
-the owner to trust a publisher, and a click on every release tells the owner
-nothing they can judge (`TRUST.md` §4).
+**Q3. What consent binds, for a signed release.** (a) one release: every
+update asks again; (b) the applet's id and its publisher's key: asked again
+when the key changes or when an update newly requires `native`.
+*Recommendation*: **(b)**: the dialog asks the owner to trust a publisher, and
+a click on every release tells the owner nothing they can judge. **A
+development release has no key, so its consent binds its content hash** in
+either case (`TRUST.md` §4).
 
 **Q4. The console's catalog row.** A console's own store page shows what the
 computer's store page shows only if the link's catalog row (link §6.4) carries
@@ -122,14 +124,14 @@ until consent, and a code typed in Pocket Hub is the owner's act already.
 **Q6. Where the device states what it takes**: `EVENT device.accepts` per
 connection (link §7.9). *Recommendation*: as proposed.
 
-**Q7. Versions.** The stacked pull request's rule (`MIGRATION.md` §1), and
+**Q7. Versions.** Pull request #24's rule (`MIGRATION.md` §1), and
 a `protocol` bump at every breaking step of the control API and of the
 service handshake (2 at step 1, 3 at step 2). *Recommendation*: adopt it.
 
 **Q8. `data.fs` on Omarchy Pocket** (`DEVICES.md` §7). *Recommendation*: yes.
 
 **Q9. The setup inlet is open to any local program** (`SETUP.md` §2), origins
-included, so a program of the owner's user can hand a service a session or an
+included (each previewed with `services.resolveOrigin` first), so a program of the owner's user can hand a service a session or an
 address of its choosing. *Recommendation*: as proposed; such a program needs
 no Hub to act as the owner (`TRUST.md` §2).
 

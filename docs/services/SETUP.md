@@ -46,18 +46,28 @@ host enforces what is the host's:
   service's store; `services.origins {id}` lists them and
   `services.revokeOrigin {id, origin}` removes one; removing the service with
   its data removes them;
-- **never loopback, link-local (169.254.0.0/16, fe80::/10), unspecified,
-  multicast, or one of this computer's own addresses**; a private address is
-  allowed for that origin;
-- **the pin is the addresses the name resolved to at that moment**; later
-  connections go only to those addresses; **the call returns them**
-  (`origins: [{origin, addresses}]`), so the agent shows the owner what they
-  agree to: the addresses, not the name. A public name gets no wording of "on
-  your network"; it is shown as what it resolved to;
-- **behind a proxy the pin cannot be enforced** (the proxy resolves the name
-  again, `crates/hub-net/src/proxy.rs`), so **a granted origin is always
-  reached directly**, never through the system's proxy; where only the proxy
-  can reach it, the request fails `connect`.
+- **before anything is granted**, the agent calls
+  **`services.resolveOrigin {origin}`** (`pocket-hub service resolve <url>`),
+  which changes nothing and returns `{addresses, kind: "private" | "public"}`,
+  so the owner agrees to addresses, not to a name;
+- **a private origin** (every address it resolves to is private) **is pinned
+  to those addresses**: later connections go only to them;
+- **a public origin is not pinned**: it is resolved at each connect and every
+  address must be public, as for a manifest's host, so a CDN that rotates its
+  addresses keeps working; a name whose answers mix public and private
+  addresses is refused at the grant;
+- **at every connect**, the address is checked again against loopback,
+  link-local (169.254.0.0/16, fe80::/10), unspecified, multicast **and this
+  computer's own addresses as they are at that moment** (DHCP or a VPN can
+  make an address the computer's own later);
+- **a granted origin is always reached directly**, never through the system's
+  proxy, since a proxy resolves the name again (`crates/hub-net/src/proxy.rs`);
+  where only the proxy can reach it, the request fails `connect`;
+- **a redirect from a granted origin** is followed only to another granted
+  origin or a host the manifest names, each hop checked again
+  (`CAPABILITIES.md` §4);
+- `services.setup` returns what it stored (`origins: [{origin, kind,
+  addresses}]`), the same as the preview.
 
 **Rejected, by the owner's rule** ("the setup happens outside the host; the
 agent asks for the important confirmations"): a click in Pocket Hub's app to

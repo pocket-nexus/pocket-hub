@@ -46,9 +46,9 @@ link. So the host enforces:
 
 | Bound | Value | Answer past it |
 | --- | --- | --- |
-| decoded pixels in flight, host-wide | **64 megapixels** (256 MiB as RGBA), a semaphore every `image.render` and every media decoder's frame buffers take before decoding | the request waits its turn; one that has waited 10 s is answered `busy` |
-| one picture | **50 megapixels**, refused before decoding | `too_large` |
-| media transcodes, host-wide | **2** on a Mac, **1** on a device that hosts itself | `busy` |
+| pictures decoded at once, host-wide | **64 megapixels** (256 MiB as RGBA). A render takes **its own pixel count once the image's header is read** (the larger of the source's and the output's), not the worst case, and gives it back when the entry is encoded | the request waits its turn; one that has waited 10 s is answered `busy` |
+| one picture | **50 megapixels**, refused when the header is read, before decoding | `too_large` |
+| media, host-wide, **a budget of its own** | **2** transcodes on a Mac, **1** on a device that hosts itself, each holding its frame buffers for the whole session; pictures never wait for media | a further `media.open` is `busy` |
 | system channels per device connection | **1** | a second `channel.open` with `service: "system"` is refused `rejected` (link §7.9) |
 
 None of these was measured; they are the order of what a Mac and an RG DS
@@ -102,7 +102,6 @@ export interface Host {
   log(line: string): void;
   readonly net: Net;
   readonly store: Store;
-  /** null unless the manifest requires "native". */
   /** Present on every host; its members fail with not_required unless the manifest requires "native". */
   readonly native: Native;
 }
@@ -232,8 +231,12 @@ export interface NetSocket {
 does `net.http` for a device (link specification §6.5), under **one
 destination policy shared with the applet's `net.http`**: every hop resolved
 and its address checked (no loopback, private, link-local, CGNAT, multicast,
-unique-local or reserved address, except a granted origin's private
-address, `SETUP.md` §2), redirects followed by the host, the system's proxy settings. The
+unique-local or reserved address, except a granted private origin's
+address, `SETUP.md` §2), redirects followed by the host, and **a redirect
+followed only to a host the manifest names or an origin granted to this
+service**, each hop checked again; the system's proxy settings, **except for a
+granted origin, which is always reached directly** so its addresses are the
+ones checked. The
 difference between the two surfaces is whose host list applies: the
 service's manifest `hosts` here, the applet's `applet.hosts` for `net.http`.
 The host keeps no cookie jar: a service that holds a session sends its `cookie`
@@ -303,7 +306,7 @@ and `ct0`, Discord's bot token, Home Assistant's token (its address is a granted
 
 | Limit | Value |
 | --- | --- |
-| Key | 1 to **256** bytes of UTF-8, no control character |
+| Key | 1 to **256** bytes of UTF-8, no control character. **A string with a lone surrogate is refused by the SDK** (`ServiceError("invalid")`) before it is encoded, since it would encode to the same bytes as another key; the host refuses bytes that are not valid UTF-8 (`invalid`) |
 | Value | at most **4 MiB** |
 | Whole store | the `store.maxBytes` of **the newest release installed**, which every running release of the id writes under: default **16 MiB**, at most **256 MiB** (`QUESTIONS.md` Q16) |
 | `list` page | at most **1,000** keys, in byte order of the key |
@@ -324,13 +327,36 @@ file mode (`QUESTIONS.md` Q26).
 
 | Point | Rule | Why |
 | --- | --- | --- |
-| The file | one SQLite database per store, `store.sqlite` in the store's folder, `journal_mode=WAL`, `synchronous=FULL`, `PRAGMA user_version = 1`; one table `entries(key BLOB PRIMARY KEY, value BLOB NOT NULL)` and one row of `meta(bytes, keys)` | a key is bytes (up to 256, `/` included), so no key is mapped to a file name; atomicity, durability and the count come from one engine on macOS and Linux |
+| The file | one SQLite database per store, `store.sqlite` in the store's folder, created by exactly the statements below, in this order, in one transaction after the first two | a key is bytes (up to 256, `/` included), so no key is mapped to a file name; atomicity, durability and the count come from one engine on macOS and Linux |
 | Who writes | **only the host's process**, through one connection per store guarded by one lock; services never open the file (they cannot, `TRUST.md` §5), so two releases' processes writing at once are two requests the host serializes | one writer makes the quota exact |
 | A `set` | the value's whole body is received first; then one transaction replaces the row and updates `meta` (the key's and value's bytes are what `usage` counts); the quota is checked inside that transaction against `meta.bytes`; the commit is the reply's precondition | "atomic and durable": the old value or the new one, and a reply only after `synchronous=FULL` has synced the write-ahead log |
 | The folder | created with mode 0700 and synced (`fsync` of the folder) after the database and its `-wal` file are created | a crash right after creation keeps the files |
 | `list` | `after` is the last key returned (exclusive), keys in byte order; `more` says whether a later key exists at that moment; keys added or removed between pages show or not by their order | a cursor that is a key needs no server state |
 | `CANCEL` | **before the body's last byte**: nothing is written and the reply is `cancelled`; **after it**: the transaction completes and the `set`'s own reply is sent | a write either happened whole or did not, and the service is told which |
-| A newer format | a host that finds a `user_version` above its own refuses that store (`service` error, reason `store_format`) and does not touch it | no reading of a format it does not know |
+| Disk use | `maxBytes` bounds **`meta.bytes`**: the sum of every key's and value's length. It does not bound the file: SQLite's pages and the write-ahead log add to it. The host keeps both small: `auto_vacuum = INCREMENTAL` with `PRAGMA incremental_vacuum` after a commit that leaves more than a quarter of the pages free, and `PRAGMA wal_checkpoint(TRUNCATE)` after a commit that leaves the log over 4 MiB. `Service.store` reports the file's size beside `bytes` | the quota is the service's data, which it controls; the overhead is the host's |
+| A limit below the usage | when a newer release's `maxBytes` is below `meta.bytes`, nothing is deleted: a `set` that would raise `meta.bytes` fails `quota`, and a `set` that lowers it or a `delete` succeeds | the service shrinks its own data |
+| A newer format | a host that finds a `user_version` above its own refuses that store: a capability call gets `REPLY ERROR` `store_format` on the host connection, and a control call the error `service` with reason `store_format`; the file is not touched | no reading of a format it does not know |
+
+```sql
+PRAGMA auto_vacuum = INCREMENTAL;        -- before any table exists
+PRAGMA journal_mode = WAL;
+BEGIN;
+CREATE TABLE entries (
+  key   BLOB PRIMARY KEY NOT NULL,       -- the key's UTF-8 bytes, 1 to 256
+  value BLOB NOT NULL                    -- at most 4 MiB
+) WITHOUT ROWID;
+CREATE TABLE meta (
+  one   INTEGER PRIMARY KEY CHECK (one = 1),   -- exactly one row
+  bytes INTEGER NOT NULL CHECK (bytes >= 0),   -- sum of length(key) + length(value)
+  keys  INTEGER NOT NULL CHECK (keys >= 0)     -- count of entries
+);
+INSERT INTO meta (one, bytes, keys) VALUES (1, 0, 0);
+PRAGMA user_version = 1;
+COMMIT;
+```
+
+Each connection then sets `PRAGMA synchronous = FULL`. A `set` or `delete`
+changes `entries` and the one `meta` row in one transaction.
 
 
 **The framework does not use `store`.** An applet without a service keeps its

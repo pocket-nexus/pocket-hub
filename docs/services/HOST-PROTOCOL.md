@@ -237,6 +237,14 @@ with the step that makes it (`MIGRATION.md` §3):
 | the SDK's copy, written at each start | `<home>/sdk/service/` | step 1 (was `sdk/daemon`) | the same |
 | the package index (`QUESTIONS.md` Q11) | `<home>/packages.json` | step 4 | the same |
 
+**How a release folder appears.** `services/<id>/` appears only by renaming
+into place a staged folder (under `services-staging/`) that already holds
+`releases.json` and the first release; a later release is renamed into
+`services/<id>/` first, and `releases.json` is then replaced by writing a
+temporary file and renaming it. So a crash cannot leave a new install without
+`releases.json` (which the rule below would read as earlier), and a release
+folder that `releases.json` does not list is removed at the next start.
+
 **How step 2 recognises what step 1 left.** One rule, read once per id at the
 host's start: **a folder `services/<id>/` holding `releases.json` is of step 2;
 any other is earlier.** An earlier id is listed as one `Service` in state
