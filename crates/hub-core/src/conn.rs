@@ -66,10 +66,10 @@ pub(crate) enum ConnMsg {
     OpenDone { id: u32, generation: u32, result: Result<ChannelStream, ChannelOpenError> },
     /// The generation could not be stored.
     OpenFailed { id: u32, message: String },
-    /// The supervisor stops the channel's daemon.
-    DaemonStop { key: u64 },
-    /// A frame from a daemon's channel connection; None when it closed.
-    Daemon { key: u64, frame: Option<Result<Frame, LinkClose>> },
+    /// The supervisor stops the channel's service.
+    ServiceStop { key: u64 },
+    /// A frame from a service's channel connection; None when it closed.
+    Service { key: u64, frame: Option<Result<Frame, LinkClose>> },
     CallProgress { id: u32, object: Map<String, Value> },
     CallWrite { id: u32, bytes: Bytes, end: bool },
     CallDone { id: u32, result: Result<Value, ErrorReply> },
@@ -138,22 +138,22 @@ pub(crate) enum OutKind {
     /// `switch`: a `runtime.launch` of an app, whose `switching` reply opens
     /// the patient window (`Conn::patient`).
     Op { key: u64, state: bool, switch: bool, done: Option<oneshot::Sender<Result<OpOutcome, OpError>>>, progress: Option<mpsc::UnboundedSender<Value>>, head: Option<Map<String, Value>> },
-    /// A daemon's request, forwarded: `local` is its id on the channel connection.
+    /// A service's request, forwarded: `local` is its id on the channel connection.
     Channel { key: u64, local: u32, early_credit: u64, answered: bool },
 }
 
 /// A request of the device that Hub holds.
 pub(crate) enum InRequest {
-    /// `channel.open` while the daemon starts.
+    /// `channel.open` while the service starts.
     ChannelOpen { task: JoinHandle<()>, deadline: Instant, app: String, hash: String },
     /// A system request served by `DeviceRequests`. Its handler runs in a
     /// task of its own; `cancel` is the handler's signal (§5.4).
     System { cancel: watch::Sender<Option<CancelCause>>, group: &'static str, head: bool },
-    /// An applet's request, forwarded to its daemon.
+    /// An applet's request, forwarded to its service.
     Applet { key: u64, head: bool, refused: bool },
 }
 
-/// Bytes Hub sends on one stream direction, its own or a daemon's.
+/// Bytes Hub sends on one stream direction, its own or a service's.
 pub(crate) struct SendStream {
     pub pending: VecDeque<Bytes>,
     pub pending_len: u64,
@@ -210,7 +210,7 @@ pub(crate) struct RecvStream {
 pub(crate) enum RecvSink {
     /// Hub keeps the bytes, under a window it refills itself (§5.6: 256 KiB).
     Collect { total: u64, data: Vec<u8>, ended: bool, unsolicited: Option<Map<String, Value>> },
-    /// The bytes go to a daemon, which grants the credit.
+    /// The bytes go to a service, which grants the credit.
     Relay { key: u64 },
     /// A device request's body, toward its `DeviceRequests` handler. `total`
     /// is None until the handler takes the stream; an `END` of an empty body
@@ -250,12 +250,12 @@ pub(crate) struct Conn {
     pub recv: HashMap<u32, RecvStream>,
     pub channels: HashMap<u32, Channel>,
     pub next_key: u64,
-    /// Link ids of daemon requests that ended, with their channel: a late
+    /// Link ids of service requests that ended, with their channel: a late
     /// progress event on one still gets its units back (§5.6). The oldest
     /// entries go first past `RELEASED_KEPT`.
     pub released: HashMap<u32, u64>,
     pub released_order: VecDeque<u32>,
-    /// Tasks that wait for a daemon's stop signal, by channel key.
+    /// Tasks that wait for a service's stop signal, by channel key.
     pub stop_watchers: HashMap<u64, JoinHandle<()>>,
     /// State-changing operations waiting for the open one to end (§8.3).
     waiting_state: VecDeque<Op>,
@@ -576,7 +576,7 @@ impl Conn {
     }
 
     /// Every open request, stream and channel fails; nothing is replayed on
-    /// the next connection (§4.8). Daemons get one close notice, `link`.
+    /// the next connection (§4.8). Services get one close notice, `link`.
     fn teardown(&mut self, info: CloseInfo) {
         self.end_everything();
         self.shared.unlinked(&self.device, self.conn, info);
@@ -677,7 +677,7 @@ impl Conn {
             if let Some(InRequest::ChannelOpen { task, .. }) = self.inr.remove(&id) {
                 task.abort();
             }
-            self.reply_error(id, "busy", "the daemon did not start in time");
+            self.reply_error(id, "busy", "the service did not start in time");
         }
         self.flush_features();
     }
@@ -694,7 +694,7 @@ impl Conn {
             OutKind::Channel { key, local, answered, .. } => {
                 let (key, local) = (*key, *local);
                 *answered = true;
-                self.daemon_reply_error(key, local, "timeout", "30 s without a frame for the request");
+                self.service_reply_error(key, local, "timeout", "30 s without a frame for the request");
             }
         }
     }
@@ -709,7 +709,7 @@ impl Conn {
             }
             OutKind::Channel { key, local, answered, .. } => {
                 if !answered {
-                    self.daemon_reply_error(key, local, request.cause, "the applet's host sent no reply after CANCEL");
+                    self.service_reply_error(key, local, request.cause, "the applet's host sent no reply after CANCEL");
                 }
                 self.released(wire, key);
                 if let Some(channel) = self.channels.values_mut().find(|c| c.key == key) {
@@ -755,10 +755,10 @@ impl Conn {
                     self.reply_error(id, "busy", &message);
                 }
             }
-            ConnMsg::Daemon { key, frame } => self.daemon_frame(key, frame),
-            ConnMsg::DaemonStop { key } => {
+            ConnMsg::Service { key, frame } => self.service_frame(key, frame),
+            ConnMsg::ServiceStop { key } => {
                 if let Some(id) = self.channels.values().find(|c| c.key == key).map(|c| c.id) {
-                    self.close_channel(id, Some("daemon"), Some("stop"));
+                    self.close_channel(id, Some(crate::relay::CLOSE_BY_SERVICE), Some("stop"));
                 }
             }
             ConnMsg::CallProgress { id, object } => {
@@ -1311,7 +1311,7 @@ impl Conn {
         match reading {
             Reading::Close(why) => Err(LinkClose::protocol(why)),
             Reading::Ignore => {
-                // A late progress event of a daemon request Hub has released:
+                // A late progress event of a service request Hub has released:
                 // dropped, and its units go back to the device.
                 if !app && let Some(&key) = self.released.get(&id) {
                     self.late_device_event(key, parsed.raw.len());
@@ -1527,7 +1527,7 @@ impl Conn {
             }
             stream.credit += amount;
             if let Some(key) = stream.channel {
-                self.relay_credit_to_daemon(key, id, amount);
+                self.relay_credit_to_service(key, id, amount);
             }
             self.pump(id);
         }
@@ -1558,13 +1558,13 @@ impl Conn {
             stream.outstanding = 0;
         }
         if let Some(key) = owner {
-            self.relay_reset_to_daemon(key, id, code.unwrap_or(ResetCode::Cancelled));
+            self.relay_reset_to_service(key, id, code.unwrap_or(ResetCode::Cancelled));
         } else if let Some(InRequest::Applet { key, .. }) = self.inr.get(&id) {
             let key = *key;
-            self.relay_reset_to_daemon(key, id, code.unwrap_or(ResetCode::Cancelled));
+            self.relay_reset_to_service(key, id, code.unwrap_or(ResetCode::Cancelled));
         } else if let Some(OutRequest { kind: OutKind::Channel { key, .. }, .. }) = self.out.get(&id) {
             let key = *key;
-            self.relay_reset_to_daemon(key, id, code.unwrap_or(ResetCode::Cancelled));
+            self.relay_reset_to_service(key, id, code.unwrap_or(ResetCode::Cancelled));
         }
     }
 
@@ -1625,7 +1625,9 @@ impl Conn {
         match result {
             Err(error) => {
                 let code = match &error {
-                    ChannelOpenError::NoDaemon => "no_daemon",
+                    // `no_daemon` is the wire's code (link specification §7.1), which says
+                    // daemon until the specification renames it.
+                    ChannelOpenError::NoService => "no_daemon",
                     ChannelOpenError::Busy(_) => "busy",
                     ChannelOpenError::Rejected(_) => "rejected",
                 };

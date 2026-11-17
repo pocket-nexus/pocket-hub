@@ -19,8 +19,10 @@ pub use client::{Call, Client, ClientError, Transcript};
 pub use rpc::{ErrorData, ErrorKind, RpcError};
 pub use types::*;
 
-/// The protocol version a client names in `hub.hello`.
-pub const PROTOCOL: u32 = 1;
+/// The protocol version a client names in `hub.hello` (CONTROL-API.md §1,
+/// Hello). 1 was Pocket Hub 0.2.1's and earlier, before services took their
+/// names; the core refuses it like any other version.
+pub const PROTOCOL: u32 = 2;
 
 /// The methods of §3.
 pub mod methods {
@@ -45,14 +47,14 @@ pub mod methods {
     pub const PAIRING_LIST: &str = "pairing.list";
     pub const PAIRING_ANSWER: &str = "pairing.answer";
     pub const PAIRING_DECLINE: &str = "pairing.decline";
-    pub const DAEMONS_LIST: &str = "daemons.list";
-    pub const DAEMONS_INSTALL: &str = "daemons.install";
-    pub const DAEMONS_REMOVE: &str = "daemons.remove";
-    pub const DAEMONS_START: &str = "daemons.start";
-    pub const DAEMONS_STOP: &str = "daemons.stop";
-    pub const DAEMONS_RESTART: &str = "daemons.restart";
-    pub const DAEMONS_LOGS: &str = "daemons.logs";
-    pub const DAEMONS_RUNTIME: &str = "daemons.runtime";
+    pub const SERVICES_LIST: &str = "services.list";
+    pub const SERVICES_INSTALL: &str = "services.install";
+    pub const SERVICES_REMOVE: &str = "services.remove";
+    pub const SERVICES_START: &str = "services.start";
+    pub const SERVICES_STOP: &str = "services.stop";
+    pub const SERVICES_RESTART: &str = "services.restart";
+    pub const SERVICES_LOGS: &str = "services.logs";
+    pub const SERVICES_RUNTIME: &str = "services.runtime";
     pub const STORE_APPS: &str = "store.apps";
     pub const STORE_DETAILS: &str = "store.details";
     pub const STORE_SAMPLE: &str = "store.sample";
@@ -72,11 +74,11 @@ pub mod topics {
     pub const DEVICE_LOG: &str = "device.log";
     pub const DEVICE_SCREENSHOT: &str = "device.screenshot";
     pub const PAIRING_CHANGED: &str = "pairing.changed";
-    pub const DAEMON_CHANGED: &str = "daemon.changed";
-    pub const DAEMON_REMOVED: &str = "daemon.removed";
-    pub const DAEMON_LOG: &str = "daemon.log";
+    pub const SERVICE_CHANGED: &str = "service.changed";
+    pub const SERVICE_REMOVED: &str = "service.removed";
+    pub const SERVICE_LOG: &str = "service.log";
     pub const HUB_CHANGED: &str = "hub.changed";
     pub const STORE_CHANGED: &str = "store.changed";
     pub const ALL: [&str; 11] =
-        [DEVICE_CHANGED, DEVICE_REMOVED, DEVICE_UNLINKED, DEVICE_LOG, DEVICE_SCREENSHOT, PAIRING_CHANGED, DAEMON_CHANGED, DAEMON_REMOVED, DAEMON_LOG, HUB_CHANGED, STORE_CHANGED];
+        [DEVICE_CHANGED, DEVICE_REMOVED, DEVICE_UNLINKED, DEVICE_LOG, DEVICE_SCREENSHOT, PAIRING_CHANGED, SERVICE_CHANGED, SERVICE_REMOVED, SERVICE_LOG, HUB_CHANGED, STORE_CHANGED];
 }

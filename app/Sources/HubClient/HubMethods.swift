@@ -173,42 +173,42 @@ extension HubCalling {
                        progress: typed(progress)).decoded()
     }
 
-    // MARK: Daemons
+    // MARK: Services
 
-    public func daemons() async throws -> [Daemon] {
-        try await call("daemons.list")["daemons"].orThrow("daemons").decoded()
+    public func services() async throws -> [Service] {
+        try await call("services.list")["services"].orThrow("services").decoded()
     }
 
-    /// Installs a daemon from a folder or a `.tar.gz`.
-    public func installDaemon(path: String, progress: (@Sendable (DaemonInstallProgress) -> Void)? = nil) async throws -> Daemon {
-        try await call("daemons.install", params: ["path": .string(path)], progress: typed(progress)).decoded()
+    /// Installs a service from a folder or a `.tar.gz`.
+    public func installService(path: String, progress: (@Sendable (ServiceInstallProgress) -> Void)? = nil) async throws -> Service {
+        try await call("services.install", params: ["path": .string(path)], progress: typed(progress)).decoded()
     }
 
-    /// Removes a daemon; its data folder stays unless `purge`.
-    public func removeDaemon(id: String, purge: Bool = false) async throws {
+    /// Removes a service; its data folder stays unless `purge`.
+    public func removeService(id: String, purge: Bool = false) async throws {
         var params: [String: JSONValue] = ["id": .string(id)]
         if purge { params["purge"] = true }
-        _ = try await call("daemons.remove", params: .object(params))
+        _ = try await call("services.remove", params: .object(params))
     }
 
-    public func daemon(_ action: DaemonAction, id: String) async throws -> Daemon {
-        try await call("daemons.\(action.rawValue)", params: ["id": .string(id)]).decoded()
+    public func service(_ action: ServiceAction, id: String) async throws -> Service {
+        try await call("services.\(action.rawValue)", params: ["id": .string(id)]).decoded()
     }
 
-    public func daemonLogs(id: String, tail: Int? = nil) async throws -> [DaemonLogLine] {
+    public func serviceLogs(id: String, tail: Int? = nil) async throws -> [ServiceLogLine] {
         var params: [String: JSONValue] = ["id": .string(id)]
         if let tail { params["tail"] = .number(Double(tail)) }
-        return try await call("daemons.logs", params: .object(params))["lines"].orThrow("lines").decoded()
+        return try await call("services.logs", params: .object(params))["lines"].orThrow("lines").decoded()
     }
 
     /// The Bun runtime's state; with `install` Hub downloads Bun now.
     public func bunRuntime(install: Bool = false, progress: (@Sendable (ByteProgress) -> Void)? = nil) async throws -> BunRuntime {
         let params: JSONValue = install ? ["install": true] : [:]
-        return try await call("daemons.runtime", params: params, progress: typed(progress)).decoded()
+        return try await call("services.runtime", params: params, progress: typed(progress)).decoded()
     }
 }
 
-public enum DaemonAction: String, Sendable { case start, stop, restart }
+public enum ServiceAction: String, Sendable { case start, stop, restart }
 
 /// Adapts a typed progress handler to the raw one; a notification that does
 /// not decode is skipped rather than failing the call.

@@ -1,8 +1,8 @@
-//! Hub provides the daemon SDK (docs/DAEMON-PROTOCOL.md §1): the runtime
-//! files of `sdk/daemon` are built into this binary and written under
-//! `<home>/sdk/daemon` at each start, so the SDK a daemon runs is always the
-//! one of the Hub that started it. `hub-daemons` links that folder into a
-//! package that has no `node_modules/@pocket-hub/daemon` of its own.
+//! Hub provides the service SDK (docs/SERVICE-PROTOCOL.md §1): the runtime
+//! files of `sdk/service` are built into this binary and written under
+//! `<home>/sdk/service` at each start, so the SDK a service runs is always the
+//! one of the Hub that started it. `hub-services` links that folder into a
+//! package that has no `node_modules/@pocketjs/service` of its own.
 
 use std::fs;
 use std::io;
@@ -10,20 +10,20 @@ use std::path::{Path, PathBuf};
 
 /// The package's runtime files, by their path in the package.
 pub const FILES: &[(&str, &str)] = &[
-    ("package.json", include_str!("../../../sdk/daemon/package.json")),
-    ("README.md", include_str!("../../../sdk/daemon/README.md")),
-    ("src/channel.ts", include_str!("../../../sdk/daemon/src/channel.ts")),
-    ("src/connection.ts", include_str!("../../../sdk/daemon/src/connection.ts")),
-    ("src/errors.ts", include_str!("../../../sdk/daemon/src/errors.ts")),
-    ("src/frame.ts", include_str!("../../../sdk/daemon/src/frame.ts")),
-    ("src/index.ts", include_str!("../../../sdk/daemon/src/index.ts")),
-    ("src/serve.ts", include_str!("../../../sdk/daemon/src/serve.ts")),
-    ("src/streams.ts", include_str!("../../../sdk/daemon/src/streams.ts")),
+    ("package.json", include_str!("../../../sdk/service/package.json")),
+    ("README.md", include_str!("../../../sdk/service/README.md")),
+    ("src/channel.ts", include_str!("../../../sdk/service/src/channel.ts")),
+    ("src/connection.ts", include_str!("../../../sdk/service/src/connection.ts")),
+    ("src/errors.ts", include_str!("../../../sdk/service/src/errors.ts")),
+    ("src/frame.ts", include_str!("../../../sdk/service/src/frame.ts")),
+    ("src/index.ts", include_str!("../../../sdk/service/src/index.ts")),
+    ("src/serve.ts", include_str!("../../../sdk/service/src/serve.ts")),
+    ("src/streams.ts", include_str!("../../../sdk/service/src/streams.ts")),
 ];
 
-/// `<home>/sdk/daemon`.
+/// `<home>/sdk/service`.
 pub fn folder(home: &Path) -> PathBuf {
-    home.join("sdk").join("daemon")
+    home.join("sdk").join("service")
 }
 
 /// Writes the SDK under `home`: each file whose content differs, and a file
@@ -57,7 +57,7 @@ mod tests {
     /// A source file added to the SDK must be added to `FILES` too.
     #[test]
     fn every_sdk_source_is_embedded() {
-        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sdk/daemon/src");
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sdk/service/src");
         let mut on_disk: Vec<String> = fs::read_dir(src).unwrap().map(|e| format!("src/{}", e.unwrap().file_name().to_string_lossy())).collect();
         on_disk.sort();
         let mut embedded: Vec<String> = FILES.iter().filter(|(path, _)| path.starts_with("src/")).map(|(path, _)| path.to_string()).collect();

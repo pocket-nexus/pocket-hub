@@ -154,7 +154,7 @@ impl DeviceHandle {
     }
 
     /// Ends one of the device's applet channels by the owner's or Hub's
-    /// policy: the device gets `channel.close` `policy`, the daemon its one
+    /// policy: the device gets `channel.close` `policy`, the service its one
     /// close notice with the same reason (§7.5). False when the device is not linked.
     pub fn close_channel(&self, channel: u32) -> bool {
         self.shared.link_tx(&self.id).is_some_and(|tx| tx.send(Input::Msg(ConnMsg::CloseChannel(channel))).is_ok())

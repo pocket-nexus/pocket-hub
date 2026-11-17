@@ -1450,28 +1450,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pocket-hub-daemons"
-version = "0.2.2"
-dependencies = [
- "bytes",
- "flate2",
- "hex",
- "libc",
- "pocket-link",
- "rand 0.9.5",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "zip",
-]
-
-[[package]]
 name = "pocket-hub-net"
 version = "0.2.2"
 dependencies = [
@@ -1493,6 +1471,28 @@ dependencies = [
  "tokio-rustls",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "pocket-hub-services"
+version = "0.2.2"
+dependencies = [
+ "bytes",
+ "flate2",
+ "hex",
+ "libc",
+ "pocket-link",
+ "rand 0.9.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "zip",
 ]
 
 [[package]]
@@ -1535,8 +1535,8 @@ dependencies = [
  "pocket-hub-api",
  "pocket-hub-applet-store",
  "pocket-hub-core",
- "pocket-hub-daemons",
  "pocket-hub-net",
+ "pocket-hub-services",
  "pocket-hub-setup",
  "pocket-hub-store",
  "pocket-link",

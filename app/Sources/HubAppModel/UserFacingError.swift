@@ -80,9 +80,9 @@ public struct UserFacingError: Error, Identifiable, Sendable, Equatable {
                               advice: String(localized: "Check this Mac's internet connection, then try again."),
                               detail: detail)
                 }
-            case .daemon:
-                self.init(title: String(localized: "The daemon couldn't be installed, started or stopped."),
-                          advice: String(localized: "Check its output in Advanced › Daemons, then try again."),
+            case .service:
+                self.init(title: String(localized: "The service couldn't be installed, started or stopped."),
+                          advice: String(localized: "Check its output in Advanced › Services, then try again."),
                           detail: detail)
             case .setup:
                 self.init(title: String(localized: "The setup didn't finish."),

@@ -1,209 +1,6 @@
 {
   "about": "Lines pocket-hubd wrote and read in crates/hubd/tests/e2e.rs (POCKET_HUB_UPDATE_EXAMPLES=1 cargo test -p pocket-hubd --test e2e writes this file again). One example per method (request, answer, and the last progress notification of each phase), notification a client sends, event topic and error kind or code. What belongs to the computer and the run that made it is replaced: paths (the repository is /path/to/pocket-hub, Hub's home /tmp/hub-home, the test's files /tmp/work), ids made in the run, times (2026-01-01), pids, loopback ports and byte counts between 0 and the total.",
   "methods": {
-    "daemons.install": {
-      "request": {
-        "jsonrpc": "2.0",
-        "id": 39,
-        "method": "daemons.install",
-        "params": {
-          "path": "/path/to/pocket-hub/sdk/daemon/examples/link-channel"
-        }
-      },
-      "response": {
-        "jsonrpc": "2.0",
-        "id": 39,
-        "result": {
-          "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
-          "state": "stopped",
-          "pid": null,
-          "since": 1767225600000,
-          "channels": 0,
-          "lastExit": null,
-          "error": null
-        }
-      },
-      "progress": [
-        {
-          "jsonrpc": "2.0",
-          "method": "progress",
-          "params": {
-            "stage": "installing",
-            "message": "Installing the daemon package /path/to/pocket-hub/sdk/daemon/examples/link-channel.",
-            "id": 39
-          }
-        }
-      ]
-    },
-    "daemons.list": {
-      "request": {
-        "jsonrpc": "2.0",
-        "id": 41,
-        "method": "daemons.list",
-        "params": {}
-      },
-      "response": {
-        "jsonrpc": "2.0",
-        "id": 41,
-        "result": {
-          "daemons": [
-            {
-              "id": "dev.pocket-nexus.link-channel",
-              "version": "0.1.0",
-              "state": "running",
-              "pid": 4242,
-              "since": 1767225600000,
-              "channels": 1,
-              "lastExit": null,
-              "error": null
-            }
-          ]
-        }
-      }
-    },
-    "daemons.logs": {
-      "request": {
-        "jsonrpc": "2.0",
-        "id": 40,
-        "method": "daemons.logs",
-        "params": {
-          "id": "dev.pocket-nexus.link-channel",
-          "tail": 1
-        }
-      },
-      "response": {
-        "jsonrpc": "2.0",
-        "id": 40,
-        "result": {
-          "lines": [
-            {
-              "at": 1767225600000,
-              "stream": "hub",
-              "text": "installed 0.1.0"
-            }
-          ]
-        }
-      }
-    },
-    "daemons.remove": {
-      "request": {
-        "jsonrpc": "2.0",
-        "id": 64,
-        "method": "daemons.remove",
-        "params": {
-          "id": "dev.pocket-nexus.link-channel"
-        }
-      },
-      "response": {
-        "jsonrpc": "2.0",
-        "id": 64,
-        "result": {}
-      }
-    },
-    "daemons.restart": {
-      "request": {
-        "jsonrpc": "2.0",
-        "id": 43,
-        "method": "daemons.restart",
-        "params": {
-          "id": "dev.pocket-nexus.link-channel"
-        }
-      },
-      "response": {
-        "jsonrpc": "2.0",
-        "id": 43,
-        "result": {
-          "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
-          "state": "running",
-          "pid": 4242,
-          "since": 1767225600000,
-          "channels": 0,
-          "lastExit": {
-            "code": 0,
-            "signal": null,
-            "at": 1767225600000
-          },
-          "error": null
-        }
-      }
-    },
-    "daemons.runtime": {
-      "request": {
-        "jsonrpc": "2.0",
-        "id": 38,
-        "method": "daemons.runtime",
-        "params": {
-          "install": null
-        }
-      },
-      "response": {
-        "jsonrpc": "2.0",
-        "id": 38,
-        "result": {
-          "version": "1.4.4",
-          "installed": true,
-          "path": "/usr/local/bin/bun"
-        }
-      }
-    },
-    "daemons.start": {
-      "request": {
-        "jsonrpc": "2.0",
-        "id": 42,
-        "method": "daemons.start",
-        "params": {
-          "id": "dev.pocket-nexus.link-channel"
-        }
-      },
-      "response": {
-        "jsonrpc": "2.0",
-        "id": 42,
-        "result": {
-          "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
-          "state": "running",
-          "pid": 4242,
-          "since": 1767225600000,
-          "channels": 0,
-          "lastExit": {
-            "code": 0,
-            "signal": null,
-            "at": 1767225600000
-          },
-          "error": null
-        }
-      }
-    },
-    "daemons.stop": {
-      "request": {
-        "jsonrpc": "2.0",
-        "id": 44,
-        "method": "daemons.stop",
-        "params": {
-          "id": "dev.pocket-nexus.link-channel"
-        }
-      },
-      "response": {
-        "jsonrpc": "2.0",
-        "id": 44,
-        "result": {
-          "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
-          "state": "stopped",
-          "pid": null,
-          "since": 1767225600000,
-          "channels": 0,
-          "lastExit": {
-            "code": 0,
-            "signal": null,
-            "at": 1767225600000
-          },
-          "error": null
-        }
-      }
-    },
     "devices.forget": {
       "request": {
         "jsonrpc": "2.0",
@@ -633,7 +430,7 @@
         "id": 2,
         "method": "hub.hello",
         "params": {
-          "protocol": 1,
+          "protocol": 2,
           "client": {
             "kind": "gui",
             "name": "Pocket Hub",
@@ -645,7 +442,7 @@
         "jsonrpc": "2.0",
         "id": 2,
         "result": {
-          "protocol": 1,
+          "protocol": 2,
           "hub": {
             "id": "fedcba9876543210",
             "name": "Studio Mac",
@@ -802,6 +599,209 @@
               "expires": 1767225900000
             }
           ]
+        }
+      }
+    },
+    "services.install": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 39,
+        "method": "services.install",
+        "params": {
+          "path": "/path/to/pocket-hub/sdk/service/examples/link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 39,
+        "result": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "stopped",
+          "pid": null,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": null,
+          "error": null
+        }
+      },
+      "progress": [
+        {
+          "jsonrpc": "2.0",
+          "method": "progress",
+          "params": {
+            "stage": "installing",
+            "message": "Installing the service package /path/to/pocket-hub/sdk/service/examples/link-channel.",
+            "id": 39
+          }
+        }
+      ]
+    },
+    "services.list": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "method": "services.list",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 41,
+        "result": {
+          "services": [
+            {
+              "id": "dev.pocket-nexus.link-channel",
+              "version": "0.1.0",
+              "state": "running",
+              "pid": 4242,
+              "since": 1767225600000,
+              "channels": 1,
+              "lastExit": null,
+              "error": null
+            }
+          ]
+        }
+      }
+    },
+    "services.logs": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 40,
+        "method": "services.logs",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel",
+          "tail": 1
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 40,
+        "result": {
+          "lines": [
+            {
+              "at": 1767225600000,
+              "stream": "hub",
+              "text": "installed 0.1.0"
+            }
+          ]
+        }
+      }
+    },
+    "services.remove": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 64,
+        "method": "services.remove",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 64,
+        "result": {}
+      }
+    },
+    "services.restart": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 43,
+        "method": "services.restart",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 43,
+        "result": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "running",
+          "pid": 4242,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": {
+            "code": 0,
+            "signal": null,
+            "at": 1767225600000
+          },
+          "error": null
+        }
+      }
+    },
+    "services.runtime": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 38,
+        "method": "services.runtime",
+        "params": {
+          "install": null
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 38,
+        "result": {
+          "version": "1.4.4",
+          "installed": true,
+          "path": "/usr/local/bin/bun"
+        }
+      }
+    },
+    "services.start": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 42,
+        "method": "services.start",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 42,
+        "result": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "running",
+          "pid": 4242,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": {
+            "code": 0,
+            "signal": null,
+            "at": 1767225600000
+          },
+          "error": null
+        }
+      }
+    },
+    "services.stop": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 44,
+        "method": "services.stop",
+        "params": {
+          "id": "dev.pocket-nexus.link-channel"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 44,
+        "result": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "stopped",
+          "pid": null,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": {
+            "code": 0,
+            "signal": null,
+            "at": 1767225600000
+          },
+          "error": null
         }
       }
     },
@@ -1272,42 +1272,6 @@
     }
   },
   "events": {
-    "daemon.changed": {
-      "jsonrpc": "2.0",
-      "method": "event",
-      "params": {
-        "topic": "daemon.changed",
-        "daemon": {
-          "id": "dev.pocket-nexus.link-channel",
-          "version": "0.1.0",
-          "state": "stopped",
-          "pid": null,
-          "since": 1767225600000,
-          "channels": 0,
-          "lastExit": null,
-          "error": null
-        }
-      }
-    },
-    "daemon.log": {
-      "jsonrpc": "2.0",
-      "method": "event",
-      "params": {
-        "topic": "daemon.log",
-        "id": "dev.pocket-nexus.link-channel",
-        "at": 1767225600000,
-        "stream": "hub",
-        "text": "installed 0.1.0"
-      }
-    },
-    "daemon.removed": {
-      "jsonrpc": "2.0",
-      "method": "event",
-      "params": {
-        "topic": "daemon.removed",
-        "id": "dev.pocket-nexus.link-channel"
-      }
-    },
     "device.changed": {
       "jsonrpc": "2.0",
       "method": "event",
@@ -1475,6 +1439,42 @@
         ]
       }
     },
+    "service.changed": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "service.changed",
+        "service": {
+          "id": "dev.pocket-nexus.link-channel",
+          "version": "0.1.0",
+          "state": "stopped",
+          "pid": null,
+          "since": 1767225600000,
+          "channels": 0,
+          "lastExit": null,
+          "error": null
+        }
+      }
+    },
+    "service.log": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "service.log",
+        "id": "dev.pocket-nexus.link-channel",
+        "at": 1767225600000,
+        "stream": "hub",
+        "text": "installed 0.1.0"
+      }
+    },
+    "service.removed": {
+      "jsonrpc": "2.0",
+      "method": "event",
+      "params": {
+        "topic": "service.removed",
+        "id": "dev.pocket-nexus.link-channel"
+      }
+    },
     "store.changed": {
       "jsonrpc": "2.0",
       "method": "event",
@@ -1578,28 +1578,6 @@
           "message": "The call was cancelled.",
           "data": {
             "kind": "cancelled"
-          }
-        }
-      }
-    },
-    "daemon": {
-      "request": {
-        "jsonrpc": "2.0",
-        "id": 67,
-        "method": "daemons.start",
-        "params": {
-          "id": "dev.test.broken"
-        }
-      },
-      "response": {
-        "jsonrpc": "2.0",
-        "id": 67,
-        "error": {
-          "code": 1,
-          "message": "The daemon did not start: the process exited before its daemon.hello (exited with code 3).",
-          "data": {
-            "kind": "daemon",
-            "id": "dev.test.broken"
           }
         }
       }
@@ -1736,6 +1714,28 @@
           "data": {
             "kind": "release",
             "reason": "not_found"
+          }
+        }
+      }
+    },
+    "service": {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 67,
+        "method": "services.start",
+        "params": {
+          "id": "dev.test.broken"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 67,
+        "error": {
+          "code": 1,
+          "message": "The service did not start: the process exited before its service.hello (exited with code 3).",
+          "data": {
+            "kind": "service",
+            "id": "dev.test.broken"
           }
         }
       }

@@ -1,0 +1,6 @@
+{
+  "service": 1,
+  "id": "com.example.locked",
+  "version": "1.0.0",
+  "entry": "service.mjs"
+}

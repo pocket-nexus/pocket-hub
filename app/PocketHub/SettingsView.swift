@@ -82,7 +82,7 @@ struct SettingsView: View {
                         Text("Unknown while Pocket Hub isn't running").foregroundStyle(.secondary)
                     }
                 }
-                Text("Pocket Hub keeps its paired devices, daemons and screenshots here. Set POCKET_HUB_HOME to use another folder.")
+                Text("Pocket Hub keeps its paired devices, services and screenshots here. Set POCKET_HUB_HOME to use another folder.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let status = model.status {

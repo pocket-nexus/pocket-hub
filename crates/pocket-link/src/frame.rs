@@ -211,8 +211,8 @@ pub fn id_range(id: u32) -> Option<Side> {
 /// Which connection a frame travels on.
 ///
 /// `Wire` is a device's link, as the specification defines it. `Local` is the
-/// connection between Hub and a daemon for one applet channel
-/// (docs/DAEMON-PROTOCOL.md): the same header and frame types, but the
+/// connection between Hub and a service for one applet channel
+/// (docs/SERVICE-PROTOCOL.md): the same header and frame types, but the
 /// connection is the channel, so no frame carries the `APP` flag or a channel
 /// id, a `REQUEST` may carry `BODY` by itself, and a `HANDSHAKE` frame is
 /// valid at any time.

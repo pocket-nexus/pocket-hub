@@ -11,8 +11,10 @@ public enum UnreachableReason: Sendable, Equatable {
     /// answered: the core's own one-line reason (English), or the spawn error.
     /// The client does not start it again until `retry()`.
     case coreFailedToStart(String)
-    /// The core answered with another protocol version.
-    case incompatible(hubProtocol: Int)
+    /// The core speaks another protocol version: it answered with its own, or
+    /// (nil) it refused this client's hello as another version (`-32602`,
+    /// CONTROL-API.md §1, Hello).
+    case incompatible(hubProtocol: Int?)
     /// Anything else: the socket refused us, the hello timed out, a resync call failed.
     case failed(String)
 }
@@ -43,9 +45,9 @@ public struct HubSnapshot: Sendable {
     public var devices: [Device]
     /// The devices that ask to be paired by the code they show.
     public var pairRequests: [PairRequest]
-    /// nil when `daemons.list` failed; the devices still work.
-    public var daemons: [Daemon]?
-    /// nil when `daemons.runtime` failed.
+    /// nil when `services.list` failed; the devices still work.
+    public var services: [Service]?
+    /// nil when `services.runtime` failed.
     public var bun: BunRuntime?
 }
 
@@ -61,7 +63,7 @@ public enum HubClientUpdate: Sendable {
 /// events, and reconnects when the connection drops, starting the core when
 /// nothing answers. Calls go to the current connection.
 public actor HubClient: HubCalling {
-    public static let protocolVersion = 1
+    public static let protocolVersion = 2
     static let log = Logger(subsystem: "nexus.pocket.hub", category: "client")
 
     public struct Configuration: Sendable {
@@ -288,6 +290,14 @@ public actor HubClient: HubCalling {
         do {
             hello = try await connection.hello(client: identity)
             watchdog.cancel()
+        } catch HubError.rpc(code: -32602, message: _) {
+            // A core of another protocol refuses this hello with `-32602` and a
+            // sentence instead of answering with its own version (CONTROL-API.md
+            // §1, Hello): a resident core of Pocket Hub 0.2.1 (protocol 1) meets
+            // this app so after an update. The app's own `client` is never the
+            // cause, so the refusal is the version's.
+            watchdog.cancel()
+            throw HubError.incompatibleProtocol(hub: nil, client: Self.protocolVersion)
         } catch {
             watchdog.cancel()
             throw error
@@ -302,21 +312,21 @@ public actor HubClient: HubCalling {
         let status: HubStatus = try statusValue.decoded()
         let devices: [Device] = try devicesValue["devices"].orThrow("devices").decoded()
         let pairRequests: [PairRequest] = try pairingValue["requests"].orThrow("requests").decoded()
-        var daemons: [Daemon]?
-        var daemonsSequence: UInt64 = 0
-        if let (value, sequence) = try? await connection.callSequenced("daemons.list") {
-            daemons = try? value["daemons"].orThrow("daemons").decoded()
-            daemonsSequence = sequence
+        var services: [Service]?
+        var servicesSequence: UInt64 = 0
+        if let (value, sequence) = try? await connection.callSequenced("services.list") {
+            services = try? value["services"].orThrow("services").decoded()
+            servicesSequence = sequence
         }
         let bun = try? await connection.bunRuntime()
-        let snapshot = HubSnapshot(hello: hello, status: status, devices: devices, pairRequests: pairRequests, daemons: daemons, bun: bun)
-        return (snapshot, Thresholds(devices: devicesSequence, pairing: pairingSequence, daemons: daemonsSequence, hub: statusSequence))
+        let snapshot = HubSnapshot(hello: hello, status: status, devices: devices, pairRequests: pairRequests, services: services, bun: bun)
+        return (snapshot, Thresholds(devices: devicesSequence, pairing: pairingSequence, services: servicesSequence, hub: statusSequence))
     }
 
     struct Thresholds {
         var devices: UInt64
         var pairing: UInt64
-        var daemons: UInt64
+        var services: UInt64
         var hub: UInt64
     }
 
@@ -325,7 +335,7 @@ public actor HubClient: HubCalling {
             let threshold: UInt64 = switch item.event.family {
             case .devices: thresholds.devices
             case .pairing: thresholds.pairing
-            case .daemons: thresholds.daemons
+            case .services: thresholds.services
             case .hub: thresholds.hub
             case .other: 0
             }
@@ -333,7 +343,7 @@ public actor HubClient: HubCalling {
             // and applying it after the snapshot would roll state back. Log lines
             // are not state: they are kept whatever their position.
             switch item.event {
-            case .deviceLog, .daemonLog: break
+            case .deviceLog, .serviceLog: break
             default: if item.sequence < threshold { continue }
             }
             updateContinuation.yield(.event(item.event))

@@ -4,7 +4,7 @@ import MockHubCore
 import Testing
 @testable import HubAppModel
 
-@Suite("Model: devices, daemons, outages")
+@Suite("Model: devices, services, outages")
 @MainActor
 struct HubModelTests {
     @Test func fillsFromTheSnapshot() async throws {
@@ -13,7 +13,7 @@ struct HubModelTests {
         #expect(h.model.hub?.name == "Studio Mac")
         #expect(h.model.devices.map(\.id) == ["0123456789abcdef", "89abcdef01234567"], "linked first")
         #expect(h.model.devices.first?.link?.carrier == .tcp)
-        #expect(h.model.daemons?.map(\.id) == ["nexus.pocket.notes", "nexus.pocket.weather"])
+        #expect(h.model.services?.map(\.id) == ["nexus.pocket.notes", "nexus.pocket.weather"])
         #expect(h.model.status?.home == h.home.path)
         #expect(h.model.bun?.installed == true)
     }
@@ -66,7 +66,7 @@ struct HubModelTests {
         await h.core.dropConnections()
         await eventually("not live") { !h.model.isLive }
         #expect(h.model.devices.isEmpty, "a device list shown while Hub is unreachable would be stale")
-        #expect(h.model.daemons == nil)
+        #expect(h.model.services == nil)
         #expect(h.model.hub != nil, "Hub's identity is kept for the window title")
         if case .unreachable = h.model.connection {} else if h.model.connection != .connecting {
             Issue.record("unexpected state \(h.model.connection)")
@@ -75,25 +75,25 @@ struct HubModelTests {
         await eventually("live again") { h.model.isLive && h.model.devices.count == 2 }
     }
 
-    @Test func daemonsFollowEvents() async throws {
+    @Test func servicesFollowEvents() async throws {
         let h = try await Harness(.demo)
         defer { Task { await h.tearDown() } }
-        try await h.model.perform(.restart, daemon: "nexus.pocket.notes")
-        #expect(h.model.daemons?.first { $0.id == "nexus.pocket.notes" }?.state == .running)
-        await eventually("daemon log line") {
-            h.model.daemonLogs["nexus.pocket.notes"]?.entries.contains { $0.line.text.contains("started") } == true
+        try await h.model.perform(.restart, service: "nexus.pocket.notes")
+        #expect(h.model.services?.first { $0.id == "nexus.pocket.notes" }?.state == .running)
+        await eventually("service log line") {
+            h.model.serviceLogs["nexus.pocket.notes"]?.entries.contains { $0.line.text.contains("started") } == true
         }
-        try await h.model.loadDaemonLog("nexus.pocket.weather")
-        #expect(h.model.daemonLogs["nexus.pocket.weather"]?.entries.count == 2)
+        try await h.model.loadServiceLog("nexus.pocket.weather")
+        #expect(h.model.serviceLogs["nexus.pocket.weather"]?.entries.count == 2)
 
-        let folder = h.home.appending(path: "my-daemon", directoryHint: .isDirectory)
+        let folder = h.home.appending(path: "my-service", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try await h.model.installDaemon(from: folder)
-        #expect(h.model.daemons?.contains { $0.id == "my-daemon" } == true)
-        #expect(h.model.daemonInstall == nil)
-        try await h.model.removeDaemon("my-daemon", purge: true)
-        await eventually("removed") { h.model.daemons?.contains { $0.id == "my-daemon" } == false }
-        #expect(await h.core.purged.contains("my-daemon"))
+        try await h.model.installService(from: folder)
+        #expect(h.model.services?.contains { $0.id == "my-service" } == true)
+        #expect(h.model.serviceInstall == nil)
+        try await h.model.removeService("my-service", purge: true)
+        await eventually("removed") { h.model.services?.contains { $0.id == "my-service" } == false }
+        #expect(await h.core.purged.contains("my-service"))
     }
 
     @Test func bunInstallReportsProgress() async throws {

@@ -23,7 +23,7 @@ pub enum ErrorKind {
     Cancelled,
     Setup,
     Invalid,
-    Daemon,
+    Service,
     Store,
     /// The release of a device's program could not be used.
     Release,
@@ -42,7 +42,7 @@ impl ErrorKind {
             Self::Cancelled => "cancelled",
             Self::Setup => "setup",
             Self::Invalid => "invalid",
-            Self::Daemon => "daemon",
+            Self::Service => "service",
             Self::Store => "store",
             Self::Release => "release",
             Self::Pairing => "pairing",
@@ -79,7 +79,7 @@ pub struct ErrorData {
     /// `setup`: the failing step in the setup's own words, for a log.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
-    /// `daemon`: the daemon's id.
+    /// `service`: the service's id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// `setup`: the device a key was stored for, with `confirmed: false`.

@@ -1,5 +1,5 @@
 //! `pocket-hubd`, Pocket Hub's resident core (docs/CONTROL-API.md): the
-//! store of paired devices, the Pocket Link endpoint, the daemon supervisor
+//! store of paired devices, the Pocket Link endpoint, the service supervisor
 //! and the control server on `<home>/hubd.sock`, in one process per home.
 //!
 //! - [`start`] checks the home, takes it, binds the link port and the
@@ -10,8 +10,8 @@
 //! - `handlers`: the methods of §3.
 //! - `map`: the contract's shapes from the internal types.
 //! - `program`: the newest release of each device family's own program.
-//! - `host`: the daemon supervisor as the endpoint's channel host.
-//! - `sdk`: the daemon SDK Hub provides to its daemons.
+//! - `host`: the service supervisor as the endpoint's channel host.
+//! - `sdk`: the service SDK Hub provides to its services.
 //! - `logging`: the size-bounded log file.
 
 mod core;
@@ -66,8 +66,8 @@ pub struct Options {
     pub link_silence: Duration,
     pub link_state_silence: Duration,
     pub link_state_ping: Duration,
-    /// Replaces every daemon manifest's `idleSeconds` (development, tests).
-    pub daemon_idle: Option<Duration>,
+    /// Replaces every service manifest's `idleSeconds` (development, tests).
+    pub service_idle: Option<Duration>,
     /// `net.http` requests for these hosts go to the given servers, private
     /// addresses allowed for those hosts alone (development, tests; link
     /// specification §12.1 `--resolve`).
@@ -96,7 +96,7 @@ impl Options {
             link_silence: pocket_hub_core::Timing::default().silence,
             link_state_silence: pocket_hub_core::Timing::default().state_silence,
             link_state_ping: pocket_hub_core::Timing::default().state_ping,
-            daemon_idle: None,
+            service_idle: None,
             net_overrides: Vec::new(),
             store_url: pocket_hub_applet_store::DEFAULT_URL.to_owned(),
             store_key: pocket_hub_applet_store::OFFICIAL_KEY.to_owned(),
@@ -132,7 +132,7 @@ impl Running {
     }
 
     /// Serves until `hub.shutdown` or `stop`, then shuts down in order:
-    /// links closed with `going_away`, daemons stopped, socket removed.
+    /// links closed with `going_away`, services stopped, socket removed.
     pub async fn run(self, stop: impl std::future::Future<Output = ()>) {
         tokio::select! {
             _ = self.core.shutdown_requested() => {}

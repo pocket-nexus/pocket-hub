@@ -1,6 +1,0 @@
-{
-  "daemon": 1,
-  "id": "dev.pocket-hub.daemon-sample",
-  "version": "0.1.0",
-  "entry": "daemon.ts"
-}

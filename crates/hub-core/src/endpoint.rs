@@ -252,7 +252,7 @@ impl EndpointBuilder {
         self.listeners.push(listener);
         self
     }
-    /// Routes applet channels to daemons; Hub lists `channel` while one is set.
+    /// Routes applet channels to services; Hub lists `channel` while one is set.
     pub fn channel_host(mut self, host: Arc<dyn ChannelHost>) -> Self {
         self.host = Some(host);
         self

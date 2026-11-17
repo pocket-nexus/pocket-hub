@@ -20,7 +20,7 @@ use pocket_hub_setup::ShellSource;
 use pocket_hubd::{Options, StartError, logging};
 
 #[derive(Parser, Debug)]
-#[command(name = "pocket-hubd", version, about = "Pocket Hub's resident core: devices, daemons and the control socket.", long_about = None)]
+#[command(name = "pocket-hubd", version, about = "Pocket Hub's resident core: devices, services and the control socket.", long_about = None)]
 struct Args {
     /// Run in the foreground. This is what pocket-hubd always does; the flag
     /// is accepted for scripts and development sessions.
@@ -43,7 +43,7 @@ struct Args {
     #[arg(long, value_name = "NAME", env = "POCKET_HUB_NAME")]
     name: Option<String>,
 
-    /// Run daemons on this Bun instead of the one Hub downloads.
+    /// Run services on this Bun instead of the one Hub downloads.
     #[arg(long, value_name = "PATH", env = "POCKET_HUB_BUN")]
     bun: Option<PathBuf>,
 
@@ -64,9 +64,9 @@ struct Args {
     #[arg(long, value_name = "MS", hide = true)]
     program_look_ms: Option<u64>,
 
-    /// Replace every daemon's idleSeconds (development and tests).
+    /// Replace every service's idleSeconds (development and tests).
     #[arg(long, value_name = "SECONDS", hide = true)]
-    daemon_idle_seconds: Option<f64>,
+    service_idle_seconds: Option<f64>,
 
     /// How long a second caller waits for a device's mutex, in milliseconds.
     #[arg(long, value_name = "MS", hide = true, default_value_t = 10_000)]
@@ -117,8 +117,8 @@ fn fatal(message: &str) -> ExitCode {
 
 fn main() -> ExitCode {
     // Nothing of whatever started this core (the command line, the app)
-    // stays open in it for its life (`pocket_hub_daemons::child`).
-    pocket_hub_daemons::child::close_inherited();
+    // stays open in it for its life (`pocket_hub_services::child`).
+    pocket_hub_services::child::close_inherited();
     let args = Args::parse();
     let Some(home) = args.home.clone().or_else(pocket_hub_api::paths::home_from_env) else {
         return fatal("Pocket Hub has no home folder: set POCKET_HUB_HOME or HOME.");
@@ -155,7 +155,7 @@ fn main() -> ExitCode {
     if let Some(ms) = args.program_look_ms {
         options.program_look_interval = Duration::from_millis(ms);
     }
-    options.daemon_idle = args.daemon_idle_seconds.map(Duration::from_secs_f64);
+    options.service_idle = args.service_idle_seconds.map(Duration::from_secs_f64);
     options.mutex_wait = Duration::from_millis(args.mutex_wait_ms);
     for (value, field) in [(args.link_silence_ms, &mut options.link_silence), (args.link_state_silence_ms, &mut options.link_state_silence), (args.link_state_ping_ms, &mut options.link_state_ping)] {
         if let Some(ms) = value {

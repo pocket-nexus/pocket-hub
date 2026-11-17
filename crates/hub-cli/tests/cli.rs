@@ -172,7 +172,7 @@ fn a_core_that_cannot_start_is_reported() {
 }
 
 #[test]
-fn devices_setup_and_daemons_in_both_modes() {
+fn devices_setup_and_services_in_both_modes() {
     let home = home();
     let _stop = Stop(home.path());
     let work = home.path().join("work");
@@ -261,30 +261,30 @@ fn devices_setup_and_daemons_in_both_modes() {
     assert_eq!(bad.status, 1);
     assert!(bad.stderr.contains("[invalid]"), "{}", bad.stderr);
 
-    // Daemons, while `watch` prints the events.
+    // Services, while `watch` prints the events.
     // `watch` says on standard error once it is subscribed; the install comes after that.
-    let mut watch = command(home.path(), &["watch", "--topic", "daemon.changed"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut watch = command(home.path(), &["watch", "--topic", "service.changed"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     let mut note = String::new();
     BufReader::new(watch.stderr.take().unwrap()).read_line(&mut note).unwrap();
     assert!(note.starts_with("Watching the core's events"), "{note}");
-    assert_eq!(run(home.path(), &["daemons"]).stdout.trim(), "No daemon is installed.");
-    let package = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sdk/daemon/examples/link-channel");
-    let installed = run(home.path(), &["daemon", "install", package.to_str().unwrap()]);
+    assert_eq!(run(home.path(), &["services"]).stdout.trim(), "No service is installed.");
+    let package = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sdk/service/examples/link-channel");
+    let installed = run(home.path(), &["service", "install", package.to_str().unwrap()]);
     assert_eq!(installed.stdout.trim(), "Installed dev.pocket-nexus.link-channel 0.1.0.", "{}", installed.stderr);
     let mut first = String::new();
     BufReader::new(watch.stdout.take().unwrap()).read_line(&mut first).unwrap();
-    assert!(first.starts_with("daemon dev.pocket-nexus.link-channel 0.1.0: stopped"), "{first}");
+    assert!(first.starts_with("service dev.pocket-nexus.link-channel 0.1.0: stopped"), "{first}");
     let _ = watch.kill();
     let _ = watch.wait();
-    let daemons = run(home.path(), &["--json", "daemons"]).json();
-    assert_eq!(daemons["daemons"][0]["state"], "stopped");
-    let started = run(home.path(), &["daemon", "start", "dev.pocket-nexus.link-channel"]);
+    let services = run(home.path(), &["--json", "services"]).json();
+    assert_eq!(services["services"][0]["state"], "stopped");
+    let started = run(home.path(), &["service", "start", "dev.pocket-nexus.link-channel"]);
     assert!(started.stdout.contains("running"), "{}", started.stdout);
-    let logs = run(home.path(), &["--json", "daemon", "logs", "dev.pocket-nexus.link-channel"]).json();
+    let logs = run(home.path(), &["--json", "service", "logs", "dev.pocket-nexus.link-channel"]).json();
     assert!(logs["lines"].as_array().unwrap().iter().any(|line| line["text"].as_str().unwrap().contains("installed 0.1.0")));
-    assert!(run(home.path(), &["daemon", "stop", "dev.pocket-nexus.link-channel"]).stdout.contains("stopped"));
-    assert_eq!(run(home.path(), &["daemon", "remove", "dev.pocket-nexus.link-channel"]).stdout.trim(), "Removed dev.pocket-nexus.link-channel; its data folder is kept.");
-    assert_eq!(run(home.path(), &["daemon", "start", "dev.pocket-nexus.link-channel"]).status, 1);
+    assert!(run(home.path(), &["service", "stop", "dev.pocket-nexus.link-channel"]).stdout.contains("stopped"));
+    assert_eq!(run(home.path(), &["service", "remove", "dev.pocket-nexus.link-channel"]).stdout.trim(), "Removed dev.pocket-nexus.link-channel; its data folder is kept.");
+    assert_eq!(run(home.path(), &["service", "start", "dev.pocket-nexus.link-channel"]).status, 1);
     assert!(run(home.path(), &["runtime"]).stdout.contains("is installed at"));
 
     let forgotten = run(home.path(), &["device", "forget"]);

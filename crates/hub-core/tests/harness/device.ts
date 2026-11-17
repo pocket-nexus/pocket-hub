@@ -183,7 +183,7 @@ const wireGuest = (channel: GuestChannel) => {
     );
   });
   channel.onEvent("nostream", (args) => out({ ev: "ch-event", t: "nostream", args }));
-  // The link-channel example daemon's own request and events (pocket-hubd's end-to-end test).
+  // The link-channel example service's own request and events (pocket-hubd's end-to-end test).
   channel.on("applet.sum", (args) => {
     out({ ev: "applet-request", t: "applet.sum", args });
     return { sum: Number(args.a ?? 0) + Number(args.b ?? 0) };

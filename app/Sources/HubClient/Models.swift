@@ -362,31 +362,31 @@ public struct AppletChannel: Codable, Sendable, Hashable {
     }
 }
 
-// MARK: - Daemon
+// MARK: - Service
 
-public struct DaemonState: OpenStringEnum {
+public struct ServiceState: OpenStringEnum {
     public var rawValue: String
     public init(rawValue: String) { self.rawValue = rawValue }
-    public static let stopped = DaemonState(rawValue: "stopped")
-    public static let starting = DaemonState(rawValue: "starting")
-    public static let running = DaemonState(rawValue: "running")
-    public static let stopping = DaemonState(rawValue: "stopping")
-    public static let failed = DaemonState(rawValue: "failed")
+    public static let stopped = ServiceState(rawValue: "stopped")
+    public static let starting = ServiceState(rawValue: "starting")
+    public static let running = ServiceState(rawValue: "running")
+    public static let stopping = ServiceState(rawValue: "stopping")
+    public static let failed = ServiceState(rawValue: "failed")
 }
 
-/// One installed daemon.
-public struct Daemon: Codable, Sendable, Hashable, Identifiable {
+/// One installed service.
+public struct Service: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var version: String
-    public var state: DaemonState
+    public var state: ServiceState
     public var pid: Int?
     public var since: EpochMilliseconds?
     public var channels: Int
-    public var lastExit: DaemonExit?
+    public var lastExit: ServiceExit?
     public var error: String?
 
-    public init(id: String, version: String, state: DaemonState, pid: Int? = nil, since: EpochMilliseconds? = nil,
-                channels: Int = 0, lastExit: DaemonExit? = nil, error: String? = nil)
+    public init(id: String, version: String, state: ServiceState, pid: Int? = nil, since: EpochMilliseconds? = nil,
+                channels: Int = 0, lastExit: ServiceExit? = nil, error: String? = nil)
     {
         self.id = id
         self.version = version
@@ -400,7 +400,7 @@ public struct Daemon: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// `{code, signal, at}`: `code` an integer or null, `signal` a name such as `SIGTERM` or null.
-public struct DaemonExit: Codable, Sendable, Hashable {
+public struct ServiceExit: Codable, Sendable, Hashable {
     public var code: Int?
     public var signal: String?
     public var at: EpochMilliseconds
@@ -455,7 +455,7 @@ public struct HubStatus: Codable, Sendable, Hashable {
         public var port: Int?
     }
 
-    /// The Bun runtime the daemons run on. `version` is null while it is not installed.
+    /// The Bun runtime the services run on. `version` is null while it is not installed.
     public struct Bun: Codable, Sendable, Hashable {
         public var version: String?
         public var installed: Bool
@@ -925,18 +925,18 @@ public struct InstallReport: Codable, Sendable, Hashable {
     }
 }
 
-// MARK: - Daemons results
+// MARK: - Services results
 
-/// Progress of `daemons.install`: `{stage, message}`; `stage` is `runtime`
+/// Progress of `services.install`: `{stage, message}`; `stage` is `runtime`
 /// while Hub downloads Bun for it, then `installing`.
-public struct DaemonInstallProgress: Codable, Sendable, Hashable {
+public struct ServiceInstallProgress: Codable, Sendable, Hashable {
     public var stage: String
     public var message: String?
 }
 
-public struct DaemonLogLine: Codable, Sendable, Hashable {
+public struct ServiceLogLine: Codable, Sendable, Hashable {
     public var at: EpochMilliseconds
-    /// `stdout`, `stderr`, or `hub` for Hub's own lines about the daemon.
+    /// `stdout`, `stderr`, or `hub` for Hub's own lines about the service.
     public var stream: String
     public var text: String
 
@@ -947,11 +947,11 @@ public struct DaemonLogLine: Codable, Sendable, Hashable {
     }
 }
 
-public struct DaemonLogsResult: Codable, Sendable, Hashable {
-    public var lines: [DaemonLogLine]
+public struct ServiceLogsResult: Codable, Sendable, Hashable {
+    public var lines: [ServiceLogLine]
 }
 
-/// `daemons.runtime`: the Bun runtime the daemons run on.
+/// `services.runtime`: the Bun runtime the services run on.
 public struct BunRuntime: Codable, Sendable, Hashable {
     public var version: String?
     public var installed: Bool
@@ -964,7 +964,7 @@ public struct BunRuntime: Codable, Sendable, Hashable {
     }
 }
 
-/// Progress of `daemons.runtime` with `install`: `{done, total}`.
+/// Progress of `services.runtime` with `install`: `{done, total}`.
 public struct ByteProgress: Codable, Sendable, Hashable {
     public var done: Int64?
     public var total: Int64?

@@ -1,7 +1,7 @@
 //! The whole path through the real `pocket-hubd` binary: setup onto a
 //! folder that stands in for an SD card, the reference device linking with
 //! the pairing that setup wrote, the runtime operations, the device mutex
-//! across two clients, the link-channel example daemon installed through the
+//! across two clients, the link-channel example service installed through the
 //! API and serving the device's applet channel with the real SDK, a second
 //! device that pairs by the code it shows as an M5Stack Tab5 does, and the
 //! ordered shutdown.
@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use common::*;
 use pocket_hub_api::types::*;
-use pocket_hub_api::{Client, ErrorKind, Transcript, methods};
+use pocket_hub_api::{Client, ErrorKind, PROTOCOL, Transcript, methods};
 use pocket_hub_applet_store::test_support::{FakeStore, build_package, icon, public, sign, test_key};
 use pocket_hub_setup::test_support::{FakeFtp, FakeHttp, fake_3dsx, github_release};
 use serde_json::{Value, json};
@@ -61,16 +61,16 @@ async fn device_where(client: &Client, id: &str, mut wanted: impl FnMut(&Device)
     }
 }
 
-/// The first daemon log line that contains `needle`, waiting for it.
-async fn daemon_line(client: &Client, needle: &str) -> String {
+/// The first service log line that contains `needle`, waiting for it.
+async fn service_line(client: &Client, needle: &str) -> String {
     for _ in 0..200 {
-        let logs: DaemonLogs = client.call_as(methods::DAEMONS_LOGS, &DaemonLogsParams { id: APP.into(), tail: Some(1000) }).await.unwrap();
+        let logs: ServiceLogs = client.call_as(methods::SERVICES_LOGS, &ServiceLogsParams { id: APP.into(), tail: Some(1000) }).await.unwrap();
         if let Some(line) = logs.lines.iter().find(|line| line.text.contains(needle)) {
             return line.text.clone();
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    panic!("no daemon log line contains {needle}");
+    panic!("no service log line contains {needle}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -108,7 +108,7 @@ async fn the_vertical_slice_through_the_binary() {
         .env("POCKET_HUB_NAME", HUB_NAME)
         .arg("--home")
         .arg(home.path())
-        .args(["--link-port", "0", "--no-beacons", "--daemon-idle-seconds", "1", "--mutex-wait-ms", "400", "--discover-targets", "127.0.0.1"])
+        .args(["--link-port", "0", "--no-beacons", "--service-idle-seconds", "1", "--mutex-wait-ms", "400", "--discover-targets", "127.0.0.1"])
         .arg("--discover-port")
         .arg(console.address.port().to_string())
         .arg("--bun")
@@ -132,7 +132,7 @@ async fn the_vertical_slice_through_the_binary() {
     let transcript = Transcript::default();
     let client = Client::connect_raw(&socket, Some(transcript.clone())).await.unwrap();
     assert_eq!(rpc(client.call(methods::STATUS, &json!({})).await.unwrap_err()).code, -32600);
-    let hello: HelloResult = client.call_as(methods::HELLO, &HelloParams { protocol: 1, client: info(ClientKind::Gui, "Pocket Hub") }).await.unwrap();
+    let hello: HelloResult = client.call_as(methods::HELLO, &HelloParams { protocol: PROTOCOL, client: info(ClientKind::Gui, "Pocket Hub") }).await.unwrap();
     assert_eq!(hello.hub.name, HUB_NAME, "a test core never takes the computer's name");
     client.call(methods::SUBSCRIBE, &json!({})).await.unwrap();
     let status: HubStatus = client.call_as(methods::STATUS, &json!({})).await.unwrap();
@@ -320,37 +320,37 @@ async fn the_vertical_slice_through_the_binary() {
     signal(device.pid(), SIGCONT);
     event(&client, |e| topic(e, "device.changed") && e["device"]["busy"].is_null()).await;
 
-    // --- the link-channel daemon, installed through the API -------------------
-    let runtime: RuntimeInfo = client.call_as(methods::DAEMONS_RUNTIME, &RuntimeParams::default()).await.unwrap();
+    // --- the link-channel service, installed through the API -------------------
+    let runtime: RuntimeInfo = client.call_as(methods::SERVICES_RUNTIME, &RuntimeParams::default()).await.unwrap();
     assert!(runtime.installed);
-    let mut install = client.start(methods::DAEMONS_INSTALL, &DaemonPathParams { path: link_channel_package().display().to_string() }).await.unwrap();
+    let mut install = client.start(methods::SERVICES_INSTALL, &ServicePathParams { path: link_channel_package().display().to_string() }).await.unwrap();
     let mut install_stages = Vec::new();
     while let Some(progress) = install.progress().await {
         install_stages.push(progress["stage"].as_str().unwrap().to_owned());
     }
-    let daemon: Daemon = serde_json::from_value(install.finish().await.unwrap()).unwrap();
-    assert_eq!((daemon.id.as_str(), daemon.version.as_str(), daemon.state), (APP, "0.1.0", DaemonState::Stopped));
+    let service: Service = serde_json::from_value(install.finish().await.unwrap()).unwrap();
+    assert_eq!((service.id.as_str(), service.version.as_str(), service.state), (APP, "0.1.0", ServiceState::Stopped));
     assert_eq!(install_stages, vec!["installing"]);
-    // The daemon's kept lines at a moment whose content is known: the
-    // examples file's `daemons.logs`.
-    let kept: DaemonLogs = client.call_as(methods::DAEMONS_LOGS, &DaemonLogsParams { id: APP.into(), tail: Some(1) }).await.unwrap();
+    // The service's kept lines at a moment whose content is known: the
+    // examples file's `services.logs`.
+    let kept: ServiceLogs = client.call_as(methods::SERVICES_LOGS, &ServiceLogsParams { id: APP.into(), tail: Some(1) }).await.unwrap();
     assert_eq!(kept.lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>(), ["installed 0.1.0"]);
-    assert!(home.path().join(format!("daemons/{APP}/0.1.0/node_modules/@pocket-hub/daemon")).is_symlink(), "Hub linked its SDK into the package");
+    assert!(home.path().join(format!("services/{APP}/0.1.0/node_modules/@pocketjs/service")).is_symlink(), "Hub linked its SDK into the package");
 
     device.send(json!({"cmd": "open", "app": APP})).await;
     device.expect("channel-open").await;
-    // The daemon's and the device's views of the channel, in either order.
+    // The service's and the device's views of the channel, in either order.
     let (mut open, mut running) = (None, None);
     while open.is_none() || running.is_none() {
-        let e = event(&client, |e| topic(e, "device.changed") || topic(e, "daemon.changed")).await;
+        let e = event(&client, |e| topic(e, "device.changed") || topic(e, "service.changed")).await;
         if topic(&e, "device.changed") && e["device"]["channels"].as_array().is_some_and(|c| c.len() == 1) {
             open = Some(e);
-        } else if topic(&e, "daemon.changed") && e["daemon"]["state"] == "running" && e["daemon"]["channels"] == 1 {
+        } else if topic(&e, "service.changed") && e["service"]["state"] == "running" && e["service"]["channels"] == 1 {
             running = Some(e);
         }
     }
     assert_eq!(open.unwrap()["device"]["channels"][0]["app"], APP);
-    let daemon_pid = running.unwrap()["daemon"]["pid"].as_u64().unwrap() as u32;
+    let service_pid = running.unwrap()["service"]["pid"].as_u64().unwrap() as u32;
 
     // A request each way.
     device.send(json!({"cmd": "request", "tag": "echo", "t": "echo", "args": {"text": "hi"}})).await;
@@ -359,7 +359,7 @@ async fn the_vertical_slice_through_the_binary() {
     device.send(json!({"cmd": "emit", "t": "hello", "args": {"from": "device"}})).await;
     let asked = device.expect("applet-request").await;
     assert_eq!(asked["args"], json!({"a": 19, "b": 23}));
-    // Events from the daemon.
+    // Events from the service.
     let tick = device.wait(|v| v["ev"] == "ch-event" && v["t"] == "tick").await;
     assert!(tick["args"]["n"].is_u64());
     // 1 MiB each way.
@@ -370,35 +370,35 @@ async fn the_vertical_slice_through_the_binary() {
     let blob = device.reply("blob").await;
     assert_eq!(blob["ok"], true, "{blob}");
     assert_eq!((blob["bytes"].as_u64(), blob["value"]["bytes"].as_u64()), (Some(MIB as u64), Some(MIB as u64)));
-    assert_eq!(blob["sum"], blob["value"]["hash"], "the device read the bytes the daemon wrote");
+    assert_eq!(blob["sum"], blob["value"]["hash"], "the device read the bytes the service wrote");
 
-    let daemons: DaemonList = client.call_as(methods::DAEMONS_LIST, &json!({})).await.unwrap();
-    assert_eq!((daemons.daemons[0].state, daemons.daemons[0].channels), (DaemonState::Running, 1));
-    event(&client, |e| topic(e, "daemon.log") && e["id"] == APP).await;
+    let services: ServiceList = client.call_as(methods::SERVICES_LIST, &json!({})).await.unwrap();
+    assert_eq!((services.services[0].state, services.services[0].channels), (ServiceState::Running, 1));
+    event(&client, |e| topic(e, "service.log") && e["id"] == APP).await;
 
-    // The applet exits: the channel closes, the daemon goes idle and stops.
+    // The applet exits: the channel closes, the service goes idle and stops.
     device.send(json!({"cmd": "exit"})).await;
     event(&client, |e| topic(e, "device.changed") && e["device"]["channels"].as_array().is_some_and(|c| c.is_empty())).await;
     // Polled on a client of its own: the line comes a moment after the
     // close, so the number of polls differs between runs, and on the traced
     // client each one would move the id of every later request in the
     // examples file.
-    let closed = daemon_line(&common::client(&socket, "logs").await, "closed (").await;
+    let closed = service_line(&common::client(&socket, "logs").await, "closed (").await;
     let note = format!("\"bytes\":{MIB},\"hash\":{}", fnv32(&pattern(MIB)));
-    assert!(closed.contains(&note), "the daemon read the device's 1 MiB: {closed}");
-    let stopped = event(&client, |e| topic(e, "daemon.changed") && e["daemon"]["state"] == "stopped").await;
-    assert_eq!(stopped["daemon"]["channels"], 0);
-    assert!(stopped["daemon"]["lastExit"]["at"].is_i64());
-    assert!(gone(daemon_pid).await);
+    assert!(closed.contains(&note), "the service read the device's 1 MiB: {closed}");
+    let stopped = event(&client, |e| topic(e, "service.changed") && e["service"]["state"] == "stopped").await;
+    assert_eq!(stopped["service"]["channels"], 0);
+    assert!(stopped["service"]["lastExit"]["at"].is_i64());
+    assert!(gone(service_pid).await);
 
     // Its owner's start, restart and stop.
-    let started: Daemon = client.call_as(methods::DAEMONS_START, &DaemonIdParams { id: APP.into() }).await.unwrap();
-    assert_eq!(started.state, DaemonState::Running);
-    let restarted: Daemon = client.call_as(methods::DAEMONS_RESTART, &DaemonIdParams { id: APP.into() }).await.unwrap();
-    assert_eq!(restarted.state, DaemonState::Running);
+    let started: Service = client.call_as(methods::SERVICES_START, &ServiceIdParams { id: APP.into() }).await.unwrap();
+    assert_eq!(started.state, ServiceState::Running);
+    let restarted: Service = client.call_as(methods::SERVICES_RESTART, &ServiceIdParams { id: APP.into() }).await.unwrap();
+    assert_eq!(restarted.state, ServiceState::Running);
     assert_ne!(restarted.pid, started.pid);
-    let stopped: Daemon = client.call_as(methods::DAEMONS_STOP, &DaemonIdParams { id: APP.into() }).await.unwrap();
-    assert_eq!(stopped.state, DaemonState::Stopped);
+    let stopped: Service = client.call_as(methods::SERVICES_STOP, &ServiceIdParams { id: APP.into() }).await.unwrap();
+    assert_eq!(stopped.state, ServiceState::Stopped);
     assert!(gone(restarted.pid.unwrap()).await);
 
     // --- a Tab5 pairs by the code it shows -------------------------------------
@@ -499,22 +499,22 @@ async fn the_vertical_slice_through_the_binary() {
     assert_eq!((unlinked["id"].as_str(), unlinked["code"].as_str()), (Some(id.as_str()), Some("forgotten")));
     let removed = event(&client, |e| topic(e, "device.removed")).await;
     assert_eq!(removed["id"], id.as_str());
-    client.call(methods::DAEMONS_REMOVE, &DaemonIdParams { id: APP.into() }).await.unwrap();
-    event(&client, |e| topic(e, "daemon.removed")).await;
-    assert_eq!(kind_of(client.call(methods::DAEMONS_START, &DaemonIdParams { id: APP.into() }).await.unwrap_err()), ErrorKind::NotFound);
+    client.call(methods::SERVICES_REMOVE, &ServiceIdParams { id: APP.into() }).await.unwrap();
+    event(&client, |e| topic(e, "service.removed")).await;
+    assert_eq!(kind_of(client.call(methods::SERVICES_START, &ServiceIdParams { id: APP.into() }).await.unwrap_err()), ErrorKind::NotFound);
 
-    // A daemon that cannot start is the error `daemon`; `purge` removes its data.
+    // A service that cannot start is the error `service`; `purge` removes its data.
     let broken = work.path().join("broken");
     std::fs::create_dir_all(&broken).unwrap();
-    std::fs::write(broken.join("pocket.daemon.json"), r#"{"daemon":1,"id":"dev.test.broken","version":"1.0.0","entry":"daemon.ts"}"#).unwrap();
-    std::fs::write(broken.join("daemon.ts"), "process.exit(3);\n").unwrap();
-    client.call(methods::DAEMONS_INSTALL, &DaemonPathParams { path: broken.display().to_string() }).await.unwrap();
-    let error = rpc(client.call(methods::DAEMONS_START, &DaemonIdParams { id: "dev.test.broken".into() }).await.unwrap_err());
+    std::fs::write(broken.join("pocket.service.json"), r#"{"service":1,"id":"dev.test.broken","version":"1.0.0","entry":"service.ts"}"#).unwrap();
+    std::fs::write(broken.join("service.ts"), "process.exit(3);\n").unwrap();
+    client.call(methods::SERVICES_INSTALL, &ServicePathParams { path: broken.display().to_string() }).await.unwrap();
+    let error = rpc(client.call(methods::SERVICES_START, &ServiceIdParams { id: "dev.test.broken".into() }).await.unwrap_err());
     let data = error.data.unwrap();
-    assert_eq!((data.kind, data.id.as_deref()), (ErrorKind::Daemon, Some("dev.test.broken")));
-    assert!(home.path().join("daemon-data/dev.test.broken").is_dir());
-    client.call(methods::DAEMONS_REMOVE, &DaemonRemoveParams { id: "dev.test.broken".into(), purge: Some(true) }).await.unwrap();
-    assert!(!home.path().join("daemon-data/dev.test.broken").exists());
+    assert_eq!((data.kind, data.id.as_deref()), (ErrorKind::Service, Some("dev.test.broken")));
+    assert!(home.path().join("service-data/dev.test.broken").is_dir());
+    client.call(methods::SERVICES_REMOVE, &ServiceRemoveParams { id: "dev.test.broken".into(), purge: Some(true) }).await.unwrap();
+    assert!(!home.path().join("service-data/dev.test.broken").exists());
 
     // The keys setup stored, to look for in the log afterwards.
     let store: Value = serde_json::from_str(&std::fs::read_to_string(home.path().join("store/devices.json")).unwrap()).unwrap();
@@ -527,8 +527,8 @@ async fn the_vertical_slice_through_the_binary() {
     let exit = tokio::time::timeout(Duration::from_secs(10), core.wait()).await.expect("the core exits").unwrap();
     assert!(exit.success());
     assert!(!socket.exists(), "the socket is gone");
-    assert!(!home.path().join("daemon.sock").exists());
-    for pid in [daemon_pid, started.pid.unwrap(), restarted.pid.unwrap()] {
+    assert!(!home.path().join("service.sock").exists());
+    for pid in [service_pid, started.pid.unwrap(), restarted.pid.unwrap()] {
         assert!(gone(pid).await);
     }
     device.kill().await;
@@ -573,11 +573,11 @@ const FIXED_TIME: i64 = 1_767_225_600_000;
 
 impl Machine {
     /// A string with this run's paths and ids replaced, and the numbers that
-    /// differ between runs fixed: a pid in a daemon's log line, a loopback
+    /// differ between runs fixed: a pid in a service's log line, a loopback
     /// port (a peer, a test server), a screenshot's time in its file name.
     fn text(&self, text: &str) -> String {
         if text == self.bun_version {
-            return pocket_hub_daemons::BUN_VERSION.to_owned();
+            return pocket_hub_services::BUN_VERSION.to_owned();
         }
         let mut text = text.to_owned();
         for (from, to) in &self.replacements {
