@@ -267,13 +267,33 @@ in the keychain before it builds:
       --key AuthKey_<key id>.p8 --key-id <key id> --issuer <issuer id>
   ```
 
-The release workflow gets both from the repository's secrets and puts them in
-a keychain of its own: `DEVELOPER_ID_P12` (the certificate, its key and the
-issuing authority, as a .p12 in base64) and `DEVELOPER_ID_P12_PASSWORD`;
-`NOTARY_API_KEY` (the .p8's contents), `NOTARY_API_KEY_ID` and
-`NOTARY_API_ISSUER`. A pull request that changes `package.sh`, `embed-core.sh`
-or the workflow runs the whole build too, notarization included, and keeps
-the archives as the run's artifact.
+### The release runner
+
+The release workflow runs on a self-hosted runner of this repository with
+the label `pocket-hub-release`, never on a machine of GitHub's: it is a Mac
+that holds the certificate and the notarytool profile above in its login
+keychain, and they never leave it (the workflow takes no secret). A pull
+request that changes `package.sh`, `embed-core.sh` or the workflow runs the
+whole build there too, notarization included, and keeps the archives as the
+run's artifact. A pull request from a fork never runs there.
+
+The runner runs as a launchd agent of the owner logged in on that Mac, which
+is what unlocks the keychain and lets Finder lay out the disk image; the
+first run asks once whether the runner may control Finder. It needs Xcode at
+`/Applications/Xcode.app` and Rust from rustup. To set one up, in a folder of
+its own (the runner's release from
+[actions/runner](https://github.com/actions/runner/releases), unpacked there):
+
+```sh
+./config.sh --url https://github.com/pocket-nexus/pocket-hub --labels pocket-hub-release \
+    --token "$(gh api -X POST repos/pocket-nexus/pocket-hub/actions/runners/registration-token -q .token)"
+printf %s "$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" > .path
+./svc.sh install && ./svc.sh start
+```
+
+`.path` is the runner's `PATH`; `config.sh` writes the one of the shell it ran
+in, which the line after it replaces with a plain one (`gh` and `git` from
+Homebrew, cargo from rustup).
 
 Publishing the release deploys [hub.pocket.nexus](https://hub.pocket.nexus)
 again (`.github/workflows/site.yml`): its Download button links the release's

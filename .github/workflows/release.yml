@@ -10,15 +10,13 @@
 # build, notarization included, and keeps the archives as the run's artifact:
 # it is the only test of this path before a tag. So does a run started by hand.
 #
-# Repository secrets (docs/CONTRIBUTING.md "Releasing" has how each is made):
-#   DEVELOPER_ID_P12            the Developer ID Application certificate, its
-#                               private key and the authority that issued it,
-#                               as a .p12 in base64
-#   DEVELOPER_ID_P12_PASSWORD   the .p12's password
-#   NOTARY_API_KEY              an App Store Connect API key of the team
-#                               (AuthKey_<id>.p8, its contents)
-#   NOTARY_API_KEY_ID           that key's id
-#   NOTARY_API_ISSUER           the team's issuer id for its keys
+# The job runs on a self-hosted runner of this repository, labelled
+# pocket-hub-release: a Mac whose login keychain holds the Developer ID
+# certificate with its private key and notarytool's profile pocket-hub-notary,
+# the two package.sh signs and notarizes with. Neither leaves that Mac: the
+# workflow takes no secret. The runner runs as a launchd agent of the logged-in
+# owner, where the keychain is unlocked and Finder can lay out the disk image.
+# docs/CONTRIBUTING.md "The release runner" has how one is set up.
 name: release
 
 on:
@@ -36,68 +34,30 @@ permissions:
 
 jobs:
   package:
-    # The secrets are not given to a pull request from a fork: it would only fail.
+    # A pull request from a fork never reaches the Mac that signs: its code
+    # would run there. (A fork's workflow change cannot lift this either: the
+    # repository asks for approval before any outside contributor's run.)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    # Xcode 27, which the releases so far were built with; the image is
-    # macOS 26 with Xcode 27.
-    runs-on: xcode-27
+    runs-on: [self-hosted, macOS, ARM64, pocket-hub-release]
     timeout-minutes: 60
     concurrency:
       group: release-${{ github.ref }}
       cancel-in-progress: false
     permissions:
       contents: write # the draft release
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: true
 
-      # embed-core.sh runs cargo where rustup's own installer puts it,
-      # ~/.cargo/bin. The image installs rustup with Homebrew, whose proxies
-      # are elsewhere, so rustup is installed here the way a Mac has it.
+      # What package.sh uses from the Mac: Xcode at /Applications/Xcode.app,
+      # cargo where rustup puts it, the Developer ID (package.sh checks the
+      # notarytool profile itself, before it builds).
       - name: Toolchains
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --no-modify-path
           "$HOME/.cargo/bin/cargo" --version
-          xcodebuild -version
-
-      # A keychain of this run alone, holding the Developer ID and notarytool's
-      # profile under the name package.sh asks for. It is made the default
-      # keychain and put in the search list, where codesign and notarytool
-      # look, and codesign is let use the key without a dialog.
-      - name: Signing keychain
-        env:
-          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
-          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
-          NOTARY_API_KEY: ${{ secrets.NOTARY_API_KEY }}
-          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
-          NOTARY_API_ISSUER: ${{ secrets.NOTARY_API_ISSUER }}
-        run: |
-          for name in DEVELOPER_ID_P12 DEVELOPER_ID_P12_PASSWORD NOTARY_API_KEY NOTARY_API_KEY_ID NOTARY_API_ISSUER; do
-            if [ -z "$(printenv "$name")" ]; then
-              echo "::error::the repository secret $name is not set"
-              exit 1
-            fi
-          done
-          keychain="$RUNNER_TEMP/signing.keychain-db"
-          password="$(openssl rand -hex 24)"
-          security create-keychain -p "$password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$password" "$keychain"
-          secrets="$(mktemp -d)"
-          printf '%s' "$DEVELOPER_ID_P12" | base64 --decode > "$secrets/developer-id.p12"
-          security import "$secrets/developer-id.p12" -k "$keychain" -f pkcs12 \
-            -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          security default-keychain -d user -s "$keychain"
-          printf '%s\n' "$NOTARY_API_KEY" > "$secrets/AuthKey.p8"
-          xcrun notarytool store-credentials pocket-hub-notary --keychain "$keychain" \
-            --key "$secrets/AuthKey.p8" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER"
-          rm -rf "$secrets"
-          security find-identity -v -p codesigning "$keychain"
+          /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -version
+          security find-identity -v -p codesigning | grep -F '"Developer ID Application: TypeSafe Limited (9FDAZCRAN3)"'
 
       - name: Build, sign and notarize
         run: app/scripts/package.sh
@@ -146,6 +106,3 @@ jobs:
             --title "Pocket Hub $GITHUB_REF_NAME" --notes "$notes" \
             "Pocket-Hub-$VERSION-arm64.dmg" "Pocket-Hub-$VERSION-arm64.zip"
 
-      - name: Remove the signing keychain
-        if: always()
-        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
