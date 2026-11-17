@@ -88,6 +88,10 @@ impl ServiceHost {
     /// cannot start.
     pub async fn start(options: HostOptions) -> Result<Arc<ServiceHost>, String> {
         let sdk = crate::sdk::materialize(&options.home).map_err(|error| format!("Pocket Hub cannot write the service SDK into its home: {error}."))?;
+        // Canonical: a package's link to it is followed inside the
+        // enclosure, which names no symbolic link above it (`/var`, a home
+        // reached through a link).
+        let sdk = std::fs::canonicalize(&sdk).map_err(|error| format!("Pocket Hub cannot find the service SDK in its home: {error}."))?;
         let mut config = Config::new(&options.home, &options.socket);
         config.bun_path = options.bun.clone();
         config.sdk = Some(sdk);
@@ -398,6 +402,8 @@ fn start_error(id: &str, error: StartError) -> RpcError {
         StartError::NotInstalled(id) => no_service(&id),
         StartError::Earlier(_) => service_error(id, EARLIER_SENTENCE).with(|data| data.reason = Some("earlier".into())),
         StartError::StoreFormat(_) => service_error(id, STORE_FORMAT_SENTENCE).with(|data| data.reason = Some("store_format".into())),
+        // SERVICE-PROTOCOL.md §2: nothing runs outside the enclosure.
+        StartError::Enclosure(why) => service_error(id, sentence(&format!("the service did not start: {why}"))).with(|data| data.reason = Some("enclosure".into())),
         StartError::Failed(why) => service_error(id, sentence(&format!("the service did not start: {why}"))),
     }
 }

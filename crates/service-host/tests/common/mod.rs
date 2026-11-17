@@ -11,6 +11,10 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 /// The system `bun`, or None with a note: the tests that run a service are
 /// skipped on a computer without Bun.
 pub fn system_bun() -> Option<PathBuf> {
+    // `PH_TEST_BUN` names another Bun (the pinned one the host downloads).
+    if let Some(bun) = std::env::var_os("PH_TEST_BUN") {
+        return Some(PathBuf::from(bun));
+    }
     let path = std::env::var_os("PATH")?;
     let found = std::env::split_paths(&path).map(|dir| dir.join("bun")).find(|bun| bun.is_file());
     if found.is_none() {

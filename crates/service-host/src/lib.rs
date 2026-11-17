@@ -29,6 +29,7 @@ mod archive;
 mod channel;
 mod config;
 mod connector;
+pub mod enclosure;
 pub mod host;
 mod hosts;
 mod instance;
