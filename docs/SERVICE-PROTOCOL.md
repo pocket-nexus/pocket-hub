@@ -133,7 +133,7 @@ service                                           Hub
 | --- | --- | --- |
 | `service.hello` | service to Hub, `HANDSHAKE` | `{"t":"service.hello","protocol":2,"token":<POCKET_SERVICE_TOKEN>,"app":<applet id>}` |
 | `service.ready` | Hub to service, `HANDSHAKE` | `{"t":"service.ready","app":<applet id>,"data":<data folder>}` |
-| `service.refused` | Hub to service, `HANDSHAKE` | `{"t":"service.refused","message":<text>}`: an unknown token, or a `protocol` other than **2** (1 is the exchange of Pocket Hub 0.2.1 and earlier). Hub closes |
+| `service.refused` | Hub to service, `HANDSHAKE` | `{"t":"service.refused","message":<text>}`: an unknown token, or a `protocol` other than **2** (1 is the exchange of Pocket Hub 0.2.2 and earlier). Hub closes |
 | `channel.offer` | Hub to service, `EVENT` id 0 | below |
 | `service.stop` | Hub to service, `EVENT` id 0 | `{"t":"service.stop"}`: finish and exit |
 

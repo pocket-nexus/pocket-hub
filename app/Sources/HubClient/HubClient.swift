@@ -293,7 +293,7 @@ public actor HubClient: HubCalling {
         } catch HubError.rpc(code: -32602, message: _) {
             // A core of another protocol refuses this hello with `-32602` and a
             // sentence instead of answering with its own version (CONTROL-API.md
-            // §1, Hello): a resident core of Pocket Hub 0.2.1 (protocol 1) meets
+            // §1, Hello): a resident core of Pocket Hub 0.2.2 (protocol 1) meets
             // this app so after an update. The app's own `client` is never the
             // cause, so the refusal is the version's.
             watchdog.cancel()

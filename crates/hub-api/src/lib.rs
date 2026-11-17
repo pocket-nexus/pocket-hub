@@ -20,7 +20,7 @@ pub use rpc::{ErrorData, ErrorKind, RpcError};
 pub use types::*;
 
 /// The protocol version a client names in `hub.hello` (CONTROL-API.md §1,
-/// Hello). 1 was Pocket Hub 0.2.1's and earlier, before services took their
+/// Hello). 1 was Pocket Hub 0.2.2's and earlier, before services took their
 /// names; the core refuses it like any other version.
 pub const PROTOCOL: u32 = 2;
 

@@ -41,7 +41,7 @@ notification before it is ignored. A second `hello` is `-32600`; another
 answered `-32700`; a line over 1 MiB is answered `-32600` and the connection is
 closed.
 
-**The protocol is 2.** Version 1 is the API of Pocket Hub 0.2.1 and earlier,
+**The protocol is 2.** Version 1 is the API of Pocket Hub 0.2.2 and earlier,
 before the methods, objects and events of services took their names (§3, §4).
 A client that says 1 is refused with `-32602` and one sentence that names both
 versions, and a core of version 1 refuses a client that says 2 the same way;

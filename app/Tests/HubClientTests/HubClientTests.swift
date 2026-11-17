@@ -255,8 +255,9 @@ struct HubClientTests {
         await client.stop()
     }
 
-    /// A resident core of Pocket Hub 0.2.1 speaks protocol 1 and refuses this
-    /// client's hello with `-32602` and its sentence, word for word.
+    /// A resident core of Pocket Hub 0.2.2 or earlier speaks protocol 1 and
+    /// refuses this client's hello with `-32602` and its sentence, word for
+    /// word.
     @Test func aCoreThatRefusesTheHelloIsAnotherProtocol() async throws {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }

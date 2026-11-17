@@ -58,10 +58,10 @@ async fn hello_first_and_protocol_errors() {
     assert_ne!(core.core.link_port, 0);
 
     // A hello of another protocol, or with a bad kind, is refused. Protocol 1
-    // is Pocket Hub 0.2.1's, before services took their names: one sentence
-    // that names both versions.
+    // is Pocket Hub 0.2.2's and earlier, before services took their names:
+    // one sentence that names both versions.
     let other = Client::connect_raw(&core.socket, None).await.unwrap();
-    let old = rpc(other.call(methods::HELLO, &json!({"protocol": 1, "client": {"kind": "gui", "name": "Pocket Hub", "version": "0.2.1"}})).await.unwrap_err());
+    let old = rpc(other.call(methods::HELLO, &json!({"protocol": 1, "client": {"kind": "gui", "name": "Pocket Hub", "version": "0.2.2"}})).await.unwrap_err());
     assert_eq!((old.code, old.message.as_str()), (INVALID_PARAMS, "This Hub speaks protocol 2, not 1."));
     assert_eq!(rpc(other.call(methods::HELLO, &json!({"protocol": 3, "client": {"kind": "cli", "name": "x", "version": "1"}})).await.unwrap_err()).code, INVALID_PARAMS);
     assert_eq!(rpc(other.call(methods::HELLO, &json!({"protocol": PROTOCOL, "client": {"kind": "robot", "name": "x", "version": "1"}})).await.unwrap_err()).code, INVALID_PARAMS);

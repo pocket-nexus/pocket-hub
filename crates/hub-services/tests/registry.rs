@@ -206,7 +206,7 @@ async fn invalid_manifests_are_refused_and_install_nothing() {
     assert!(registry.list().is_empty());
 }
 
-/// A package of Pocket Hub 0.2.1 and earlier, written before services took
+/// A package of Pocket Hub 0.2.2 and earlier, written before services took
 /// their names, is not read under its old names: the line names the file Hub
 /// expects, and an old version key in the new file is refused as malformed.
 #[tokio::test]
