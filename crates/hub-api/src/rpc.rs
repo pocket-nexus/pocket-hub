@@ -51,12 +51,20 @@ impl ErrorKind {
     }
 }
 
-/// `error.data` of an operation's failure. Only the members of its kind are
-/// present.
+/// `error.data`: of an operation's failure (`kind` and the members of that
+/// kind), or of a hello refused for its protocol (`protocol` alone,
+/// CONTROL-API.md §1, Hello).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ErrorData {
-    pub kind: ErrorKind,
+    /// Present for every failure of an operation (`error.code` 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ErrorKind>,
+    /// A hello refused for its protocol (`-32602`): the protocol the core
+    /// speaks. A core of protocol 1 (Pocket Hub 0.2.2 and earlier) sends no
+    /// `data` at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<u32>,
     /// `busy`: who holds the device.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub holder: Option<Holder>,
@@ -91,7 +99,11 @@ pub struct ErrorData {
 
 impl ErrorData {
     pub fn new(kind: ErrorKind) -> Self {
-        Self { kind, holder: None, code: None, phase: None, step: None, reason: None, detail: None, id: None, device: None, confirmed: None }
+        Self { kind: Some(kind), ..Self::empty() }
+    }
+
+    fn empty() -> Self {
+        Self { kind: None, protocol: None, holder: None, code: None, phase: None, step: None, reason: None, detail: None, id: None, device: None, confirmed: None }
     }
 }
 
@@ -120,6 +132,26 @@ impl RpcError {
     pub fn invalid_params(message: impl Into<String>) -> Self {
         Self::protocol(INVALID_PARAMS, message)
     }
+    /// A hello refused for its protocol: `-32602`, one sentence that names
+    /// both versions, and `data: {protocol}` with the core's own
+    /// (CONTROL-API.md §1, Hello).
+    pub fn other_protocol(core: u32, client: u32) -> Self {
+        let data = ErrorData { protocol: Some(core), ..ErrorData::empty() };
+        Self { code: INVALID_PARAMS, message: format!("This Hub speaks protocol {core}, not {client}."), data: Some(Box::new(data)) }
+    }
+    /// For an error answering `hub.hello` alone: the protocol a core speaks
+    /// when it refused the client's. `data.protocol`, or 1 for a `-32602`
+    /// without `data`, as a core of Pocket Hub 0.2.2 and earlier answers
+    /// (CONTROL-API.md §1, Hello). None for any other error.
+    pub fn refused_protocol(&self) -> Option<u32> {
+        if self.code != INVALID_PARAMS {
+            return None;
+        }
+        match &self.data {
+            None => Some(1),
+            Some(data) => data.protocol,
+        }
+    }
     /// A failure of the operation itself.
     pub fn op(kind: ErrorKind, message: impl Into<String>) -> Self {
         Self { code: OPERATION_FAILED, message: message.into(), data: Some(Box::new(ErrorData::new(kind))) }
@@ -132,6 +164,6 @@ impl RpcError {
     }
     /// The operation kind, None for a protocol error.
     pub fn kind(&self) -> Option<ErrorKind> {
-        self.data.as_ref().map(|data| data.kind)
+        self.data.as_ref().and_then(|data| data.kind)
     }
 }

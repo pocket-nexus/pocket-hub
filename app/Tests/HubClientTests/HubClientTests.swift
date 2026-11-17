@@ -238,7 +238,8 @@ struct HubClientTests {
         await client.stop()
     }
 
-    @Test func refusesAnotherProtocol() async throws {
+    /// A core that answers in a higher protocol is a newer Pocket Hub: left alone.
+    @Test func aCoreAnsweringInAHigherProtocolIsNewer() async throws {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }
         let server = try RawServer(home: home)
@@ -249,16 +250,18 @@ struct HubClientTests {
         let peer = await server.nextPeer()
         let hello = try await peer.next()
         peer.write(#"{"jsonrpc":"2.0","id":\#(hello["id"]!.intValue!),"result":{"protocol":3,"hub":{"id":"h","name":"n","version":"9"}}}"# + "\n")
-        await eventually("incompatible") {
-            await log.states.contains(where: { if case .unreachable(.incompatible(hubProtocol: 3), _) = $0 { true } else { false } })
+        await eventually("newer") {
+            await log.states.contains(where: { if case .unreachable(.newerVersionRunning, _) = $0 { true } else { false } })
         }
         await client.stop()
     }
 
     /// A resident core of Pocket Hub 0.2.2 or earlier speaks protocol 1 and
-    /// refuses this client's hello with `-32602` and its sentence, word for
-    /// word.
-    @Test func aCoreThatRefusesTheHelloIsAnotherProtocol() async throws {
+    /// refuses this client's hello with `-32602`, its sentence word for word
+    /// and no `data` (measured against the binaries built from `v0.2.1` and
+    /// `v0.2.2`). A client with no core of its own to start replaces nothing:
+    /// it says which protocol it met.
+    @Test func aRefusalWithoutDataIsProtocolOne() async throws {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }
         let server = try RawServer(home: home)
@@ -271,7 +274,7 @@ struct HubClientTests {
         #expect(hello["params"]?["protocol"] == 2)
         peer.write(#"{"jsonrpc":"2.0","id":\#(hello["id"]!.intValue!),"error":{"code":-32602,"message":"This Hub speaks protocol 1, not 2."}}"# + "\n")
         await eventually("incompatible") {
-            await log.states.contains(where: { if case .unreachable(.incompatible(hubProtocol: nil), _) = $0 { true } else { false } })
+            await log.states.contains(where: { if case .unreachable(.incompatible(hubProtocol: 1), _) = $0 { true } else { false } })
         }
         await client.stop()
     }

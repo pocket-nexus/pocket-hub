@@ -70,13 +70,20 @@ public struct CoreLauncher: Sendable {
     public var executable: @Sendable () -> URL?
     public var arguments: [String]
     public var environment: [String: String]
+    /// The version of the core this launcher starts, which the client compares
+    /// with the core it finds (CONTROL-API.md §1, "Starting and stopping the
+    /// core"). nil when it is not known: a core of the same protocol is then
+    /// never replaced for its version.
+    public var version: @Sendable () -> String?
 
     public init(executable: @escaping @Sendable () -> URL?, arguments: [String] = [],
-                environment: [String: String] = ProcessInfo.processInfo.environment)
+                environment: [String: String] = ProcessInfo.processInfo.environment,
+                version: @escaping @Sendable () -> String? = { nil })
     {
         self.executable = executable
         self.arguments = arguments
         self.environment = environment
+        self.version = version
     }
 
     /// The app's core: `$POCKET_HUBD` when it is set, else the app bundle's
@@ -90,13 +97,38 @@ public struct CoreLauncher: Sendable {
                                 environment: [String: String] = ProcessInfo.processInfo.environment) -> CoreLauncher
     {
         let bundleURL = bundle.bundleURL
-        return CoreLauncher(executable: {
+        let executable: @Sendable () -> URL? = {
             if let explicit = environment["POCKET_HUBD"], !explicit.isEmpty {
                 return URL(fileURLWithPath: explicit)
             }
             guard bundleURL.pathExtension == "app" else { return nil }
             return bundleURL.appending(path: "Contents/Helpers/pocket-hubd")
-        }, environment: environment)
+        }
+        // The core says its own version: the one that will run is the truth,
+        // also for a `$POCKET_HUBD` of another build.
+        return CoreLauncher(executable: executable, environment: environment,
+                            version: { executable().flatMap(CoreLauncher.reportedVersion(of:)) })
+    }
+
+    /// What `<core> --version` prints (`pocket-hubd 0.2.2`), the version alone;
+    /// nil when the program cannot be run or prints something else. The core
+    /// answers `--version` before it touches its home.
+    public static func reportedVersion(of executable: URL) -> String? {
+        guard FileManager.default.isExecutableFile(atPath: executable.path) else { return nil }
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = ["--version"]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0, let text = String(data: data, encoding: .utf8) else { return nil }
+        let words = text.split(whereSeparator: \.isWhitespace)
+        guard words.count == 2, words[0] == "pocket-hubd", SemanticVersion(String(words[1])) != nil else { return nil }
+        return String(words[1])
     }
 
     /// The core's executable when it is there and can be run.

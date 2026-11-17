@@ -217,6 +217,30 @@ struct ConnectionStatusView: View {
                 ContentUnavailableView {
                     Label { Text("Starting Pocket Hub…") } icon: { ProgressView().controlSize(.large) }
                 }
+            case .replacingCore:
+                // The earlier version found running stops and this one starts
+                // (CONTROL-API.md §1); to the owner that is the update ending.
+                ContentUnavailableView {
+                    Label { Text("Updating Pocket Hub…") } icon: { ProgressView().controlSize(.large) }
+                }
+            case .unreachable(.newerVersionRunning, _):
+                // Never replaced; this copy stands aside and connects by itself
+                // once the newer one has stopped.
+                ContentUnavailableView {
+                    Label("A Newer Pocket Hub Is Running", systemImage: "arrow.up.circle")
+                } description: {
+                    Text("A newer version of Pocket Hub is already running on this Mac, and this copy is older. Use the newer copy, or update this one.")
+                }
+            case .unreachable(.olderVersionDidNotStop, _):
+                // Asked to stop and not gone after 20 s: nothing more is done
+                // (no signal) until the owner asks.
+                ContentUnavailableView {
+                    Label("Pocket Hub Couldn't Finish Updating", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text("An earlier version of Pocket Hub is still running on this Mac and didn't stop. Restart this Mac to finish updating.")
+                } actions: {
+                    Button("Try Again") { model.retryNow() }
+                }
             case .stopped:
                 ContentUnavailableView("Pocket Hub Is Stopped", systemImage: "stop.circle")
             case .unreachable(.coreFailedToStart(let line), _):
@@ -244,11 +268,13 @@ struct ConnectionStatusView: View {
                     VStack(spacing: 6) {
                         switch reason {
                         case .coreNotFound:
-                            Text("Its background service is missing from this copy of the app. Reinstall Pocket Hub.")
+                            Text("Part of Pocket Hub is missing from this copy of the app. Reinstall Pocket Hub.")
                         case .coreFailedToStart:
                             EmptyView()
                         case .incompatible:
-                            Text("Its background service is a different version. Reinstall Pocket Hub.")
+                            Text("A different version of Pocket Hub is running on this Mac.")
+                        case .newerVersionRunning, .olderVersionDidNotStop:
+                            EmptyView() // shown above
                         case .notRunning, .failed:
                             Text("Your devices will reappear as soon as it is back.")
                         }

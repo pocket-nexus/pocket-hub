@@ -449,6 +449,13 @@ public struct HelloResult: Codable, Sendable, Hashable {
     public var hub: HubIdentity
 }
 
+/// What a core answered to `hub.hello` (CONTROL-API.md §1, Hello).
+public enum HelloAnswer: Sendable, Hashable {
+    case accepted(HelloResult)
+    /// Refused for the protocol: the one the core speaks, and its sentence.
+    case refused(coreProtocol: Int, message: String)
+}
+
 public struct HubStatus: Codable, Sendable, Hashable {
     public struct CarrierInfo: Codable, Sendable, Hashable {
         public var kind: Carrier

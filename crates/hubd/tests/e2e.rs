@@ -128,6 +128,17 @@ async fn the_vertical_slice_through_the_binary() {
         .expect("pocket-hubd runs");
     wait_for_socket(&socket).await;
 
+    // --- a hello in another protocol (CONTROL-API.md §1, Hello) -------------
+    // Refused with `-32602`, and the refusal says the core's own protocol, so
+    // a client of another version learns it without reading the sentence. Its
+    // lines are the examples file's `-32602`.
+    let refused_transcript = Transcript::default();
+    let refused = Client::connect_raw(&socket, Some(refused_transcript.clone())).await.unwrap();
+    let error = rpc(refused.call(methods::HELLO, &HelloParams { protocol: 1, client: info(ClientKind::Gui, "Pocket Hub") }).await.unwrap_err());
+    assert_eq!((error.code, error.message.as_str()), (-32602, "This Hub speaks protocol 2, not 1."));
+    assert_eq!((error.refused_protocol(), error.data.as_ref().and_then(|data| data.protocol), error.kind()), (Some(PROTOCOL), Some(PROTOCOL), None));
+    drop(refused);
+
     // --- hello, the hub ------------------------------------------------------
     let transcript = Transcript::default();
     let client = Client::connect_raw(&socket, Some(transcript.clone())).await.unwrap();
@@ -227,7 +238,7 @@ async fn the_vertical_slice_through_the_binary() {
     device_where(&client, &id, |d| d.apps.as_ref().is_some_and(|apps| apps.len() == 2 && apps.iter().all(|app| app.id != "dev.app.0"))).await;
     let refused = rpc(client.call(methods::DEVICES_REMOVE, &RemoveParams { device: id.clone(), app: "home".into() }).await.unwrap_err());
     let data = refused.data.unwrap();
-    assert_eq!((data.kind, data.code.as_deref(), data.reason.as_deref()), (ErrorKind::Link, Some("rejected"), Some("home")));
+    assert_eq!((data.kind.unwrap(), data.code.as_deref(), data.reason.as_deref()), (ErrorKind::Link, Some("rejected"), Some("home")));
     // The latest release, under the name of the program the device runs.
     let mut update = client.start(methods::DEVICES_INSTALL_PROGRAM, &InstallProgramParams { device: id.clone(), program: None, launch: Some(false) }).await.unwrap();
     let mut update_phases = Vec::new();
@@ -243,7 +254,7 @@ async fn the_vertical_slice_through_the_binary() {
     // A tag the release source does not have.
     let missing = rpc(client.call(methods::DEVICES_INSTALL_PROGRAM, &InstallProgramParams { device: id.clone(), program: Some(ProgramChoice::Release { release: "v1999.01.01".into() }), launch: None }).await.unwrap_err());
     let data = missing.data.unwrap();
-    assert_eq!((data.kind, data.reason.as_deref()), (ErrorKind::Release, Some("not_found")));
+    assert_eq!((data.kind.unwrap(), data.reason.as_deref()), (ErrorKind::Release, Some("not_found")));
 
     // With `launch` (the default), the device restarts into the program: the
     // mutex is held (`launching`) until it links again.
@@ -427,7 +438,7 @@ async fn the_vertical_slice_through_the_binary() {
     // the device's: nothing is stored, and the device asks again.
     assert_eq!(kind_of(client.call(methods::PAIRING_ANSWER, &answer("*", "31415")).await.unwrap_err()), ErrorKind::Invalid);
     let wrong = rpc(client.call(methods::PAIRING_ANSWER, &answer("*", "271828")).await.unwrap_err()).data.unwrap();
-    assert_eq!((wrong.kind, wrong.reason.as_deref()), (ErrorKind::Pairing, Some("wrong_code")));
+    assert_eq!((wrong.kind.unwrap(), wrong.reason.as_deref()), (ErrorKind::Pairing, Some("wrong_code")));
     event(&client, waiting(1)).await;
     assert_eq!(kind_of(client.call(methods::DEVICES_GET, &DeviceParams { device: tab5.id.clone() }).await.unwrap_err()), ErrorKind::NotFound);
 
@@ -462,7 +473,7 @@ async fn the_vertical_slice_through_the_binary() {
         (methods::STORE_INSTALL, json!({"device": tab5.id, "app": notes.id})),
     ] {
         let refused = rpc(client.call(method, &params).await.unwrap_err()).data.unwrap();
-        assert_eq!((refused.kind, refused.code.as_deref()), (ErrorKind::Link, Some("unsupported")), "{method}");
+        assert_eq!((refused.kind.unwrap(), refused.code.as_deref()), (ErrorKind::Link, Some("unsupported")), "{method}");
     }
 
     // Its applets come from its own store page, which Hub serves for its
@@ -511,7 +522,7 @@ async fn the_vertical_slice_through_the_binary() {
     client.call(methods::SERVICES_INSTALL, &ServicePathParams { path: broken.display().to_string() }).await.unwrap();
     let error = rpc(client.call(methods::SERVICES_START, &ServiceIdParams { id: "dev.test.broken".into() }).await.unwrap_err());
     let data = error.data.unwrap();
-    assert_eq!((data.kind, data.id.as_deref()), (ErrorKind::Service, Some("dev.test.broken")));
+    assert_eq!((data.kind.unwrap(), data.id.as_deref()), (ErrorKind::Service, Some("dev.test.broken")));
     assert!(home.path().join("service-data/dev.test.broken").is_dir());
     client.call(methods::SERVICES_REMOVE, &ServiceRemoveParams { id: "dev.test.broken".into(), purge: Some(true) }).await.unwrap();
     assert!(!home.path().join("service-data/dev.test.broken").exists());
@@ -535,7 +546,7 @@ async fn the_vertical_slice_through_the_binary() {
     // No link key in any line of the log, nor in any answer or event.
     let log = std::fs::read_to_string(home.path().join("logs/hubd.log")).unwrap();
     assert!(log.contains("Pocket Hub core stopped"));
-    let lines: Vec<String> = transcript.lines().iter().chain(other_transcript.lines().iter()).map(|(_, line)| line.to_string()).collect();
+    let lines: Vec<String> = transcript.lines().iter().chain(other_transcript.lines().iter()).chain(refused_transcript.lines().iter()).map(|(_, line)| line.to_string()).collect();
     for key in &keys {
         assert_eq!(key.len(), 64);
         assert!(!log.contains(key.as_str()), "a link key is in hubd.log");
@@ -555,7 +566,7 @@ async fn the_vertical_slice_through_the_binary() {
         ],
         bun_version,
     };
-    examples(&[transcript, other_transcript], &machine);
+    examples(&[refused_transcript, transcript, other_transcript], &machine);
 }
 
 /// What makes a run this computer's and this moment's, replaced in the

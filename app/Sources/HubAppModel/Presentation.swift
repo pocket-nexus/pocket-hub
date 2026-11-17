@@ -249,7 +249,7 @@ public struct CoreStartFailure: Equatable, Sendable {
             title = String(localized: "Pocket Hub can't use its folder.")
             advice = String(localized: "Check that the folder below exists and that you can write to it, then click Try Again.")
         } else {
-            title = String(localized: "Pocket Hub's background service couldn't start.")
+            title = String(localized: "Pocket Hub couldn't start.")
             advice = String(localized: "Click Try Again. If it keeps happening, restart this Mac.")
         }
     }

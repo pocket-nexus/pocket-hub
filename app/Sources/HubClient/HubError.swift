@@ -119,10 +119,6 @@ public enum HubError: Error, Sendable, Equatable {
     case disconnected
     /// Hub answered something this client cannot read.
     case invalidResponse(String)
-    /// Hub speaks another protocol version: `hub` is the version it answered
-    /// with, nil when it refused this client's hello instead.
-    case incompatibleProtocol(hub: Int?, client: Int)
-
     /// The operation error's kind, when this is one.
     public var kind: HubOperationError.Kind? {
         if case .operation(let error) = self { return error.kind }

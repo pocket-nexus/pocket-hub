@@ -104,13 +104,13 @@ public struct UserFacingError: Error, Identifiable, Sendable, Equatable {
                       advice: String(localized: "It is restarting. Try again in a moment."),
                       detail: nil)
         case .rpc(_, let message), .invalidResponse(let message):
-            self.init(title: String(localized: "This version of Pocket Hub doesn't match its background service."),
-                      advice: String(localized: "Reinstall Pocket Hub to bring both up to date."),
+            // A call this Pocket Hub does not understand: the app and what runs
+            // on the Mac differ. Opening the app again meets it anew and takes
+            // over from an earlier version (CONTROL-API.md §1); reinstalling
+            // alone would not stop it.
+            self.init(title: String(localized: "This copy of Pocket Hub doesn't match the Pocket Hub running on this Mac."),
+                      advice: String(localized: "Quit Pocket Hub and open it again."),
                       detail: message)
-        case .incompatibleProtocol:
-            self.init(title: String(localized: "This version of Pocket Hub doesn't match its background service."),
-                      advice: String(localized: "Reinstall Pocket Hub to bring both up to date."),
-                      detail: nil)
         }
     }
 }

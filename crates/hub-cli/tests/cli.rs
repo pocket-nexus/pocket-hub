@@ -635,3 +635,92 @@ fn a_started_core_holds_no_descriptor_of_its_client() {
     drop(file);
     shutdown(home.path());
 }
+
+/// A resident core of Pocket Hub 0.2.2, answering as that release does
+/// (measured against the binaries built from `v0.2.1` and `v0.2.2`):
+/// protocol 1, and any other protocol refused with `-32602`, its sentence
+/// and no `data`. It answers `hub.hello` and `hub.shutdown` alone, records
+/// every call, and removes its socket after answering `hub.shutdown`, as a
+/// core does.
+struct EarlierCore {
+    socket: PathBuf,
+    calls: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl EarlierCore {
+    fn start(home: &Path) -> Self {
+        use std::io::Write;
+        let socket = home.join("hubd.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (recorded, path) = (calls.clone(), socket.clone());
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { return };
+                let mut writer = stream.try_clone().unwrap();
+                let mut hello = false;
+                for line in BufReader::new(stream).lines() {
+                    let Ok(line) = line else { break };
+                    let request: Value = serde_json::from_str(&line).unwrap();
+                    let (id, method) = (request["id"].clone(), request["method"].as_str().unwrap_or("").to_owned());
+                    let answer = if method == "hub.hello" {
+                        let protocol = request["params"]["protocol"].as_u64().unwrap_or(0);
+                        recorded.lock().unwrap().push(format!("hub.hello {protocol}"));
+                        if protocol == 1 {
+                            hello = true;
+                            serde_json::json!({"jsonrpc": "2.0", "id": id, "result": {"protocol": 1, "hub": {"id": "0011223344556677", "name": "Studio Mac", "version": "0.2.2"}}})
+                        } else {
+                            serde_json::json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32602, "message": format!("This Hub speaks protocol 1, not {protocol}.")}})
+                        }
+                    } else {
+                        recorded.lock().unwrap().push(method.clone());
+                        if hello {
+                            serde_json::json!({"jsonrpc": "2.0", "id": id, "result": {}})
+                        } else {
+                            serde_json::json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32600, "message": "The first request must be hub.hello."}})
+                        }
+                    };
+                    writeln!(writer, "{answer}").unwrap();
+                    if method == "hub.shutdown" && hello {
+                        let _ = std::fs::remove_file(&path);
+                        return;
+                    }
+                }
+            }
+        });
+        Self { socket, calls }
+    }
+
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+/// CONTROL-API.md §1: the command line never replaces a core. Against one of
+/// another protocol it says so in one line and starts nothing; `shutdown`
+/// stops it through the two frozen methods, in its own protocol, and calls
+/// nothing else in that dialect.
+#[test]
+fn a_core_of_another_protocol_is_named_and_stopped_never_replaced() {
+    let home = home();
+    let earlier = EarlierCore::start(home.path());
+    let status = run(home.path(), &["status"]);
+    assert_eq!(status.status, 3, "{}", status.stderr);
+    assert_eq!(
+        status.stderr.trim(),
+        format!(
+            "pocket-hub: The Pocket Hub core on {} speaks protocol 1 of the control API and this pocket-hub speaks 2: use the pocket-hub of its version, or stop it with `pocket-hub shutdown`.",
+            earlier.socket.display()
+        )
+    );
+    assert!(!home.path().join("logs").exists(), "no core of this version was started beside it");
+    assert_eq!(earlier.calls(), ["hub.hello 2"]);
+
+    let stopped = run(home.path(), &["shutdown"]);
+    assert_eq!((stopped.status, stopped.stdout.trim()), (0, "The Pocket Hub core stopped."), "{}", stopped.stderr);
+    assert_eq!(earlier.calls(), ["hub.hello 2", "hub.hello 2", "hub.hello 1", "hub.shutdown"]);
+    assert!(!earlier.socket.exists());
+    let none = run(home.path(), &["shutdown"]);
+    assert_eq!(none.status, 3);
+    assert!(none.stderr.contains("there is nothing to stop"), "{}", none.stderr);
+}

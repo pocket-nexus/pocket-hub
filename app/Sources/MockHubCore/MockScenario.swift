@@ -392,6 +392,13 @@ public struct MockScenario: Sendable {
     public var hubId = "fedcba9876543210"
     public var hubName = "Studio Mac"
     public var hubVersion = "0.1.0-mock"
+    /// The control API protocol this core speaks (CONTROL-API.md §1, Hello).
+    /// A hello in another is refused with `-32602` and `data: {protocol}`; a
+    /// core of protocol 1 answers as Pocket Hub 0.2.2 and earlier, without `data`.
+    public var speaksProtocol = 2
+    /// Whether `hub.shutdown` stops it. False stands for a core that answers
+    /// and keeps running.
+    public var stopsOnShutdown = true
     public var devices: [MockDevice] = []
     public var services: [MockService] = []
     public var candidates: [SetupCandidate] = []

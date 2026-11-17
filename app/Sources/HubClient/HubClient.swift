@@ -11,10 +11,17 @@ public enum UnreachableReason: Sendable, Equatable {
     /// answered: the core's own one-line reason (English), or the spawn error.
     /// The client does not start it again until `retry()`.
     case coreFailedToStart(String)
-    /// The core speaks another protocol version: it answered with its own, or
-    /// (nil) it refused this client's hello as another version (`-32602`,
-    /// CONTROL-API.md §1, Hello).
-    case incompatible(hubProtocol: Int?)
+    /// The core speaks a lower protocol and this client has no core of its own
+    /// to start in its place (no launcher), so it replaces nothing.
+    case incompatible(hubProtocol: Int)
+    /// The core speaks a higher protocol: a newer Pocket Hub runs on this Mac.
+    /// It is never replaced (CONTROL-API.md §1, "Starting and stopping the
+    /// core"); this client keeps looking and connects once it is gone.
+    case newerVersionRunning
+    /// An older core was asked to stop and was not gone within
+    /// `replaceWait`. Nothing more is done (no signal, no removing the
+    /// socket) until `retry()`.
+    case olderVersionDidNotStop
     /// Anything else: the socket refused us, the hello timed out, a resync call failed.
     case failed(String)
 }
@@ -24,6 +31,9 @@ public enum HubConnectionState: Sendable, Equatable {
     case connecting
     /// The core was not running and is being started.
     case startingCore
+    /// A core of an earlier version was found: it is being asked to stop, and
+    /// this client's own core starts after it.
+    case replacingCore
     /// Connected, subscribed and resynced.
     case connected(HelloResult)
     /// Not connected; another attempt follows at `retryAt`.
@@ -78,13 +88,19 @@ public actor HubClient: HubCalling {
         public var helloTimeout: Duration
         /// After a launch, how long to keep retrying quickly before launching again.
         public var launchGrace: Duration
+        /// How long an older core has to be gone after `hub.shutdown` before
+        /// this client says it did not stop: the command line's wait, which
+        /// fits a core's links' close drain and its services' stop
+        /// (5 s, then SIGTERM, 5 s, then SIGKILL).
+        public var replaceWait: Duration
 
         public init(identity: ClientIdentity,
                     socketPath: @escaping @Sendable () -> String = { HubPaths.current().socketPath() },
                     launcher: CoreLauncher? = nil,
                     retryDelays: [Duration] = [.milliseconds(250), .milliseconds(500), .seconds(1), .seconds(2), .seconds(3)],
                     helloTimeout: Duration = .seconds(5),
-                    launchGrace: Duration = .seconds(15))
+                    launchGrace: Duration = .seconds(15),
+                    replaceWait: Duration = .seconds(20))
         {
             self.identity = identity
             self.socketPath = socketPath
@@ -92,6 +108,7 @@ public actor HubClient: HubCalling {
             self.retryDelays = retryDelays
             self.helloTimeout = helloTimeout
             self.launchGrace = launchGrace
+            self.replaceWait = replaceWait
         }
     }
 
@@ -111,6 +128,12 @@ public actor HubClient: HubCalling {
     /// launch until the owner asks (`retry()`), so a core that cannot start is
     /// not restarted in a loop and its reason stays on screen.
     private var launchBlocked: UnreachableReason?
+    /// Set when an older core did not stop within `replaceWait`: it is not
+    /// asked again until the owner asks (`retry()`).
+    private var replaceBlocked = false
+    /// The version of the core this client starts (`CoreLauncher.version`),
+    /// asked once.
+    private var ownCoreVersion: SemanticVersion??
 
     public init(configuration: Configuration) {
         self.configuration = configuration
@@ -135,8 +158,12 @@ public actor HubClient: HubCalling {
         updateContinuation.yield(.state(.stopped))
     }
 
-    /// Asks the core to shut down, then stops. Reconnection is disabled first,
-    /// so the client cannot start the core again while it exits.
+    /// Asks the core to shut down, then stops ("Quit and Stop"). Reconnection
+    /// is disabled first, so the client cannot start the core again while it
+    /// exits. Whatever core answers is stopped, of this version or another:
+    /// without a synced connection the client meets it through the two frozen
+    /// methods (CONTROL-API.md §1, Hello). Waits at most `timeout`, so a core
+    /// that does not answer cannot hold the quitting app.
     public func shutdownHub(timeout: Duration = .seconds(3)) async throws {
         stopped = true
         launched?.discardOutput()
@@ -144,35 +171,18 @@ public actor HubClient: HubCalling {
         runTask?.cancel()
         wakeRetry()
         defer { updateContinuation.yield(.state(.stopped)) }
-        guard let connection else { return }
-        self.connection = nil
-        // A core that does not answer must not hold the quitting app: closing
-        // the connection fails the call with `.disconnected`.
-        let watchdog = Task {
-            try await Task.sleep(for: timeout)
-            await connection.close()
-        }
-        defer { watchdog.cancel() }
-        do {
-            try await connection.shutdown()
-        } catch HubError.disconnected {
-            // The core closed the socket as it exited, or the watchdog fired.
-        }
-        // The core is gone when the connection has ended and `hubd.sock` no
-        // longer exists (§1); wait for both, within the same bound.
-        await connection.waitUntilClosed()
-        let socket = configuration.socketPath()
-        let deadline = ContinuousClock.now + timeout
-        while FileManager.default.fileExists(atPath: socket), ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(50))
-        }
+        let current = connection
+        connection = nil
+        _ = await stopCore(introduced: current, wait: timeout)
     }
 
     /// Skips the wait before the next attempt (a "Try again" button), and
-    /// allows starting the core again after it failed to start.
+    /// allows starting the core again after it failed to start, and asking an
+    /// older core to stop again after it did not.
     public func retry() {
         launchBlocked = nil
         lastLaunch = nil
+        replaceBlocked = false
         wakeRetry()
     }
 
@@ -185,34 +195,45 @@ public actor HubClient: HubCalling {
 
     private func run() async {
         var failures = 0
-        while !Task.isCancelled && !stopped {
+        attempts: while !Task.isCancelled && !stopped {
             updateContinuation.yield(.state(.connecting))
             let reason: UnreachableReason
             do {
                 let connection = try HubConnection.open(path: configuration.socketPath())
                 do {
-                    let (snapshot, thresholds) = try await resync(connection)
-                    if stopped { await connection.close(); break }
-                    self.connection = connection
-                    failures = 0
-                    lastLaunch = nil
-                    launchBlocked = nil
-                    launched?.discardOutput()
-                    launched = nil
-                    Self.log.notice("connected to hub \(snapshot.hello.hub.id, privacy: .public): \(snapshot.devices.count) devices")
-                    updateContinuation.yield(.synced(snapshot))
-                    updateContinuation.yield(.state(.connected(snapshot.hello)))
-                    await forwardEvents(of: connection, after: thresholds)
-                    self.connection = nil
-                    if stopped { break }
-                    reason = .failed(await connection.closeReason ?? "the connection closed")
+                    switch try await meet(connection) {
+                    case .use(let hello):
+                        let (snapshot, thresholds) = try await resync(connection, hello: hello)
+                        if stopped { await connection.close(); break attempts }
+                        self.connection = connection
+                        failures = 0
+                        lastLaunch = nil
+                        launchBlocked = nil
+                        launched?.discardOutput()
+                        launched = nil
+                        Self.log.notice("connected to hub \(snapshot.hello.hub.id, privacy: .public): \(snapshot.devices.count) devices")
+                        updateContinuation.yield(.synced(snapshot))
+                        updateContinuation.yield(.state(.connected(snapshot.hello)))
+                        await forwardEvents(of: connection, after: thresholds)
+                        self.connection = nil
+                        if stopped { break attempts }
+                        reason = .failed(await connection.closeReason ?? "the connection closed")
+                    case .replace(let introduced, let coreProtocol):
+                        if !introduced { await connection.close() }
+                        if await replace(introduced ? connection : nil, coreProtocol: coreProtocol) {
+                            // Nobody listens now: the next attempt starts this
+                            // client's own core, at once.
+                            failures = 0
+                            continue attempts
+                        }
+                        reason = .olderVersionDidNotStop
+                    case .standAside(let why):
+                        await connection.close()
+                        reason = why
+                    }
                 } catch {
                     await connection.close()
-                    if case HubError.incompatibleProtocol(let hub, _) = error {
-                        reason = .incompatible(hubProtocol: hub)
-                    } else {
-                        reason = .failed(String(describing: error))
-                    }
+                    reason = .failed(String(describing: error))
                 }
             } catch UnixSocketStream.SocketError.nobodyListening {
                 reason = nobodyListening(&failures)
@@ -274,37 +295,165 @@ public actor HubClient: HubCalling {
         return launchReason
     }
 
-    /// The hello, the subscription and the reads that rebuild a client's state.
-    /// Subscribing before reading means no change can fall between the read and
-    /// the first event; the returned wire positions let events that Hub sent
-    /// before an answer (and that the answer already includes) be dropped.
-    private func resync(_ connection: HubConnection) async throws -> (HubSnapshot, Thresholds) {
-        let identity = configuration.identity
-        // A socket that accepts and never answers (a hung core) is closed after
-        // `helloTimeout`, which fails the hello with `.disconnected`.
+    // MARK: - Meeting the core (CONTROL-API.md §1, Hello; "Starting and stopping the core")
+
+    private enum Meeting {
+        /// A core of this client's protocol, to be used: the hello is said.
+        case use(HelloResult)
+        /// A core of an earlier version, to be replaced. `introduced`: the
+        /// connection already said hello in the core's protocol (the same as
+        /// this client's), and asks it to stop itself.
+        case replace(introduced: Bool, coreProtocol: Int)
+        /// A core this client neither uses nor replaces.
+        case standAside(UnreachableReason)
+    }
+
+    /// Says hello in this client's protocol and decides what to do with the
+    /// core that answers. A lower protocol, or the same one with a lower
+    /// `hub.version` than this client's own core (SemVer precedence), is an
+    /// earlier version: replaced when this client can start its own core. A
+    /// higher protocol is a newer Pocket Hub: never replaced. The same protocol
+    /// with an equal or higher version is used as it is.
+    private func meet(_ connection: HubConnection) async throws -> Meeting {
+        let coreProtocol: Int
+        switch try await introduce(connection, protocol: Self.protocolVersion) {
+        case .accepted(let hello) where hello.protocol == Self.protocolVersion:
+            if isOlderThanOwnCore(hello.hub.version), cannotReplace(coreProtocol: hello.protocol) == nil {
+                return .replace(introduced: true, coreProtocol: hello.protocol)
+            }
+            return .use(hello)
+        case .accepted(let hello):
+            // Accepted, yet answered in another protocol: its own decides.
+            coreProtocol = hello.protocol
+        case .refused(let theirs, _):
+            coreProtocol = theirs
+        }
+        if coreProtocol > Self.protocolVersion { return .standAside(.newerVersionRunning) }
+        if coreProtocol == Self.protocolVersion {
+            return .standAside(.failed("the core refused protocol \(coreProtocol) and says it speaks it"))
+        }
+        if let reason = cannotReplace(coreProtocol: coreProtocol) { return .standAside(reason) }
+        return .replace(introduced: false, coreProtocol: coreProtocol)
+    }
+
+    /// `hub.hello` in `version`, bounded: a socket that accepts and never
+    /// answers (a hung core) is closed after `helloTimeout`, which fails the
+    /// hello with `.disconnected`.
+    private func introduce(_ connection: HubConnection, protocol version: Int) async throws -> HelloAnswer {
         let watchdog = Task { [helloTimeout = configuration.helloTimeout] in
             try await Task.sleep(for: helloTimeout)
             await connection.close()
         }
-        let hello: HelloResult
+        defer { watchdog.cancel() }
+        return try await connection.introduce(protocol: version, client: configuration.identity)
+    }
+
+    /// Why an earlier core cannot be replaced now; nil when it can.
+    private func cannotReplace(coreProtocol: Int) -> UnreachableReason? {
+        guard let launcher = configuration.launcher else { return .incompatible(hubProtocol: coreProtocol) }
+        // Stopping it without a core to start after it would leave nothing.
+        guard launcher.locate() != nil else { return .coreNotFound }
+        if replaceBlocked { return .olderVersionDidNotStop }
+        return nil
+    }
+
+    /// Whether `version` orders below the version of the core this client
+    /// starts. False when either is unknown or not a SemVer version.
+    private func isOlderThanOwnCore(_ version: String) -> Bool {
+        guard let launcher = configuration.launcher else { return false }
+        if ownCoreVersion == nil {
+            ownCoreVersion = .some(launcher.version().flatMap(SemanticVersion.init))
+        }
+        guard let own = ownCoreVersion ?? nil, let found = SemanticVersion(version) else { return false }
+        return found < own
+    }
+
+    /// Asks an earlier core to stop and waits until it is gone. True when it
+    /// is (or nobody answers any more); false after `replaceWait`, and then
+    /// nothing more is done until `retry()`.
+    private func replace(_ introduced: HubConnection?, coreProtocol: Int) async -> Bool {
+        Self.log.notice("replacing the core of an earlier version (protocol \(coreProtocol))")
+        updateContinuation.yield(.state(.replacingCore))
+        switch await stopCore(introduced: introduced, firstProtocol: coreProtocol, wait: configuration.replaceWait) {
+        case .gone, .nobody:
+            lastLaunch = nil
+            launchBlocked = nil
+            return true
+        case .notGone:
+            Self.log.error("the core of an earlier version did not stop within \(self.configuration.replaceWait)")
+            replaceBlocked = true
+            return false
+        }
+    }
+
+    private enum StopOutcome {
+        case gone
+        case nobody
+        case notGone
+    }
+
+    /// Stops the core on the socket, of any version, through the two methods
+    /// every protocol keeps: `hub.hello` in the core's own protocol, then
+    /// `hub.shutdown` (CONTROL-API.md §1, Hello). Nothing else is called in
+    /// another version's dialect. `introduced`: a connection that already said
+    /// hello. The core is gone when the connection has ended and `hubd.sock`
+    /// no longer exists (§1); both are waited for within `wait`. No signal is
+    /// sent and the socket is never removed here.
+    private func stopCore(introduced: HubConnection?, firstProtocol: Int = HubClient.protocolVersion, wait: Duration) async -> StopOutcome {
+        let deadline = ContinuousClock.now + wait
+        let socket = configuration.socketPath()
+        var connection = introduced
+        if connection == nil {
+            var version = firstProtocol
+            // At most two hellos: in `version`, then in the protocol its refusal names.
+            for _ in 0..<2 where connection == nil {
+                let attempt: HubConnection
+                do {
+                    attempt = try HubConnection.open(path: socket)
+                } catch UnixSocketStream.SocketError.nobodyListening {
+                    return .nobody
+                } catch {
+                    return .notGone
+                }
+                switch try? await introduce(attempt, protocol: version) {
+                case .accepted?:
+                    connection = attempt
+                case .refused(let theirs, _)? where theirs != version:
+                    await attempt.close()
+                    version = theirs
+                default:
+                    await attempt.close()
+                    return .notGone
+                }
+            }
+        }
+        guard let connection else { return .notGone }
+        let watchdog = Task {
+            try await Task.sleep(until: deadline)
+            await connection.close()
+        }
+        defer { watchdog.cancel() }
         do {
-            hello = try await connection.hello(client: identity)
-            watchdog.cancel()
-        } catch HubError.rpc(code: -32602, message: _) {
-            // A core of another protocol refuses this hello with `-32602` and a
-            // sentence instead of answering with its own version (CONTROL-API.md
-            // §1, Hello): a resident core of Pocket Hub 0.2.2 (protocol 1) meets
-            // this app so after an update. The app's own `client` is never the
-            // cause, so the refusal is the version's.
-            watchdog.cancel()
-            throw HubError.incompatibleProtocol(hub: nil, client: Self.protocolVersion)
+            try await connection.shutdown()
+        } catch HubError.disconnected {
+            // The core closed the socket as it exited, or the wait ran out.
         } catch {
-            watchdog.cancel()
-            throw error
+            await connection.close()
+            return .notGone
         }
-        guard hello.protocol == Self.protocolVersion else {
-            throw HubError.incompatibleProtocol(hub: hello.protocol, client: Self.protocolVersion)
+        await connection.waitUntilClosed()
+        while FileManager.default.fileExists(atPath: socket), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
         }
+        return FileManager.default.fileExists(atPath: socket) ? .notGone : .gone
+    }
+
+    /// The subscription and the reads that rebuild a client's state, after
+    /// the hello. Subscribing before reading means no change can fall between
+    /// the read and the first event; the returned wire positions let events
+    /// that Hub sent before an answer (and that the answer already includes)
+    /// be dropped.
+    private func resync(_ connection: HubConnection, hello: HelloResult) async throws -> (HubSnapshot, Thresholds) {
         try await connection.subscribe()
         let (statusValue, statusSequence) = try await connection.callSequenced("hub.status")
         let (devicesValue, devicesSequence) = try await connection.callSequenced("devices.list")

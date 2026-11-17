@@ -51,7 +51,10 @@ pub async fn connect(home: &Path, start: bool) -> Result<Client, Unreachable> {
         Err(ClientError::Unreachable { .. }) => {
             return Err(Unreachable(format!("No Pocket Hub core answers on {}. Start one with pocket-hubd, or run this command without --no-start.", socket.display())));
         }
-        Err(error) => return Err(Unreachable(format!("The Pocket Hub core on {} did not accept this client: {error}.", socket.display()))),
+        Err(ClientError::Rpc(error)) if error.refused_protocol().is_some() => {
+            return Err(other_protocol(&socket, error.refused_protocol().unwrap_or(1)));
+        }
+        Err(error) => return Err(not_accepted(&socket, &error)),
     }
     start_core(home)?;
     let deadline = Instant::now() + START_WAIT;
@@ -64,6 +67,40 @@ pub async fn connect(home: &Path, start: bool) -> Result<Client, Unreachable> {
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+}
+
+/// Connects for `shutdown`, to a core of any version: a hello in this
+/// command line's protocol, and when the core refuses it for its own, a hello
+/// in that one. `hub.hello` and `hub.shutdown` are frozen across versions
+/// (CONTROL-API.md §1, Hello), and `shutdown` calls nothing else. Never
+/// starts a core.
+pub async fn connect_to_stop(home: &Path) -> Result<Client, Unreachable> {
+    let socket = paths::checked_socket_path(home).map_err(Unreachable)?;
+    match Client::connect(&socket, client_info()).await {
+        Ok(client) => Ok(client),
+        Err(ClientError::Unreachable { .. }) => Err(Unreachable(format!("No Pocket Hub core answers on {}; there is nothing to stop.", socket.display()))),
+        Err(ClientError::Rpc(error)) if error.refused_protocol().is_some() => {
+            let core = error.refused_protocol().unwrap_or(1);
+            Client::connect_in(&socket, client_info(), core, None).await.map_err(|error| not_accepted(&socket, &error))
+        }
+        Err(error) => Err(not_accepted(&socket, &error)),
+    }
+}
+
+/// The one line for a core of another protocol: this command line never
+/// replaces a core (CONTROL-API.md §1, "Starting and stopping the core").
+fn other_protocol(socket: &Path, core: u32) -> Unreachable {
+    Unreachable(format!(
+        "The Pocket Hub core on {} speaks protocol {core} of the control API and this pocket-hub speaks {}: use the pocket-hub of its version, or stop it with `pocket-hub shutdown`.",
+        socket.display(),
+        pocket_hub_api::PROTOCOL
+    ))
+}
+
+fn not_accepted(socket: &Path, error: &ClientError) -> Unreachable {
+    let reason = error.to_string();
+    let end = if reason.ends_with('.') { "" } else { "." };
+    Unreachable(format!("The Pocket Hub core on {} did not accept this client: {reason}{end}", socket.display()))
 }
 
 /// Starts the core, detached, and returns once it answers or has exited.

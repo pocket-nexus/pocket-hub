@@ -493,6 +493,70 @@
         }
       }
     },
+    "A Newer Pocket Hub Is Running" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Newer Pocket Hub Is Running"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已有更新版本的 Pocket Hub 在运行"
+          }
+        }
+      }
+    },
+    "A different version of Pocket Hub is running on this Mac." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A different version of Pocket Hub is running on this Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上正在运行另一个版本的 Pocket Hub。"
+          }
+        }
+      }
+    },
+    "A newer Pocket Hub is running" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A newer Pocket Hub is running"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新版本的 Pocket Hub 正在运行"
+          }
+        }
+      }
+    },
+    "A newer version of Pocket Hub is already running on this Mac, and this copy is older. Use the newer copy, or update this one." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A newer version of Pocket Hub is already running on this Mac, and this copy is older. Use the newer copy, or update this one."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上已经在运行更新版本的 Pocket Hub，而这个副本较旧。请使用较新的副本，或更新这个副本。"
+          }
+        }
+      }
+    },
     "Add a Device" : {
       "localizations" : {
         "en" : {
@@ -669,6 +733,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "就快好了"
+          }
+        }
+      }
+    },
+    "An earlier version of Pocket Hub is still running on this Mac and didn't stop. Restart this Mac to finish updating." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An earlier version of Pocket Hub is still running on this Mac and didn't stop. Restart this Mac to finish updating."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上仍在运行旧版本的 Pocket Hub，且它没有停止。请重新启动这台 Mac 以完成更新。"
           }
         }
       }
@@ -1361,38 +1441,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在拷贝到你的 3DS…"
-          }
-        }
-      }
-    },
-    "Services" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Services"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "服务"
-          }
-        }
-      }
-    },
-    "Services Unavailable" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Services Unavailable"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "服务不可用"
           }
         }
       }
@@ -2245,38 +2293,6 @@
         }
       }
     },
-    "Its background service is a different version. Reinstall Pocket Hub." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Its background service is a different version. Reinstall Pocket Hub."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "它的后台服务版本不一致。请重新安装 Pocket Hub。"
-          }
-        }
-      }
-    },
-    "Its background service is missing from this copy of the app. Reinstall Pocket Hub." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Its background service is missing from this copy of the app. Reinstall Pocket Hub."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此应用副本缺少后台服务。请重新安装 Pocket Hub。"
-          }
-        }
-      }
-    },
     "Its data on the device is deleted with it." : {
       "localizations" : {
         "en" : {
@@ -2735,38 +2751,6 @@
         }
       }
     },
-    "No Service Selected" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No Service Selected"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未选择服务"
-          }
-        }
-      }
-    },
-    "No Services" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No Services"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有服务"
-          }
-        }
-      }
-    },
     "No Devices Yet" : {
       "localizations" : {
         "en" : {
@@ -2811,6 +2795,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有输出"
+          }
+        }
+      }
+    },
+    "No Service Selected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Service Selected"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未选择服务"
+          }
+        }
+      }
+    },
+    "No Services" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Services"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有服务"
           }
         }
       }
@@ -3331,6 +3347,22 @@
         }
       }
     },
+    "Part of Pocket Hub is missing from this copy of the app. Reinstall Pocket Hub." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Part of Pocket Hub is missing from this copy of the app. Reinstall Pocket Hub."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此应用副本缺少 Pocket Hub 的一部分。请重新安装 Pocket Hub。"
+          }
+        }
+      }
+    },
     "Pocket Hub" : {
       "localizations" : {
         "en" : {
@@ -3343,6 +3375,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pocket Hub"
+          }
+        }
+      }
+    },
+    "Pocket Hub Couldn't Finish Updating" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub Couldn't Finish Updating"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub 未能完成更新"
           }
         }
       }
@@ -3587,6 +3635,22 @@
         }
       }
     },
+    "Pocket Hub couldn't start." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub couldn't start."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pocket Hub 无法启动。"
+          }
+        }
+      }
+    },
     "Pocket Hub isn't responding" : {
       "localizations" : {
         "en" : {
@@ -3709,22 +3773,6 @@
         }
       }
     },
-    "Pocket Hub's background service couldn't start." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pocket Hub's background service couldn't start."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pocket Hub 的后台服务无法启动。"
-          }
-        }
-      }
-    },
     "Pocket Hub's devices connect on port %@. Quit the program that uses it (it may be another copy of Pocket Hub), then click Try Again." : {
       "localizations" : {
         "en" : {
@@ -3789,6 +3837,22 @@
         }
       }
     },
+    "Quit Pocket Hub and open it again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quit Pocket Hub and open it again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请退出 Pocket Hub，然后重新打开。"
+          }
+        }
+      }
+    },
     "Quit and Stop Pocket Hub" : {
       "localizations" : {
         "en" : {
@@ -3833,22 +3897,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刷新商店"
-          }
-        }
-      }
-    },
-    "Reinstall Pocket Hub to bring both up to date." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reinstall Pocket Hub to bring both up to date."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重新安装 Pocket Hub 以同时更新两者。"
           }
         }
       }
@@ -4141,6 +4189,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在发送…"
+          }
+        }
+      }
+    },
+    "Services" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Services"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务"
+          }
+        }
+      }
+    },
+    "Services Unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Services Unavailable"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务不可用"
           }
         }
       }
@@ -4809,22 +4889,6 @@
         }
       }
     },
-    "The service couldn't be installed, started or stopped." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The service couldn't be installed, started or stopped."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法安装、启动或停止这个服务。"
-          }
-        }
-      }
-    },
     "The device" : {
       "localizations" : {
         "en" : {
@@ -5165,6 +5229,22 @@
         }
       }
     },
+    "The service couldn't be installed, started or stopped." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The service couldn't be installed, started or stopped."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法安装、启动或停止这个服务。"
+          }
+        }
+      }
+    },
     "The setup didn't finish." : {
       "localizations" : {
         "en" : {
@@ -5313,18 +5393,18 @@
         }
       }
     },
-    "This service hasn't written anything yet." : {
+    "This copy of Pocket Hub doesn't match the Pocket Hub running on this Mac." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This service hasn't written anything yet."
+            "value" : "This copy of Pocket Hub doesn't match the Pocket Hub running on this Mac."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个服务还没有输出任何内容。"
+            "value" : "这个 Pocket Hub 副本与这台 Mac 上正在运行的 Pocket Hub 不一致。"
           }
         }
       }
@@ -5377,6 +5457,22 @@
         }
       }
     },
+    "This service hasn't written anything yet." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This service hasn't written anything yet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个服务还没有输出任何内容。"
+          }
+        }
+      }
+    },
     "This update is no longer available." : {
       "localizations" : {
         "en" : {
@@ -5389,22 +5485,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这个更新已不再提供。"
-          }
-        }
-      }
-    },
-    "This version of Pocket Hub doesn't match its background service." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This version of Pocket Hub doesn't match its background service."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此版本的 Pocket Hub 与其后台服务不匹配。"
           }
         }
       }
@@ -5905,6 +5985,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更新到版本 %@…"
+          }
+        }
+      }
+    },
+    "Updating Pocket Hub…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updating Pocket Hub…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在更新 Pocket Hub…"
           }
         }
       }

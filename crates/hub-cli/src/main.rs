@@ -307,7 +307,9 @@ async fn run(cli: Cli, out: &Out) -> Outcome {
         Command::Device { args } => Some(parse_device(args)?),
         _ => None,
     };
-    let client = connect::connect(&home, start).await?;
+    // `shutdown` reaches a core of any version through the two frozen methods
+    // (CONTROL-API.md §1, Hello); every other command, this version's alone.
+    let client = if matches!(cli.command, Command::Shutdown) { connect::connect_to_stop(&home).await? } else { connect::connect(&home, start).await? };
     match cli.command {
         Command::Status => {
             let value = client.call(methods::STATUS, &json!({})).await?;

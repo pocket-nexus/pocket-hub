@@ -14,6 +14,9 @@ public final class HubModel {
     public enum Connection: Equatable, Sendable {
         case connecting
         case startingCore
+        /// An earlier version found running is being stopped, and this app's own
+        /// starts after it (CONTROL-API.md §1, "Starting and stopping the core").
+        case replacingCore
         case connected
         case unreachable(UnreachableReason, retryAt: Date)
         case stopped
@@ -157,6 +160,9 @@ public final class HubModel {
                 dropLiveState()
             case .startingCore:
                 connection = .startingCore
+                dropLiveState()
+            case .replacingCore:
+                connection = .replacingCore
                 dropLiveState()
             case .connected:
                 connection = .connected
