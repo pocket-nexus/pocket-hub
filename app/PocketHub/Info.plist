@@ -15,6 +15,18 @@
 
   CFBundleURLTypes registers the app for pocket-hub: links, which a web page
   opens it with (docs/DEEP-LINKS.md §1).
+
+  The app updates itself with Sparkle (AppUpdater.swift). CFBundleVersion is
+  the marketing version, as Sparkle orders releases by it. The feed is the
+  appcast.xml of the latest release on GitHub, which app/scripts/package.sh
+  writes. Every update is checked against SUPublicEDKey, the public half of
+  the release key, before it is opened (SUVerifyUpdateBeforeExtraction), and
+  so is the feed itself (SURequireSignedFeed). Were the key lost, an update
+  signed with the same Developer ID can bring a new one (Sparkle, "Rotating
+  signing keys"); with the update verified before it is opened, only a disk
+  image can, which is why the update is the disk image. Checks and installs
+  are automatic from the first launch, without Sparkle's question: an update
+  downloads in the background and is installed when the app quits.
 -->
 <plist version="1.0">
 <dict>
@@ -53,7 +65,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
@@ -64,5 +76,17 @@
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/pocket-nexus/pocket-hub/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>XxG0Eqv5FYXkW2jlDbk6i+54y0cg6RlqwEXdkmk6Rmc=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

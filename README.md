@@ -39,6 +39,10 @@ app, leaves Pocket Hub running in the background so devices stay connected;
 **Quit and Stop Pocket Hub** in the menu bar item stops it altogether. Settings
 can open Pocket Hub at login.
 
+Pocket Hub updates itself: a new version downloads in the background and is
+installed when the app next quits. **Check for Updates…** in the Pocket Hub
+menu looks now.
+
 ## Set up a 3DS
 
 Choose **Add a Device…** (in the sidebar, or File › Add a Device…, ⌘N).
@@ -125,7 +129,7 @@ only shows the applet; installing is always your click in Pocket Hub.
   starts when its applet needs it and stops when it is idle. Pocket Hub
   downloads the runtime daemons need ([Bun](https://bun.sh)) the first time.
 - **Settings**: this Mac's name as your devices show it, the app's language
-  (English or Simplified Chinese), and opening at login.
+  (English or Simplified Chinese), opening at login, and updates.
 
 ## Command line
 

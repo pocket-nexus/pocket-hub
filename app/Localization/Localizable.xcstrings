@@ -891,6 +891,38 @@
         }
       }
     },
+    "Check for Updates…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check for Updates…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查更新…"
+          }
+        }
+      }
+    },
+    "Check for updates automatically" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check for updates automatically"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检查更新"
+          }
+        }
+      }
+    },
     "Check its output in Advanced › Daemons, then try again." : {
       "localizations" : {
         "en" : {
@@ -1553,6 +1585,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载 Bun"
+          }
+        }
+      }
+    },
+    "Download and install updates automatically" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download and install updates automatically"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动下载并安装更新"
           }
         }
       }
@@ -5863,6 +5911,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "立即更新"
+          }
+        }
+      }
+    },
+    "Update Pocket Hub to Version %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Pocket Hub to Version %@…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将 Pocket Hub 更新到版本 %@…"
           }
         }
       }

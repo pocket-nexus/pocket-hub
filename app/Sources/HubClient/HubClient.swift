@@ -109,6 +109,9 @@ public actor HubClient: HubCalling {
     /// launch until the owner asks (`retry()`), so a core that cannot start is
     /// not restarted in a loop and its reason stays on screen.
     private var launchBlocked: UnreachableReason?
+    /// Set once this client has asked an older core to make way for its own
+    /// (`replacesOlderCore`).
+    private var replacedOlderCore = false
 
     public init(configuration: Configuration) {
         self.configuration = configuration
@@ -144,8 +147,13 @@ public actor HubClient: HubCalling {
         defer { updateContinuation.yield(.state(.stopped)) }
         guard let connection else { return }
         self.connection = nil
-        // A core that does not answer must not hold the quitting app: closing
-        // the connection fails the call with `.disconnected`.
+        try await shutDown(connection, timeout: timeout)
+    }
+
+    /// Asks the core on `connection` to shut down and waits until it is gone.
+    /// A core that does not answer must not hold the caller: closing the
+    /// connection after `timeout` fails the call with `.disconnected`.
+    private func shutDown(_ connection: HubConnection, timeout: Duration) async throws {
         let watchdog = Task {
             try await Task.sleep(for: timeout)
             await connection.close()
@@ -191,6 +199,14 @@ public actor HubClient: HubCalling {
                 do {
                     let (snapshot, thresholds) = try await resync(connection)
                     if stopped { await connection.close(); break }
+                    // Read before `launched` is cleared below: whether this
+                    // core is one this client started.
+                    let replacing = replacesOlderCore(snapshot.hello.hub, startedHere: launched != nil)
+                    let held = Set(snapshot.devices.filter { $0.busy != nil }.map(\.id))
+                    if replacing, held.isEmpty {
+                        await makeWay(connection)
+                        continue
+                    }
                     self.connection = connection
                     failures = 0
                     lastLaunch = nil
@@ -200,9 +216,13 @@ public actor HubClient: HubCalling {
                     Self.log.notice("connected to hub \(snapshot.hello.hub.id, privacy: .public): \(snapshot.devices.count) devices")
                     updateContinuation.yield(.synced(snapshot))
                     updateContinuation.yield(.state(.connected(snapshot.hello)))
-                    await forwardEvents(of: connection, after: thresholds)
+                    let madeWay = await forwardEvents(of: connection, after: thresholds,
+                                                      makingWayOnceFree: replacing ? held : nil)
                     self.connection = nil
                     if stopped { break }
+                    // The core left because this client asked it to: start
+                    // this client's own now, with no wait and no failure shown.
+                    if madeWay { continue }
                     reason = .failed(await connection.closeReason ?? "the connection closed")
                 } catch {
                     await connection.close()
@@ -320,7 +340,14 @@ public actor HubClient: HubCalling {
         var hub: UInt64
     }
 
-    private func forwardEvents(of connection: HubConnection, after thresholds: Thresholds) async {
+    /// Forwards the connection's events until it ends. With `held`, the core
+    /// is an older one to replace and those are the devices it held when this
+    /// client connected: the events keep that set current, and once it is
+    /// empty the core is asked to make way and this returns true.
+    private func forwardEvents(of connection: HubConnection, after thresholds: Thresholds,
+                               makingWayOnceFree held: Set<String>?) async -> Bool
+    {
+        var held = held
         for await item in connection.events {
             let threshold: UInt64 = switch item.event.family {
             case .devices: thresholds.devices
@@ -337,7 +364,55 @@ public actor HubClient: HubCalling {
             default: if item.sequence < threshold { continue }
             }
             updateContinuation.yield(.event(item.event))
+            guard var devices = held else { continue }
+            switch item.event {
+            case .deviceChanged(let device):
+                if device.busy == nil { devices.remove(device.id) } else { devices.insert(device.id) }
+            case .deviceRemoved(let id):
+                devices.remove(id)
+            default:
+                break
+            }
+            held = devices
+            // A client that is stopping (the app quits) leaves the core as it is.
+            if devices.isEmpty, !stopped {
+                self.connection = nil
+                await makeWay(connection)
+                return true
+            }
         }
+        return false
+    }
+
+    // MARK: - An older core makes way (CONTROL-API.md §1)
+
+    /// Whether the core that answered is to make way for this client's own.
+    /// The core outlives the app (it keeps devices connected when the app
+    /// quits), so an update of the app does not reach a core that was
+    /// already running: the updated app replaces it. Only a client that
+    /// starts cores does, only a core it found running (one it started is its
+    /// own, whatever it says), only one older than itself (a newer one stays:
+    /// two builds side by side do not take turns replacing each other), and
+    /// once: a core that did not go when asked is not asked in a loop.
+    private func replacesOlderCore(_ hub: HubIdentity, startedHere: Bool) -> Bool {
+        guard configuration.launcher != nil, !startedHere, !replacedOlderCore,
+              let core = ReleaseVersion(hub.version),
+              let mine = ReleaseVersion(configuration.identity.version)
+        else { return false }
+        return core < mine
+    }
+
+    /// Asks an older core to shut down, so that the connection loop finds
+    /// nobody listening and starts this client's own. A device operation in
+    /// progress would end with it, so this waits until no device is held
+    /// (`forwardEvents`); a client's own calls end when it disconnects anyway
+    /// (§1), so a held device belongs to another client.
+    private func makeWay(_ connection: HubConnection) async {
+        replacedOlderCore = true
+        Self.log.notice("the running core is older than this app: asking it to shut down and starting this app's own")
+        try? await shutDown(connection, timeout: .seconds(3))
+        await connection.close()
+        lastLaunch = nil
     }
 
     /// Waits `duration`, or less when `retry()` or `stop()` wakes it. Each wait

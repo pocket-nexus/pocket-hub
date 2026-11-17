@@ -51,6 +51,11 @@ struct HubCommands: Commands {
     let state: AppState
 
     var body: some Commands {
+        // Where a Mac app has it: in the app menu, after About.
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") { state.updater.checkForUpdates() }
+                .disabled(!state.updater.canCheckForUpdates)
+        }
         CommandGroup(replacing: .newItem) {
             Button("Add a Device…") { state.startSetup() }
                 .keyboardShortcut("n")
