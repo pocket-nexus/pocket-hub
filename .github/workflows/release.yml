@@ -54,9 +54,12 @@ jobs:
         with:
           submodules: true
 
-      # embed-core.sh runs cargo where rustup puts it; the image has it there.
+      # embed-core.sh runs cargo where rustup's own installer puts it,
+      # ~/.cargo/bin. The image installs rustup with Homebrew, whose proxies
+      # are elsewhere, so rustup is installed here the way a Mac has it.
       - name: Toolchains
         run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --no-modify-path
           "$HOME/.cargo/bin/cargo" --version
           xcodebuild -version
 
