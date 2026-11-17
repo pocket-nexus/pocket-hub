@@ -174,6 +174,24 @@ struct HubModelTests {
         #expect(UserFacingError(cancelled) == nil, "a cancellation needs no message")
     }
 
+    /// CONTROL-API.md §1 Errors: dependencies that would not install are
+    /// `service` with `reason: "dependencies"`; the app words its own sentence
+    /// and shows the end of `bun install`'s output after Hub's.
+    @Test func dependenciesThatWouldNotInstallAreSaidPlainly() async throws {
+        let h = try await Harness(.demo)
+        defer { Task { await h.tearDown() } }
+        await h.core.failNext("services.install", with: .init(kind: "service", message: "The package could not be installed: its dependencies did not install (exit status: 1).",
+                                                              data: ["reason": "dependencies", "detail": "error: lockfile had changes, but lockfile is frozen"]))
+        do {
+            try await h.model.installService(from: URL(fileURLWithPath: "/nonexistent/package"))
+            Issue.record("expected service")
+        } catch {
+            let message = try #require(UserFacingError(error))
+            #expect(message.title == String(localized: "This service's packages couldn't be installed."))
+            #expect(message.detail == "The package could not be installed: its dependencies did not install (exit status: 1).\n\nerror: lockfile had changes, but lockfile is frozen")
+        }
+    }
+
     @Test func screenshotAndLogs() async throws {
         var scenario = MockScenario.demo
         scenario.logInterval = .milliseconds(50)

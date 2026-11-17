@@ -363,7 +363,7 @@ async fn an_install_over_an_idle_service_stops_it_and_the_next_start_runs_the_ne
     assert_eq!(report.service.release, "dev");
     let status = supervisor.status("app.up").unwrap();
     assert_eq!((status.state, status.release.as_deref(), status.running_release.as_deref()), (ServiceState::Running, Some("dev"), Some("dev")));
-    assert!(std::fs::read_to_string(home.path().join("services/app.up/dev/fixture.json")).unwrap().contains("2"));
+    assert!(std::fs::read_to_string(report.service.dir.join("fixture.json")).unwrap().contains("2"));
     drop(channel);
     assert!(eventually(Duration::from_secs(2), || supervisor.status("app.up").unwrap().channels == 0).await);
 

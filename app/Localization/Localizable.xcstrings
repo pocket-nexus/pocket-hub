@@ -5357,6 +5357,22 @@
         }
       }
     },
+    "The service's package list and lockfile need fixing by its author. The details show what went wrong." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The service's package list and lockfile need fixing by its author. The details show what went wrong."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个服务的软件包清单和锁定文件需要由其作者修正。详细信息会显示出了什么问题。"
+          }
+        }
+      }
+    },
     "The setup didn't finish." : {
       "localizations" : {
         "en" : {
@@ -5597,6 +5613,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法安装这个服务包。"
+          }
+        }
+      }
+    },
+    "This service's packages couldn't be installed." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This service's packages couldn't be installed."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法安装这个服务所需的软件包。"
           }
         }
       }

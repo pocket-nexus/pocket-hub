@@ -210,3 +210,28 @@ async fn a_refused_manifest_is_the_error_service_with_its_field() {
     assert!(host.services().is_empty());
     host.shutdown().await;
 }
+
+/// Dependencies that will not install are the error `service`, `reason:
+/// "dependencies"`, with the end of `bun install`'s output in `detail`: not
+/// bad input from the owner (CONTROL-API.md §1, Errors).
+#[tokio::test(flavor = "multi_thread")]
+async fn dependencies_that_will_not_install_have_a_reason_of_their_own() {
+    let Some(bun) = system_bun() else { return };
+    let home = temp_home();
+    let host = ServiceHost::start(HostOptions { home: home.path().to_owned(), socket: home.path().join("s.sock"), bun: Some(bun), idle_override: None }).await.unwrap();
+    let source = home.path().join("locked");
+    std::fs::create_dir_all(source.join("tiny")).unwrap();
+    for name in ["pocket.service.json", "bun.lock", "service.mjs", "tiny/index.js", "tiny/package.json"] {
+        std::fs::copy(fixtures().join("with-lock").join(name), source.join(name)).unwrap();
+    }
+    // A package.json the lockfile does not match.
+    std::fs::write(source.join("package.json"), r#"{"name":"with-lock","dependencies":{"tiny":"file:./tiny","other":"file:./tiny"}}"#).unwrap();
+    let error = host.call(methods::SERVICES_INSTALL, json!({"path": source.display().to_string()}), &|_| {}).await.unwrap_err();
+    let data = error.data.as_ref().unwrap();
+    assert_eq!((error.kind(), data.reason.as_deref()), (Some(ErrorKind::Service), Some("dependencies")));
+    assert!(error.message.ends_with("could not be installed: its dependencies did not install (exit status: 1)."), "{}", error.message);
+    let detail = data.detail.as_deref().unwrap();
+    assert!(detail.to_lowercase().contains("lockfile") && detail.len() <= 4096 + 3, "{detail}");
+    assert!(host.services().is_empty());
+    host.shutdown().await;
+}

@@ -288,6 +288,19 @@ impl ServiceHost {
                 data.detail = manifest.field();
             }),
             InstallError::Runtime(runtime) => RpcError::op(ErrorKind::Service, sentence(&format!("{source} could not be installed: {runtime}"))).with(|data| data.reason = Some("runtime".into())),
+            // The package's dependencies would not install: not bad input
+            // from the owner, so a reason of its own, and the end of
+            // `bun install`'s output in `detail` (CONTROL-API.md §1, Errors).
+            InstallError::Dependencies { status, output } => RpcError::op(ErrorKind::Service, sentence(&format!("{source} could not be installed: its dependencies did not install ({status})")))
+                .with(|data| {
+                    data.reason = Some("dependencies".into());
+                    data.detail = Some(output_tail(&output));
+                }),
+            InstallError::DependencyTimeout { seconds, output } => RpcError::op(ErrorKind::Service, sentence(&format!("{source} could not be installed: its dependencies did not install within {seconds} s")))
+                .with(|data| {
+                    data.reason = Some("dependencies".into());
+                    data.detail = Some(output_tail(&output));
+                }),
             other => RpcError::op(ErrorKind::Service, sentence(&format!("{source} could not be installed: {other}"))),
         })?;
         self.service_now(&report.service.id)
@@ -335,6 +348,22 @@ async fn pump(host: Arc<ServiceHost>, mut states: broadcast::Receiver<ServiceEve
             },
         }
     }
+}
+
+/// At most this many bytes of `bun install`'s output in an error's `detail`:
+/// its end, where the error is.
+const MAX_OUTPUT_DETAIL: usize = 4096;
+
+/// The last `MAX_OUTPUT_DETAIL` bytes of `output`, on a character boundary.
+fn output_tail(output: &str) -> String {
+    if output.len() <= MAX_OUTPUT_DETAIL {
+        return output.to_owned();
+    }
+    let mut start = output.len() - MAX_OUTPUT_DETAIL;
+    while !output.is_char_boundary(start) {
+        start += 1;
+    }
+    format!("…{}", &output[start..])
 }
 
 fn ok(value: impl Serialize) -> Result<Value, RpcError> {

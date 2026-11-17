@@ -346,7 +346,8 @@ async fn the_vertical_slice_through_the_binary() {
     // examples file's `services.logs`.
     let kept: ServiceLogs = client.call_as(methods::SERVICES_LOGS, &ServiceLogsParams { id: APP.into(), tail: Some(1) }).await.unwrap();
     assert_eq!(kept.lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>(), ["installed release dev"]);
-    assert!(home.path().join(format!("services/{APP}/dev/node_modules/@pocketjs/service")).is_symlink(), "Hub linked its SDK into the package");
+    let release_folder = std::fs::read_dir(home.path().join(format!("services/{APP}"))).unwrap().map(|e| e.unwrap().path()).find(|p| p.is_dir()).expect("the release's folder");
+    assert!(release_folder.join("node_modules/@pocketjs/service").is_symlink(), "Hub linked its SDK into the package");
 
     device.send(json!({"cmd": "open", "app": APP})).await;
     device.expect("channel-open").await;

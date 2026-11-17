@@ -107,9 +107,11 @@ async fn a_folder_without_dependencies_is_installed_as_the_dev_release() {
     assert!(!report.replaced_earlier);
     let service = report.service;
     assert_eq!((service.id.as_str(), service.release.as_str(), service.entry.as_str(), service.idle_seconds), ("com.example.plain", "dev", "src/service.ts", 12));
-    assert_eq!(service.dir, home.path().join("services/com.example.plain/dev"));
+    assert_eq!(service.dir.parent().unwrap(), home.path().join("services/com.example.plain"));
+    let name = service.dir.file_name().unwrap().to_string_lossy().into_owned();
+    assert!(name.len() == 12 && name.starts_with("dev-"), "{name}");
     let index: serde_json::Value = serde_json::from_slice(&fs::read(home.path().join("services/com.example.plain/releases.json")).unwrap()).unwrap();
-    assert_eq!(index["releases"][0]["release"], "dev");
+    assert_eq!((index["releases"][0]["release"].as_str(), index["releases"][0]["folder"].as_str()), (Some("dev"), Some(name.as_str())));
     assert_eq!(fs::read_to_string(service.dir.join("src/service.ts")).unwrap(), "1");
     assert_eq!(fs::metadata(service.dir.join("bin/run")).unwrap().permissions().mode() & 0o777, 0o755);
     assert!(!service.dir.join(".git").exists());
@@ -215,7 +217,9 @@ async fn an_archive_is_installed_with_or_without_a_top_folder() {
     // One release folder and the index.
     let mut children: Vec<String> = fs::read_dir(home.path().join("services/com.example.tar")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     children.sort();
-    assert_eq!(children, ["dev", "releases.json"]);
+    assert_eq!(children.len(), 2, "{children:?}");
+    assert!(children[0].starts_with("dev-") && children[1] == "releases.json", "{children:?}");
+    assert_eq!(report.service.dir.file_name().unwrap().to_string_lossy(), children[0], "the replaced folder is gone");
 }
 
 #[tokio::test]
@@ -290,7 +294,7 @@ async fn an_install_stopped_before_its_rename_leaves_nothing_at_the_next_start()
         let staged: Vec<_> = fs::read_dir(home.path().join("services-staging")).unwrap().collect();
         assert_eq!(staged.len(), 1, "the staged install is left as a crash leaves it");
         let staged = staged[0].as_ref().unwrap().path();
-        assert!(staged.join("id/releases.json").is_file() && staged.join("id/dev/pocket.service.json").is_file(), "staged with its index");
+        assert!(staged.join("id/releases.json").is_file() && fs::read_dir(staged.join("id")).unwrap().any(|e| e.unwrap().path().join("pocket.service.json").is_file()), "staged with its index");
     }
     // The next start.
     let registry = registry(home.path(), None);
@@ -299,41 +303,87 @@ async fn an_install_stopped_before_its_rename_leaves_nothing_at_the_next_start()
     assert!(!registry.is_earlier("com.example.crash"));
 }
 
-/// A later release is renamed in before the index is replaced; one the
-/// index does not list is removed at the next start, a listed one whose
-/// folder is gone is dropped, a half-written index is removed, and the
-/// installed release is untouched.
+/// The folders under an id's folder, sorted.
+fn folders(folder: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(folder).unwrap().map(|e| e.unwrap()).filter(|e| e.file_type().unwrap().is_dir()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    names.sort();
+    names
+}
+
+/// SERVICE-PROTOCOL.md §1, "How a release folder appears": a release
+/// installed again is renamed into a fresh folder, then the index names it,
+/// then the old folder goes. Stopped after each of the three steps in turn
+/// (a crash; here a failure point), the next start serves a complete release
+/// every time (the old one after step 1, the new one after steps 2 and 3)
+/// and leaves no folder the index does not name.
 #[tokio::test]
-async fn the_next_start_removes_what_the_index_does_not_list() {
+async fn installing_a_release_again_cannot_lose_it() {
+    for (point, served) in [(FailPoint::AfterFolder, "old"), (FailPoint::AfterIndex, "new"), (FailPoint::AfterRemove, "new")] {
+        let home = temp_home();
+        let old = package(home.path(), "old", &manifest("com.example.again"), &[("src/service.ts", "old")]);
+        let new = package(home.path(), "new", &manifest("com.example.again"), &[("src/service.ts", "new")]);
+        let folder = home.path().join("services/com.example.again");
+        {
+            let registry = registry(home.path(), None);
+            let first = registry.install(&old).await.unwrap().service;
+            assert!(first.dir.file_name().unwrap().to_string_lossy().starts_with("dev-"));
+            registry.set_fail_point(Some(point));
+            let error = registry.install(&new).await.unwrap_err();
+            assert!(error.to_string().contains("injected failure"), "{point:?}: {error}");
+        }
+        // The next start.
+        let registry = registry(home.path(), None);
+        let served_now = registry.get("com.example.again").expect("a release is served");
+        assert_eq!(fs::read_to_string(served_now.dir.join("src/service.ts")).unwrap(), served, "{point:?}");
+        assert!(served_now.dir.join("pocket.service.json").is_file(), "{point:?}: a complete folder");
+        let index: serde_json::Value = serde_json::from_slice(&fs::read(folder.join("releases.json")).unwrap()).unwrap();
+        let named: Vec<&str> = index["releases"].as_array().unwrap().iter().map(|r| r["folder"].as_str().unwrap()).collect();
+        assert_eq!(folders(&folder), named, "{point:?}: no folder the index does not name");
+        assert!(!home.path().join("services-staging").exists(), "{point:?}");
+    }
+}
+
+/// The index names each release's folder; at the next start a folder it
+/// does not name is removed, a listed release whose folder is gone is
+/// dropped, a half-written index is removed, and the release it serves is
+/// untouched.
+#[tokio::test]
+async fn the_next_start_removes_what_the_index_does_not_name() {
     let home = temp_home();
     let first = package(home.path(), "first", &manifest("com.example.later"), &[("src/service.ts", "1")]);
-    let second = package(home.path(), "second", &manifest("com.example.later"), &[("src/service.ts", "2")]);
     let folder = home.path().join("services/com.example.later");
-    {
-        let registry = registry(home.path(), None);
-        registry.install(&first).await.unwrap();
-        registry.set_fail_point(Some(FailPoint::BeforeIndex));
-        let error = registry.install(&second).await.unwrap_err();
-        assert!(error.to_string().contains("injected failure before the index"), "{error}");
-        // The new folder is in place; the index was not replaced.
-        assert_eq!(fs::read_to_string(folder.join("dev/src/service.ts")).unwrap(), "2");
-    }
+    let installed = registry(home.path(), None).install(&first).await.unwrap().service;
     // What a crashed install of a store release, and a crashed index write,
     // would leave beside it.
-    fs::create_dir_all(folder.join("0123456789abcdef/src")).unwrap();
-    fs::write(folder.join("0123456789abcdef/pocket.service.json"), manifest("com.example.later")).unwrap();
+    fs::create_dir_all(folder.join("0123456789abcdef-0f0f0f0f/src")).unwrap();
+    fs::write(folder.join("0123456789abcdef-0f0f0f0f/pocket.service.json"), manifest("com.example.later")).unwrap();
     fs::write(folder.join(".releases.json.0f0f.tmp"), "{").unwrap();
     let mut index: serde_json::Value = serde_json::from_slice(&fs::read(folder.join("releases.json")).unwrap()).unwrap();
-    index["releases"].as_array_mut().unwrap().push(serde_json::json!({"release": "fedcba9876543210", "installedAt": 1}));
+    index["releases"].as_array_mut().unwrap().push(serde_json::json!({"release": "fedcba9876543210", "folder": "fedcba9876543210-01234567", "installedAt": 1}));
     fs::write(folder.join("releases.json"), serde_json::to_vec(&index).unwrap()).unwrap();
 
     let registry = registry(home.path(), None);
-    assert!(!folder.join("0123456789abcdef").exists(), "an unlisted release folder is removed");
+    assert!(!folder.join("0123456789abcdef-0f0f0f0f").exists(), "a folder the index does not name is removed");
     assert!(!folder.join(".releases.json.0f0f.tmp").exists());
     let index: serde_json::Value = serde_json::from_slice(&fs::read(folder.join("releases.json")).unwrap()).unwrap();
     let releases: Vec<&str> = index["releases"].as_array().unwrap().iter().map(|r| r["release"].as_str().unwrap()).collect();
     assert_eq!(releases, ["dev"], "a listed release whose folder is gone is dropped");
-    assert_eq!(registry.get("com.example.later").unwrap().release, "dev");
+    assert_eq!(registry.get("com.example.later").unwrap().dir, installed.dir);
+    assert_eq!(folders(&folder), [installed.dir.file_name().unwrap().to_string_lossy().into_owned()]);
+}
+
+/// A release's folder is read only as the index's rule names it: an index
+/// that names a folder outside `<release>-<8 hex>` serves nothing from it.
+#[tokio::test]
+async fn an_index_naming_another_folder_serves_nothing() {
+    let home = temp_home();
+    let first = package(home.path(), "first", &manifest("com.example.odd"), &[("src/service.ts", "1")]);
+    let folder = home.path().join("services/com.example.odd");
+    registry(home.path(), None).install(&first).await.unwrap();
+    let mut index: serde_json::Value = serde_json::from_slice(&fs::read(folder.join("releases.json")).unwrap()).unwrap();
+    index["releases"][0]["folder"] = "../../elsewhere".into();
+    fs::write(folder.join("releases.json"), serde_json::to_vec(&index).unwrap()).unwrap();
+    assert_eq!(Registry::new(home.path(), BunRuntime::new(home.path(), None), Duration::from_secs(60)).get("com.example.odd"), None);
 }
 
 /// HOST-PROTOCOL's one rule: an id without `releases.json` is earlier. It is

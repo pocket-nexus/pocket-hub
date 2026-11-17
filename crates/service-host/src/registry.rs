@@ -1,8 +1,8 @@
 //! §1: installed services, as releases.
 //!
 //! ```text
-//! <home>/services/<id>/releases.json  the id's releases (the index)
-//! <home>/services/<id>/<release>/     one release as installed: `dev` for a development install
+//! <home>/services/<id>/releases.json            the id's releases (the index), each naming its folder
+//! <home>/services/<id>/<release>-<8 hex>/        one release as installed: `dev` for a development install
 //! <home>/service-data/<id>/           the service's own files, 0700, kept across installs
 //! <home>/services-staging/            packages being installed
 //! ```
@@ -10,12 +10,14 @@
 //! **How a release folder appears.** A package is unpacked and checked, and
 //! its dependencies installed, under `services-staging/`. `services/<id>/`
 //! appears only by renaming into place a staged folder that already holds
-//! `releases.json` and the first release; a later release is renamed into
-//! `services/<id>/` first, and `releases.json` is then replaced through a
-//! temporary file and a rename. So a crash never leaves an id without its
-//! index, and at the next start the staging folder is removed, as is a
-//! release folder the index does not list; a listed release whose folder is
-//! gone is dropped from the index.
+//! `releases.json` and the first release. **A folder's name is unique**
+//! (`<release>-<8 hex>`, random per install), and the index names each
+//! release's folder; so a release installed again is renamed into a fresh
+//! folder first, the index is then replaced through a temporary file and a
+//! rename, and the old folder is removed last. At every instant the index
+//! names a complete folder, the old one or the new one. At the next start the
+//! staging folder is removed, and so is any folder the index does not name; a
+//! listed release whose folder is gone is dropped from the index.
 //!
 //! **What an earlier Pocket Hub left.** A folder `services/<id>/` with
 //! `releases.json` is of this layout; any other (`<version>/` and
@@ -132,9 +134,13 @@ pub enum FailPoint {
     /// The staged `<id>/` holds `releases.json` and its release; not renamed
     /// into `services/` yet.
     BeforeRename,
-    /// A release renamed into an existing `services/<id>/`; `releases.json`
-    /// not replaced yet.
-    BeforeIndex,
+    /// A release installed into an existing `services/<id>/`, step 1: the
+    /// new folder renamed in; the index not replaced yet.
+    AfterFolder,
+    /// Step 2: the index names the new folder; the old one not removed yet.
+    AfterIndex,
+    /// Step 3: the old folder removed; nothing left to do.
+    AfterRemove,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -147,7 +153,21 @@ struct Index {
 #[serde(rename_all = "camelCase")]
 struct IndexEntry {
     release: String,
+    /// The release's folder under `services/<id>/`: `<release>-<8 hex>`.
+    folder: String,
     installed_at: i64,
+}
+
+/// A fresh, unique folder name for `release`.
+fn fresh_folder(release: &str) -> String {
+    format!("{release}-{}", &random_hex()[..8])
+}
+
+/// Whether `folder` is a folder name the index may name for `release`: the
+/// release, a dash and 8 lower-case hex digits. Nothing else is read, so an
+/// index cannot point a release out of its id's folder.
+fn valid_folder(release: &str, folder: &str) -> bool {
+    folder.strip_prefix(release).and_then(|rest| rest.strip_prefix('-')).is_some_and(|hex| hex.len() == 8 && hex.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
 }
 
 pub struct Registry {
@@ -242,7 +262,7 @@ impl Registry {
             for child in children.flatten() {
                 let name = child.file_name().to_string_lossy().into_owned();
                 let is_dir = child.file_type().is_ok_and(|kind| kind.is_dir());
-                if is_dir && !index.releases.iter().any(|listed| listed.release == name) {
+                if is_dir && !index.releases.iter().any(|listed| listed.folder == name) {
                     tracing::info!(id, release = name, "removing a release folder its index does not list");
                     let _ = fs::remove_dir_all(child.path());
                 } else if !is_dir && name.starts_with('.') && name.ends_with(".tmp") {
@@ -251,7 +271,7 @@ impl Registry {
                 }
             }
             let before = index.releases.len();
-            index.releases.retain(|listed| folder.join(&listed.release).is_dir());
+            index.releases.retain(|listed| valid_folder(&listed.release, &listed.folder) && folder.join(&listed.folder).is_dir());
             if index.releases.len() != before {
                 tracing::warn!(id, "the index listed a release whose folder is gone");
                 let _ = write_index(&folder, &index);
@@ -280,7 +300,11 @@ impl Registry {
         }
         let folder = self.services().join(id);
         let entry = read_index(&folder)?.releases.into_iter().find(|listed| listed.release == release)?;
-        let dir = folder.join(release);
+        if !valid_folder(release, &entry.folder) {
+            tracing::warn!(id, release, folder = entry.folder, "the index names a folder outside the rule");
+            return None;
+        }
+        let dir = folder.join(&entry.folder);
         match Manifest::read(&dir) {
             Ok(manifest) if manifest.id == id => Some(InstalledService {
                 id: manifest.id,
@@ -379,31 +403,39 @@ impl Registry {
         let folder = self.services().join(&manifest.id);
         fs::create_dir_all(self.services())?;
         let installed_at = epoch_ms();
-        let entry = IndexEntry { release: release.to_owned(), installed_at };
+        let name = fresh_folder(release);
+        let entry = IndexEntry { release: release.to_owned(), folder: name.clone(), installed_at };
         let mut replaced_earlier = false;
         match read_index(&folder) {
             Some(mut index) => {
-                // A later release: into the id's folder first, then the index.
-                let dest = folder.join(release);
-                if fs::symlink_metadata(&dest).is_ok() {
-                    // The same release again: the old folder is moved aside
-                    // first; a process running from it keeps its open files.
-                    fs::rename(&dest, staging.join("replaced"))?;
+                // 1. The new folder, under its own name, beside the old one.
+                fs::rename(&root, folder.join(&name))?;
+                if self.fails_at(FailPoint::AfterFolder) {
+                    return Err(io::Error::other("injected failure after the new folder").into());
                 }
-                fs::rename(&root, &dest)?;
-                if self.fails_at(FailPoint::BeforeIndex) {
-                    return Err(io::Error::other("injected failure before the index").into());
-                }
+                // 2. The index names it, in one rename.
+                let old = index.releases.iter().find(|listed| listed.release == release).map(|listed| listed.folder.clone());
                 index.releases.retain(|listed| listed.release != release);
                 index.releases.push(entry);
                 write_index(&folder, &index)?;
+                if self.fails_at(FailPoint::AfterIndex) {
+                    return Err(io::Error::other("injected failure after the index").into());
+                }
+                // 3. The old folder goes; a process running from it keeps
+                // the files it has open.
+                if let Some(old) = old.filter(|old| *old != name) {
+                    let _ = fs::remove_dir_all(folder.join(old));
+                }
+                if self.fails_at(FailPoint::AfterRemove) {
+                    return Err(io::Error::other("injected failure after the old folder's removal").into());
+                }
             }
             None => {
                 // The id's first release: the staged id folder holds its
                 // index before it is renamed into place.
                 let staged = staging.join("id");
                 fs::create_dir(&staged)?;
-                fs::rename(&root, staged.join(release))?;
+                fs::rename(&root, staged.join(&name))?;
                 write_index(&staged, &Index { releases: vec![entry] })?;
                 if self.fails_at(FailPoint::BeforeRename) {
                     return Err(io::Error::other("injected failure before the rename").into());
@@ -426,7 +458,7 @@ impl Registry {
             idle_seconds: manifest.idle_seconds,
             requires: manifest.requires,
             hosts: manifest.hosts,
-            dir: folder.join(release),
+            dir: folder.join(&name),
             data: self.data_dir(&manifest.id),
             installed_at,
         };
@@ -505,9 +537,12 @@ impl Registry {
                     fs::remove_dir_all(&folder)?;
                     Removed::Releases(vec![release.to_owned()])
                 } else {
+                    let gone = index.releases.iter().find(|listed| listed.release == release).map(|listed| listed.folder.clone());
                     index.releases.retain(|listed| listed.release != release);
                     write_index(&folder, &index)?;
-                    let _ = fs::remove_dir_all(folder.join(release));
+                    if let Some(gone) = gone.filter(|gone| valid_folder(release, gone)) {
+                        let _ = fs::remove_dir_all(folder.join(gone));
+                    }
                     Removed::Releases(vec![release.to_owned()])
                 }
             }
