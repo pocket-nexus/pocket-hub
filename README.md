@@ -31,9 +31,8 @@ Wi-Fi.
    (`Pocket-Hub-<version>-arm64.dmg`, also on the
    [latest release](https://github.com/pocket-nexus/pocket-hub/releases/latest)).
 2. Open it and drag **Pocket Hub** to Applications.
-3. Open it. The app is not notarized yet, so macOS stops it the first time:
-   choose **Open Anyway** in System Settings › Privacy & Security, then open it
-   again.
+3. Open it from Applications. It is signed with a Developer ID and notarized
+   by Apple, so macOS asks once whether to open an app from the internet.
 
 Pocket Hub keeps an item in the menu bar. Closing the window, or quitting the
 app, leaves Pocket Hub running in the background so devices stay connected;

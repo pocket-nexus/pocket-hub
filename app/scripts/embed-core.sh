@@ -7,10 +7,18 @@
 # cargo runs with a clean environment: Xcode exports SDKROOT,
 # MACOSX_DEPLOYMENT_TARGET and the like, which build scripts watch, and the
 # shared target/ would otherwise be rebuilt each time a build alternates
-# between Xcode and a terminal. cargo is where rustup puts it.
+# between Xcode and a terminal. cargo is where rustup puts it. The proxy
+# variables are kept: where the network is reached through a proxy, cargo
+# fetching a crate without it waits on a connection that never answers (it
+# did on the release runner).
 #
 # The helpers are signed here with the app's identity: Xcode signs the bundle
-# after this phase but does not sign executables a script copies into it.
+# after this phase but does not sign executables a script copies into it. They
+# are signed as Xcode signs the app: with the hardened runtime when the target
+# has it (ENABLE_HARDENED_RUNTIME, which Xcode turns off for an ad hoc
+# signature: a development build has none), and with a secure timestamp when the
+# identity is a certificate rather than ad hoc ("-"). Notarization accepts an
+# executable only with both (package.sh signs a release with the Developer ID).
 # The target has user script sandboxing off so this can run cargo on the
 # repository.
 set -eu
@@ -29,8 +37,14 @@ if [ ! -x "$cargo" ]; then
 fi
 
 cd "$repo_root"
-env -i HOME="$HOME" PATH="$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
-    "$cargo" build $release_flag -p pocket-hubd -p pocket-hub-cli
+set -- HOME="$HOME" PATH="$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+for name in http_proxy https_proxy all_proxy no_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY; do
+    value="$(printenv "$name" || true)"
+    if [ -n "$value" ]; then
+        set -- "$@" "$name=$value"
+    fi
+done
+env -i "$@" "$cargo" build $release_flag -p pocket-hubd -p pocket-hub-cli
 
 # cargo built the helpers for this Mac; Xcode builds the app for $ARCHS. They
 # have to be the same. A Release build used to be a universal app around
@@ -50,6 +64,14 @@ mkdir -p "$helpers"
 for tool in pocket-hubd pocket-hub; do
     cp "$repo_root/target/$profile/$tool" "$helpers/$tool"
     if [ "${CODE_SIGNING_ALLOWED:-NO}" = YES ]; then
-        codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$helpers/$tool"
+        runtime=""
+        if [ "${ENABLE_HARDENED_RUNTIME:-NO}" = YES ]; then
+            runtime="--options=runtime"
+        fi
+        timestamp="--timestamp"
+        if [ "$EXPANDED_CODE_SIGN_IDENTITY" = "-" ]; then
+            timestamp="--timestamp=none"
+        fi
+        codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" $runtime "$timestamp" "$helpers/$tool"
     fi
 done

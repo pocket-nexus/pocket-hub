@@ -1,0 +1,108 @@
+# The macOS release of Pocket Hub. A tag v<version> pushed to this repository
+# is built by app/scripts/package.sh: the app signed with the Developer ID of
+# TypeSafe Limited, notarized by Apple and stapled, packed as the disk image
+# and the zip. Both go on a draft release of that tag. A person writes the notes
+# on the draft and publishes it, and publishing is what deploys
+# hub.pocket.nexus again (site.yml): GitHub starts no workflow for a release
+# this workflow's own token would publish.
+#
+# A pull request that changes how the app is signed or packed runs the same
+# build, notarization included, and keeps the archives as the run's artifact:
+# it is the only test of this path before a tag. So does a run started by hand.
+#
+# The job runs on a self-hosted runner of this repository, labelled
+# pocket-hub-release: a Mac whose login keychain holds the Developer ID
+# certificate with its private key and notarytool's profile pocket-hub-notary,
+# the two package.sh signs and notarizes with. Neither leaves that Mac: the
+# workflow takes no secret. The runner runs as a launchd agent of the logged-in
+# owner, where the keychain is unlocked and Finder can lay out the disk image.
+# docs/CONTRIBUTING.md "The release runner" has how one is set up.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - app/scripts/package.sh
+      - app/scripts/embed-core.sh
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    # A pull request from a fork never reaches the Mac that signs: its code
+    # would run there. (A fork's workflow change cannot lift this either: the
+    # repository asks for approval before any outside contributor's run.)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, ARM64, pocket-hub-release]
+    timeout-minutes: 60
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write # the draft release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+
+      # What package.sh uses from the Mac: Xcode at /Applications/Xcode.app,
+      # cargo where rustup puts it, the Developer ID (package.sh checks the
+      # notarytool profile itself, before it builds).
+      - name: Toolchains
+        run: |
+          "$HOME/.cargo/bin/cargo" --version
+          /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -version
+          security find-identity -v -p codesigning | grep -F '"Developer ID Application: TypeSafe Limited (9FDAZCRAN3)"'
+
+      - name: Build, sign and notarize
+        run: app/scripts/package.sh
+
+      # A tag names the version it releases: the app built from it must be that one.
+      - name: Archives
+        id: archives
+        run: |
+          set -- app/dist/Pocket-Hub-*-arm64.dmg
+          if [ "$#" != 1 ] || [ ! -f "$1" ]; then
+            echo "::error::package.sh made no disk image, or more than one"
+            exit 1
+          fi
+          version="$(basename "$1" | sed 's/^Pocket-Hub-\(.*\)-arm64\.dmg$/\1/')"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::the tag is $GITHUB_REF_NAME and the app is version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Pocket-Hub-${{ steps.archives.outputs.version }}-arm64
+          path: |
+            app/dist/Pocket-Hub-${{ steps.archives.outputs.version }}-arm64.dmg
+            app/dist/Pocket-Hub-${{ steps.archives.outputs.version }}-arm64.zip
+          if-no-files-found: error
+
+      # A draft, with the build's part of the notes; a version with a
+      # pre-release part (0.3.0-rc.1) is marked a pre-release, which the
+      # download page never offers.
+      - name: Draft release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.archives.outputs.version }}
+        run: |
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          cd app/dist
+          notes="$(printf '## The build\n\nBuilt from %s by [the release workflow](%s), signed with the Developer ID of TypeSafe Limited and notarized by Apple.\n\n```\n%s\n```\n' \
+            "$(git rev-parse --short HEAD)" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            "$(shasum -a 256 "Pocket-Hub-$VERSION-arm64.dmg" "Pocket-Hub-$VERSION-arm64.zip")")"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft $prerelease \
+            --title "Pocket Hub $GITHUB_REF_NAME" --notes "$notes" \
+            "Pocket-Hub-$VERSION-arm64.dmg" "Pocket-Hub-$VERSION-arm64.zip"
+
