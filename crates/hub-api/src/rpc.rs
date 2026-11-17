@@ -61,7 +61,7 @@ pub struct ErrorData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<ErrorKind>,
     /// A hello refused for its protocol (`-32602`): the protocol the core
-    /// speaks. A core of protocol 1 (Pocket Hub 0.2.1 and earlier) sends no
+    /// speaks. A core of protocol 1 (Pocket Hub 0.2.2 and earlier) sends no
     /// `data` at all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<u32>,
@@ -141,7 +141,7 @@ impl RpcError {
     }
     /// For an error answering `hub.hello` alone: the protocol a core speaks
     /// when it refused the client's. `data.protocol`, or 1 for a `-32602`
-    /// without `data`, as a core of Pocket Hub 0.2.1 and earlier answers
+    /// without `data`, as a core of Pocket Hub 0.2.2 and earlier answers
     /// (CONTROL-API.md §1, Hello). None for any other error.
     pub fn refused_protocol(&self) -> Option<u32> {
         if self.code != INVALID_PARAMS {

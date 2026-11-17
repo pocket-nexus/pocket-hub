@@ -54,13 +54,13 @@ private func socketExists(_ home: URL) -> Bool {
 /// and speaks no method but the two frozen ones in another version's dialect.
 @Suite("Client: an earlier core is replaced, a newer one never")
 struct ReplacementTests {
-    /// Pocket Hub 0.2.1's core (protocol 1) met by this app: the hello in 2 is
+    /// Pocket Hub 0.2.2's core (protocol 1) met by this app: the hello in 2 is
     /// refused without `data`, the client says hello in 1, asks it to stop,
     /// waits until it is gone, and starts its own.
     @Test func aCoreOfAnEarlierProtocolIsStoppedAndThisOneStarted() async throws {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }
-        let earlier = try await core(home: home, protocolVersion: 1, version: "0.2.1")
+        let earlier = try await core(home: home, protocolVersion: 1, version: "0.2.2")
         let (launcher, starts) = try standIn(home: home, version: "0.3.0")
         let client = replacingClient(home: home, launcher: launcher)
         let log = UpdateLog(client)
@@ -153,7 +153,7 @@ struct ReplacementTests {
     @Test func anEarlierCoreThatDoesNotStopIsSaidAndLeft() async throws {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }
-        let stubborn = try await core(home: home, protocolVersion: 1, version: "0.2.1", stops: false)
+        let stubborn = try await core(home: home, protocolVersion: 1, version: "0.2.2", stops: false)
         defer { Task { await stubborn.stop() } }
         let (launcher, starts) = try standIn(home: home, version: "0.3.0")
         let client = replacingClient(home: home, launcher: launcher, replaceWait: .milliseconds(300))
@@ -178,7 +178,7 @@ struct ReplacementTests {
 
     /// Quit and Stop with no synced connection: whatever core is there stops,
     /// an earlier one and a newer one alike, through the frozen pair.
-    @Test(arguments: [(1, "0.2.1"), (3, "1.0.0")])
+    @Test(arguments: [(1, "0.2.2"), (3, "1.0.0")])
     func quitAndStopStopsACoreOfAnyVersion(protocolVersion: Int, version: String) async throws {
         let home = try temporaryHome()
         defer { try? FileManager.default.removeItem(at: home) }

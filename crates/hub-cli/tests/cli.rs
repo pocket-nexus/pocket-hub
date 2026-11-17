@@ -636,11 +636,12 @@ fn a_started_core_holds_no_descriptor_of_its_client() {
     shutdown(home.path());
 }
 
-/// A resident core of Pocket Hub 0.2.1, answering as that release does
-/// (measured against the binary built from `v0.2.1`): protocol 1, and any
-/// other protocol refused with `-32602`, its sentence and no `data`. It
-/// answers `hub.hello` and `hub.shutdown` alone, records every call, and
-/// removes its socket after answering `hub.shutdown`, as a core does.
+/// A resident core of Pocket Hub 0.2.2, answering as that release does
+/// (measured against the binaries built from `v0.2.1` and `v0.2.2`):
+/// protocol 1, and any other protocol refused with `-32602`, its sentence
+/// and no `data`. It answers `hub.hello` and `hub.shutdown` alone, records
+/// every call, and removes its socket after answering `hub.shutdown`, as a
+/// core does.
 struct EarlierCore {
     socket: PathBuf,
     calls: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
@@ -667,7 +668,7 @@ impl EarlierCore {
                         recorded.lock().unwrap().push(format!("hub.hello {protocol}"));
                         if protocol == 1 {
                             hello = true;
-                            serde_json::json!({"jsonrpc": "2.0", "id": id, "result": {"protocol": 1, "hub": {"id": "0011223344556677", "name": "Studio Mac", "version": "0.2.1"}}})
+                            serde_json::json!({"jsonrpc": "2.0", "id": id, "result": {"protocol": 1, "hub": {"id": "0011223344556677", "name": "Studio Mac", "version": "0.2.2"}}})
                         } else {
                             serde_json::json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32602, "message": format!("This Hub speaks protocol 1, not {protocol}.")}})
                         }

@@ -82,7 +82,7 @@ public actor HubConnection: HubCalling {
 
     /// Says hello in `protocol` and returns what the core answered, its refusal
     /// for the protocol included: `-32602` with `data.protocol`, the core's, or
-    /// without `data` from a core of Pocket Hub 0.2.1 and earlier, which speaks
+    /// without `data` from a core of Pocket Hub 0.2.2 and earlier, which speaks
     /// protocol 1 (CONTROL-API.md §1, Hello). `hub.hello` is one of the two
     /// methods every protocol keeps, so this is how a client meets a core of
     /// any version. Any other error is thrown.

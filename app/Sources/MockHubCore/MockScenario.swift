@@ -394,7 +394,7 @@ public struct MockScenario: Sendable {
     public var hubVersion = "0.1.0-mock"
     /// The control API protocol this core speaks (CONTROL-API.md §1, Hello).
     /// A hello in another is refused with `-32602` and `data: {protocol}`; a
-    /// core of protocol 1 answers as Pocket Hub 0.2.1 and earlier, without `data`.
+    /// core of protocol 1 answers as Pocket Hub 0.2.2 and earlier, without `data`.
     public var speaksProtocol = 2
     /// Whether `hub.shutdown` stops it. False stands for a core that answers
     /// and keeps running.

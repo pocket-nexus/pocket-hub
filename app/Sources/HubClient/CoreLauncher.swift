@@ -110,7 +110,7 @@ public struct CoreLauncher: Sendable {
                             version: { executable().flatMap(CoreLauncher.reportedVersion(of:)) })
     }
 
-    /// What `<core> --version` prints (`pocket-hubd 0.2.1`), the version alone;
+    /// What `<core> --version` prints (`pocket-hubd 0.2.2`), the version alone;
     /// nil when the program cannot be run or prints something else. The core
     /// answers `--version` before it touches its home.
     public static func reportedVersion(of executable: URL) -> String? {

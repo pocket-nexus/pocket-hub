@@ -62,12 +62,12 @@ version's dialect.**
 
 **A core that refuses a hello for its protocol says its own**: from protocol 2
 on, the `-32602` error carries `data: {protocol}`, the version the core speaks.
-A core of Pocket Hub 0.2.1 and earlier sends no `data`; a refusal without it
+A core of Pocket Hub 0.2.2 and earlier sends no `data`; a refusal without it
 means protocol 1, the only version before the field existed. A client reads the
 number, never the sentence.
 
 ```
-→ {"jsonrpc":"2.0","id":1,"method":"hub.hello","params":{"protocol":1,"client":{"kind":"gui","name":"Pocket Hub","version":"0.2.1"}}}
+→ {"jsonrpc":"2.0","id":1,"method":"hub.hello","params":{"protocol":1,"client":{"kind":"gui","name":"Pocket Hub","version":"0.2.2"}}}
 ← {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"This Hub speaks protocol 2, not 1.","data":{"protocol":2}}}
 ```
 
