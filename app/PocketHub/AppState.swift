@@ -27,6 +27,7 @@ final class AppState {
     let model: HubModel
     let launchAtLogin = LaunchAtLogin()
     let language = AppLanguage()
+    let updater = AppUpdater()
     var selection: SidebarItem?
     /// The section shown on a device's page; kept here so the menu bar and the
     /// keyboard commands can choose it, whichever page is open.

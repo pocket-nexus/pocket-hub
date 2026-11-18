@@ -42,6 +42,12 @@ struct MenuBarContent: View {
 
     var body: some View {
         let model = state.model
+        // An update Sparkle found by itself: with no window open, its alert
+        // is behind other apps' windows, and this brings it to the front.
+        if let version = state.updater.waitingUpdate {
+            Button("Update Pocket Hub to Version \(version)…") { state.updater.checkForUpdates() }
+            Divider()
+        }
         if model.isLive {
             let linked = model.linkedDevices.count
             if linked == 0 {
@@ -75,6 +81,10 @@ struct MenuBarContent: View {
             .keyboardShortcut("o")
         SettingsLink { Text("Settings…") }
             .keyboardShortcut(",")
+        // The app menu's item, here too: with its window closed, Hub is out
+        // of the Dock and this is the only menu it has.
+        Button("Check for Updates…") { state.updater.checkForUpdates() }
+            .disabled(!state.updater.canCheckForUpdates)
         Divider()
         Button("Quit Pocket Hub") { state.quit(stoppingHub: false) }
             .keyboardShortcut("q")

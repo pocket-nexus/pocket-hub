@@ -213,8 +213,9 @@ Changes go through a pull request named with
 A release is a tag on `main` and the app built from it, signed with the
 Developer ID of TypeSafe Limited and notarized by Apple. Pushing the tag is
 enough: `.github/workflows/release.yml` builds it with `app/scripts/package.sh`
-and attaches the disk image and the zip to a **draft** release of the tag. The
-notes are written on the draft, and publishing it is the release:
+and attaches the disk image, the zip and the appcast to a **draft** release
+of the tag. The notes are written on the draft, and publishing it is the
+release, for the download page and for every installed copy alike:
 
 ```sh
 git checkout main && git pull
@@ -222,12 +223,14 @@ git tag -a v<version> -m "Pocket Hub v<version>" && git push origin v<version>
 # the release workflow drafts the release; write its notes, then publish it
 ```
 
-The same build runs on a Mac that holds the credentials (below):
+The same build runs on a Mac that holds the credentials (below), given the
+release key:
 
 ```sh
-app/scripts/package.sh                 # app/dist/Pocket-Hub-<version>-arm64.dmg and .zip, and their SHA-256
+read -rs SPARKLE_PRIVATE_KEY && export SPARKLE_PRIVATE_KEY   # paste the release key; it is not echoed
+app/scripts/package.sh                 # app/dist/Pocket-Hub-<version>-arm64.dmg and .zip, appcast.xml, their SHA-256
 gh release create v<version> --verify-tag --title "Pocket Hub v<version>" \
-    app/dist/Pocket-Hub-<version>-arm64.dmg app/dist/Pocket-Hub-<version>-arm64.zip
+    app/dist/Pocket-Hub-<version>-arm64.dmg app/dist/Pocket-Hub-<version>-arm64.zip app/dist/appcast.xml
 ```
 
 The version is one number in three places, changed together: `version` of
@@ -245,14 +248,16 @@ macOS asks once whether the terminal may control Finder, and no other volume
 named Pocket Hub may be mounted.
 
 **Signing and notarization.** `package.sh` signs the app and both helpers with
-`Developer ID Application: TypeSafe Limited (9FDAZCRAN3)`, with the hardened
+`Developer ID Application: TypeSafe Limited (9FDAZCRAN3)`, and the build phase
+`app/scripts/sign-sparkle.sh` the programs inside Sparkle.framework (Xcode
+signs the framework it embeds but not those), with the hardened
 runtime (on in the project; Xcode leaves it out of an ad hoc signature, so a
 development build runs without it) and a secure timestamp, and
 without the entitlement that lets a debugger attach. It sends the app to
 Apple's notary service, staples the ticket to it, packs it, then signs,
 notarizes and staples the disk image. A rejection stops it with the service's
 log. Builds for development stay signed ad hoc. The script checks two things
-in the keychain before it builds:
+in the keychain before it builds, and the release key (below):
 
 - the certificate with its private key. It expires on 1 February 2027, with the
   authority that issued it; a release after that needs a new one from the
@@ -267,15 +272,43 @@ in the keychain before it builds:
       --key AuthKey_<key id>.p8 --key-id <key id> --issuer <issuer id>
   ```
 
+**Installed copies update themselves** with
+[Sparkle](https://sparkle-project.org) (`app/PocketHub/AppUpdater.swift`):
+once a day each reads the `appcast.xml` of the latest published release
+(`releases/latest/download/appcast.xml`; a draft or a pre-release is not
+one), downloads the disk image it names in the background and installs it
+when the app quits. `package.sh` writes the
+appcast with Sparkle's `generate_appcast`, which signs the disk image and the
+appcast with the release key; an installed copy takes nothing that key did
+not sign (`SUPublicEDKey` in `app/PocketHub/Info.plist` is its public half).
+
+**The release key** is Sparkle's EdDSA private key, 44 characters of base64.
+`package.sh` takes it in `SPARKLE_PRIVATE_KEY`, stops before the build
+without it and after the build when it is not the key `SUPublicEDKey` names,
+and passes it to nothing but `generate_appcast`. The release workflow gives
+it from the repository's Actions secret `SPARKLE_PRIVATE_KEY`, to the step
+that runs `package.sh` alone. GitHub never shows a secret again, so a copy is
+kept outside GitHub too; it is set from that copy (`gh` asks for the value):
+
+```sh
+gh secret set SPARKLE_PRIVATE_KEY -R pocket-nexus/pocket-hub
+```
+
+Were the key lost, a release signed with the same Developer ID can still
+bring a new one (Sparkle's "Rotating signing keys"), and only as a disk image,
+since the app checks an update before it opens it: that is why the update is
+the disk image rather than the zip.
+
 ### The release runner
 
 The release workflow runs on a self-hosted runner of this repository with
 the label `pocket-hub-release`, never on a machine of GitHub's: it is a Mac
 that holds the certificate and the notarytool profile above in its login
-keychain, and they never leave it (the workflow takes no secret). A pull
-request that changes `package.sh`, `embed-core.sh` or the workflow runs the
-whole build there too, notarization included, and keeps the archives as the
-run's artifact. A pull request from a fork never runs there.
+keychain, and they never leave it; the release key is the workflow's one
+secret. A pull request that changes `package.sh`, `embed-core.sh`,
+`sign-sparkle.sh` or the workflow runs the whole build there too,
+notarization included, and keeps the archives and the appcast as the run's
+artifact. A pull request from a fork never runs there.
 
 The runner runs as a launchd agent of the owner logged in on that Mac, which
 is what unlocks the keychain and lets Finder lay out the disk image; the

@@ -3,7 +3,7 @@ import HubAppModel
 import HubClient
 import SwiftUI
 
-/// Hub's name, the app's language, opening at login, and where Hub keeps its files.
+/// Hub's name, the app's language, opening at login, updates, and where Hub keeps its files.
 struct SettingsView: View {
     @Environment(AppState.self) private var state
     @State private var name = ""
@@ -13,6 +13,7 @@ struct SettingsView: View {
         let model = state.model
         let login = state.launchAtLogin
         let language = state.language
+        let updater = state.updater
         Form {
             Section {
                 LabeledContent("Name") {
@@ -67,6 +68,17 @@ struct SettingsView: View {
                 }
             }
             Section {
+                // The app's version: the one an update replaces (AppUpdater).
+                LabeledContent("Version") { Text(verbatim: appVersion) }
+                // Set only when the owner changes them: Sparkle keeps them,
+                // and the update alert has its own checkbox for the second.
+                Toggle("Check for updates automatically",
+                       isOn: Binding(get: { updater.automaticallyChecks }, set: { updater.setAutomaticallyChecks($0) }))
+                Toggle("Download and install updates automatically",
+                       isOn: Binding(get: { updater.automaticallyDownloads }, set: { updater.setAutomaticallyDownloads($0) }))
+                    .disabled(!updater.automaticallyChecks)
+            }
+            Section {
                 LabeledContent("Files") {
                     if let home = model.status?.home {
                         HStack {
@@ -85,9 +97,6 @@ struct SettingsView: View {
                 Text("Pocket Hub keeps its paired devices, daemons and screenshots here. Set POCKET_HUB_HOME to use another folder.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let status = model.status {
-                    LabeledContent("Version") { Text(verbatim: status.version) }
-                }
             }
         }
         .formStyle(.grouped)
@@ -100,6 +109,10 @@ struct SettingsView: View {
         .onChange(of: model.hub?.name) { _, newName in
             if !saving, let newName { name = newName }
         }
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     }
 
     private func saveName() {

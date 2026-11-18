@@ -6,11 +6,17 @@
 #                                               picture app/Artwork draws, the
 #                                               way a Mac app is handed to people
 #   app/dist/Pocket-Hub-<version>-arm64.zip     the app, as `ditto` packs one
+#   app/dist/appcast.xml                        the feed installed copies of
+#                                               the app update themselves from:
+#                                               it names the disk image, and
+#                                               both are signed with the
+#                                               release key
 #
-# and prints their SHA-256. Both are made with what macOS has (`hdiutil`,
-# `ditto`, Finder, `codesign`, `notarytool`, `stapler`). docs/CONTRIBUTING.md
-# "Releasing" has the steps around it (the tag, the release, the credentials),
-# and .github/workflows/release.yml runs it for a tag.
+# and prints their SHA-256. The archives are made with what macOS has
+# (`hdiutil`, `ditto`, Finder, `codesign`, `notarytool`, `stapler`), the feed
+# with Sparkle's generate_appcast. docs/CONTRIBUTING.md "Releasing" has the
+# steps around it (the tag, the release, the credentials), and
+# .github/workflows/release.yml runs it for a tag.
 #
 # Finder lays the disk image's window out, as only it writes a folder's
 # .DS_Store: the script runs in a logged-in session, macOS asks once whether
@@ -34,6 +40,14 @@
 # A build signed otherwise is not a release, so there is no ad hoc way
 # through this script: builds for development stay ad hoc (the project's own
 # signing settings).
+#
+# The release key is Sparkle's EdDSA key (AppUpdater.swift): installed copies
+# take an update only when it and the feed are signed with it (SUPublicEDKey
+# in Info.plist). It comes in SPARKLE_PRIVATE_KEY (the release workflow's
+# secret of that name), is checked before the build too, and is taken out of
+# the environment at once: what this script starts (Xcode, its build phases,
+# notarytool) never sees it, and it reaches generate_appcast on its standard
+# input alone.
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -42,6 +56,8 @@ app="$derived/Build/Products/Release/Pocket Hub.app"
 team="9FDAZCRAN3"
 identity="Developer ID Application: TypeSafe Limited ($team)"
 notary_profile="pocket-hub-notary"
+release_key="${SPARKLE_PRIVATE_KEY:-}"
+unset SPARKLE_PRIVATE_KEY
 
 cd "$here"
 if [ -n "$(git status --porcelain)" ]; then
@@ -64,6 +80,10 @@ if ! security find-identity -v -p codesigning | grep -qF "\"$identity\""; then
 fi
 if ! xcrun notarytool history --keychain-profile "$notary_profile" >/dev/null 2>&1; then
     echo "error: notarytool's keychain profile \"$notary_profile\" is missing or Apple refuses it: store it with xcrun notarytool store-credentials (docs/CONTRIBUTING.md \"Releasing\")" >&2
+    exit 1
+fi
+if [ -z "$release_key" ]; then
+    echo "error: SPARKLE_PRIVATE_KEY is not set: the appcast is signed with the release key (docs/CONTRIBUTING.md \"Releasing\")" >&2
     exit 1
 fi
 
@@ -124,8 +144,11 @@ for tool in pocket-hubd pocket-hub; do
 done
 codesign --verify --deep --strict "$app"
 # What notarization requires of each executable, checked here so a release
-# stops with one line instead of after an upload.
-for code in "$app/Contents/Helpers/pocket-hubd" "$app/Contents/Helpers/pocket-hub" "$app"; do
+# stops with one line instead of after an upload. Sparkle's programs are
+# signed by the build phase sign-sparkle.sh.
+sparkle="$app/Contents/Frameworks/Sparkle.framework/Versions/B"
+for code in "$app/Contents/Helpers/pocket-hubd" "$app/Contents/Helpers/pocket-hub" \
+    "$sparkle/Autoupdate" "$sparkle/Updater.app" "$sparkle" "$app"; do
     signature="$(codesign --display --verbose=2 "$code" 2>&1)"
     if ! printf '%s\n' "$signature" | grep -qxF "Authority=$identity" ||
         ! printf '%s\n' "$signature" | grep -q '^Timestamp=' ||
@@ -223,5 +246,35 @@ if [ "$("$mounted/Pocket Hub.app/Contents/Helpers/pocket-hubd" --version)" != "p
 fi
 hdiutil detach -quiet "$mounted"
 
+# The feed installed copies read (Info.plist's SUFeedURL: the appcast.xml of
+# the latest release, so this file goes on the release with the archives).
+# Its update is the disk image, the file a person downloads: signed with the
+# Developer ID, it is also what Sparkle accepts a new release key from, were
+# this one lost (Sparkle, "Rotating signing keys"; the app verifies an update
+# before it opens it, SUVerifyUpdateBeforeExtraction). generate_appcast reads
+# the version and the minimum macOS from the app in the image, names the
+# image at the address the release gives it, and signs the image and the feed
+# with the release key, given on its standard input by printf, a builtin, so
+# the key is in no program's arguments. It works in a folder
+# holding the image alone, so the feed lists this release only and makes no
+# delta from an earlier one. A key that is not the one Info.plist names
+# leaves the update unsigned, which the check after it reports.
+feed="$work/feed"
+mkdir "$feed"
+cp "$image" "$feed/"
+printf '%s' "$release_key" |
+    "$derived/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast" --ed-key-file - \
+        --download-url-prefix "https://github.com/pocket-nexus/pocket-hub/releases/download/v$version/" \
+        --link "https://hub.pocket.nexus" "$feed"
+if ! grep -q "sparkle:edSignature=" "$feed/appcast.xml"; then
+    echo "error: the appcast's update is not signed: SPARKLE_PRIVATE_KEY is not the key Info.plist names (SUPublicEDKey)" >&2
+    exit 1
+fi
+if ! grep -q "<!-- sparkle-signatures:" "$feed/appcast.xml"; then
+    echo "error: the appcast itself is not signed, and the app takes only a signed one (SURequireSignedFeed)" >&2
+    exit 1
+fi
+cp "$feed/appcast.xml" "$here/dist/appcast.xml"
+
 echo "Pocket Hub $version, built from $commit, signed by $identity and notarized"
-shasum -a 256 "$image" "$archive"
+shasum -a 256 "$image" "$archive" "$here/dist/appcast.xml"

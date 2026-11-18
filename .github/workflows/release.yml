@@ -1,10 +1,12 @@
 # The macOS release of Pocket Hub. A tag v<version> pushed to this repository
 # is built by app/scripts/package.sh: the app signed with the Developer ID of
 # TypeSafe Limited, notarized by Apple and stapled, packed as the disk image
-# and the zip. Both go on a draft release of that tag. A person writes the notes
-# on the draft and publishes it, and publishing is what deploys
-# hub.pocket.nexus again (site.yml): GitHub starts no workflow for a release
-# this workflow's own token would publish.
+# and the zip, with the appcast installed copies update themselves from. The
+# three go on a draft release of that tag. A person writes the notes on the
+# draft and publishes it, and publishing is what deploys hub.pocket.nexus
+# again (site.yml): GitHub starts no workflow for a release this workflow's
+# own token would publish. It is also what installed copies see: they read
+# the appcast of the latest published release.
 #
 # A pull request that changes how the app is signed or packed runs the same
 # build, notarization included, and keeps the archives as the run's artifact:
@@ -13,9 +15,12 @@
 # The job runs on a self-hosted runner of this repository, labelled
 # pocket-hub-release: a Mac whose login keychain holds the Developer ID
 # certificate with its private key and notarytool's profile pocket-hub-notary,
-# the two package.sh signs and notarizes with. Neither leaves that Mac: the
-# workflow takes no secret. The runner runs as a launchd agent of the logged-in
-# owner, where the keychain is unlocked and Finder can lay out the disk image.
+# the two package.sh signs and notarizes with. Neither leaves that Mac. The
+# one secret the workflow takes is SPARKLE_PRIVATE_KEY, the release key the
+# appcast and the disk image are signed with for Sparkle's updates: no Mac
+# holds it for the runner, and only the step that runs package.sh gets it.
+# The runner runs as a launchd agent of the logged-in owner, where the
+# keychain is unlocked and Finder can lay out the disk image.
 # docs/CONTRIBUTING.md "The release runner" has how one is set up.
 name: release
 
@@ -26,6 +31,7 @@ on:
     paths:
       - app/scripts/package.sh
       - app/scripts/embed-core.sh
+      - app/scripts/sign-sparkle.sh
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -60,6 +66,8 @@ jobs:
           security find-identity -v -p codesigning | grep -F '"Developer ID Application: TypeSafe Limited (9FDAZCRAN3)"'
 
       - name: Build, sign and notarize
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: app/scripts/package.sh
 
       # A tag names the version it releases: the app built from it must be that one.
@@ -84,6 +92,7 @@ jobs:
           path: |
             app/dist/Pocket-Hub-${{ steps.archives.outputs.version }}-arm64.dmg
             app/dist/Pocket-Hub-${{ steps.archives.outputs.version }}-arm64.zip
+            app/dist/appcast.xml
           if-no-files-found: error
 
       # A draft, with the build's part of the notes; a version with a
@@ -104,5 +113,5 @@ jobs:
             "$(shasum -a 256 "Pocket-Hub-$VERSION-arm64.dmg" "Pocket-Hub-$VERSION-arm64.zip")")"
           gh release create "$GITHUB_REF_NAME" --verify-tag --draft $prerelease \
             --title "Pocket Hub $GITHUB_REF_NAME" --notes "$notes" \
-            "Pocket-Hub-$VERSION-arm64.dmg" "Pocket-Hub-$VERSION-arm64.zip"
+            "Pocket-Hub-$VERSION-arm64.dmg" "Pocket-Hub-$VERSION-arm64.zip" appcast.xml
 
