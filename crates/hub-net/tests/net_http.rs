@@ -449,13 +449,11 @@ async fn sequential_https_requests_ride_one_connection() {
         assert_eq!(secure.conn_of("/small").await, 1, "request {i} rode the first connection");
     }
     assert_eq!(secure.accepts(), 1, "ten sequential requests, one TCP connection");
-    let mut later = times[1..].to_vec();
-    later.sort_unstable();
-    let median = later[later.len() / 2];
+    // The first request pays for the client, TCP and the TLS handshake, the
+    // later ones for a request alone. The times are printed and not asserted:
+    // on a busy machine their ratio says nothing, and the one accepted
+    // connection above is the proof of reuse.
     eprintln!("10 HTTPS GETs on loopback, ms each as the device saw them: {times:?}");
-    // The first pays for the client, TCP and the TLS handshake (the
-    // platform verifier included); the later ones for a request alone.
-    assert!(times[0] >= 2 * median.max(1) + 2, "first {} ms, later median {median} ms: {times:?}", times[0]);
     t.device.kill().await;
 }
 
