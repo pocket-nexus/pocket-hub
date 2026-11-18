@@ -66,18 +66,6 @@ answer to `hub.shutdown` is written before the socket closes; **the core is
 gone when the client's connection has ended and `hubd.sock` no longer exists**,
 which is what a client that has to know waits for.
 
-**An updated app replaces an older core.** The core outlives the app that
-started it, so a new version of the app finds the core of the version before
-it still running. A client that starts cores (the macOS app) and finds one
-running whose `hub.version` orders below its own asks it to shut down
-(`hub.shutdown`) and starts its own, as soon as no device is `busy`: a
-device operation in progress would end with the core, and a client's own
-calls end when it disconnects anyway, so a held device is another client's.
-A version is three numbers compared part by part; one in another form is
-never older. The client does this once in its life, and never to a core it
-started itself, so a core of another build is not restarted in a loop; a
-newer core stays.
-
 **A core that cannot start says why and exits; it does not fall back.** When
 the link port (TCP 8628) is taken, the core does not move to another port: it
 writes one line that names the port and exits with a status other than 0. The

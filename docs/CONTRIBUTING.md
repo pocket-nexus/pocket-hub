@@ -277,8 +277,7 @@ in the keychain before it builds, and the release key (below):
 once a day each reads the `appcast.xml` of the latest published release
 (`releases/latest/download/appcast.xml`; a draft or a pre-release is not
 one), downloads the disk image it names in the background and installs it
-when the app quits. An updated app then replaces the core of the version
-before, which outlives the app (`CONTROL-API.md` §1). `package.sh` writes the
+when the app quits. `package.sh` writes the
 appcast with Sparkle's `generate_appcast`, which signs the disk image and the
 appcast with the release key; an installed copy takes nothing that key did
 not sign (`SUPublicEDKey` in `app/PocketHub/Info.plist` is its public half).

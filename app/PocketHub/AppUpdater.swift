@@ -10,10 +10,6 @@ import Sparkle
 /// app left running for a week with an update waiting is shown Sparkle's own
 /// alert to install it now (SUScheduledImpatientCheckInterval).
 ///
-/// The core outlives the app, so an update reaches it when the updated app
-/// connects: a core older than the app is replaced by the app's own
-/// (HubClient, CONTROL-API.md §1).
-///
 /// A Debug build does not start the updater: it is a build of the
 /// repository, which a release must not replace. Its menus and settings are
 /// the same, with Check for Updates… unavailable.

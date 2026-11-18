@@ -68,8 +68,7 @@ struct SettingsView: View {
                 }
             }
             Section {
-                // The app's version: the one an update replaces, and the
-                // core's once the app has started its own (AppUpdater).
+                // The app's version: the one an update replaces (AppUpdater).
                 LabeledContent("Version") { Text(verbatim: appVersion) }
                 // Set only when the owner changes them: Sparkle keeps them,
                 // and the update alert has its own checkbox for the second.
